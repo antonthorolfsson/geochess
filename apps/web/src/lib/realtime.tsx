@@ -3,6 +3,7 @@
 import type { ServerMessage } from '@empire/rules';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { applyChatMessage, chatKeys, eventItems, upsertFeedItems } from './chat';
 import { keys, newerGame, toBoardGame, type BoardGame } from './queries';
 
 type Listener = (message: ServerMessage) => void;
@@ -48,17 +49,34 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
 
     const onMessage = (event: MessageEvent<string>) => {
       const message = JSON.parse(event.data) as ServerMessage;
-      if (message.type === 'game.update') {
-        // Boards apply moves directly; war events that change the campaign arrive separately.
-        const incoming = toBoardGame(message.game);
-        queryClient.setQueryData<BoardGame>(keys.game(message.game.id), (current) => newerGame(current, incoming));
-      } else if (message.type !== 'hello') {
-        // While draft-list edits are in flight, a refetch would briefly undo them on screen; the
-        // last edit refetches when it lands.
-        if (queryClient.isMutating({ mutationKey: keys.draftList(message.campaignId) }) === 0) {
-          void queryClient.invalidateQueries({ queryKey: keys.campaign(message.campaignId) });
+      switch (message.type) {
+        case 'hello':
+          break;
+        case 'game.update': {
+          // Boards apply moves directly; war events that change the campaign arrive separately.
+          const incoming = toBoardGame(message.game);
+          queryClient.setQueryData<BoardGame>(keys.game(message.game.id), (current) => newerGame(current, incoming));
+          break;
         }
-        void queryClient.invalidateQueries({ queryKey: keys.campaigns });
+        case 'chat.message':
+          // Chat goes straight into the feed and conversations; the campaign itself hasn't changed.
+          applyChatMessage(queryClient, message.campaignId, userId, message.message);
+          if (message.message.recipientId === userId) void queryClient.invalidateQueries({ queryKey: keys.campaigns });
+          break;
+        case 'chat.read':
+          void queryClient.invalidateQueries({ queryKey: chatKeys.summary(message.campaignId) });
+          void queryClient.invalidateQueries({ queryKey: keys.campaigns });
+          break;
+        default:
+          if (message.type === 'campaign.events') {
+            upsertFeedItems(queryClient, message.campaignId, eventItems(message.events));
+          }
+          // While draft-list edits are in flight, a refetch would briefly undo them on screen; the
+          // last edit refetches when it lands.
+          if (queryClient.isMutating({ mutationKey: keys.draftList(message.campaignId) }) === 0) {
+            void queryClient.invalidateQueries({ queryKey: keys.campaign(message.campaignId) });
+          }
+          void queryClient.invalidateQueries({ queryKey: keys.campaigns });
       }
       for (const listener of listeners.current) listener(message);
     };
@@ -72,9 +90,10 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
         attempt = 0;
         setConnected(true);
         // Catch up on anything missed while disconnected.
-        void queryClient.invalidateQueries({ queryKey: ['campaign'] });
+        for (const key of ['campaign', 'game', 'feed', 'conversation', 'chat']) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+        }
         void queryClient.invalidateQueries({ queryKey: keys.campaigns });
-        void queryClient.invalidateQueries({ queryKey: ['game'] });
       };
       ws.onclose = () => {
         if (socket !== ws) return;

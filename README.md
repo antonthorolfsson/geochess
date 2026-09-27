@@ -41,6 +41,19 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 - War arrows drawn on the map in grease pencil, a war room with everything waiting for you, and
   notifications by web push (installed app) or email.
 
+**Phase 3 (Diplomacy)** is in place:
+
+- Accords: non-aggression pacts between two players, with optional public terms. Proposals are
+  private until signed; a signed accord stops both players declaring war on each other until it
+  runs its course. Either side can renounce it at any time, in public, and the breaker must wait a
+  round before attacking the betrayed player.
+- Reputation: every empire starts at 100, loses 20 for breaking an accord and gains 5 for each
+  accord kept to the end.
+- Chat: a campaign channel and one-to-one private messages from the lobby on, with unread counts
+  on every device and push notifications for private messages.
+- The Diplo tab: the dispatches and the campaign channel in one timeline with filters, private
+  conversations, and everything about accords and reputation in one place.
+
 ## Quick start
 
 Requires Node.js 22.12+ (24 recommended) and pnpm 10.
@@ -61,12 +74,12 @@ To try it on a phone, open `http://<your computer's LAN address>:3000` on the sa
 
 ## Repository layout
 
-| Path             | Package          | What it is                                                                                                                                                                          |
-| ---------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, chess and clocks (chessops), campaign settings, empire colors, API types. |
-| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, and the versioned datasets it builds.                                                                                      |
-| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                         |
-| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars and the chess board (chessground).                                                                                      |
+| Path             | Package          | What it is                                                                                                                                                                                   |
+| ---------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, accords, chess and clocks (chessops), campaign settings, empire colors, API types. |
+| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, and the versioned datasets it builds.                                                                                               |
+| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                                  |
+| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars, the chess board (chessground), diplomacy and chat.                                                                              |
 
 ## Commands
 

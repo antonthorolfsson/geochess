@@ -20,6 +20,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import type { AppContext } from '../context';
 import { campaigns, holdings, members } from '../db/schema';
+import { keepFinishedAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { parse } from '../lib/http';
 import { cryptoRandom, newId, newInviteCode } from '../lib/ids';
@@ -278,10 +279,14 @@ async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: Draf
   if (complete) {
     await openCampaign(ctx, scope);
     await scope.log.add({ type: 'draft.completed', payload: {} }, null, 0);
+    await keepFinishedAccords(ctx, scope);
   }
 }
 
-/** The draft is over: round 1 begins and everyone gets their first war tokens. */
+/**
+ * The draft is over: round 1 begins and everyone gets their first war tokens. Callers then let
+ * accords signed during the draft that end with it run their course.
+ */
 async function openCampaign(ctx: AppContext, scope: MutationScope): Promise<void> {
   const { tx, campaign } = scope;
   await tx
@@ -369,6 +374,7 @@ export async function endDraft(ctx: AppContext, campaignId: string, userId: stri
     await openCampaign(ctx, scope);
     const unclaimed = run.idx.ids.length - run.owners.size;
     await scope.log.add({ type: 'draft.ended', payload: { unclaimed, autoPicked: picks.length, picks } }, userId, 0);
+    await keepFinishedAccords(ctx, scope);
   });
 }
 

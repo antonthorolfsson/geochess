@@ -28,6 +28,10 @@ when starting new work.**
   `games.ts` handles moves under a per-game lock, which may take the campaign lock inside it but
   never the other way round. Deadlines are rows in the database, polled by `scheduler.ts`, with
   in-process timers for live flag-falls. Tests drive time through the injectable `ctx.now()`.
+- Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
+  public to every member, so private changes (proposals, declines) log no events and call
+  `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and
+  pushes `chat.message` only to the players who can read it.
 - `apps/web` is Next.js 16. Its bundled docs in `apps/web/node_modules/next/dist/docs/` are the
   reference, since APIs differ from older versions (async `params`, `proxy.ts`, Turbopack default).
   Pages are thin server components that hand off to client screens in `src/components/`.

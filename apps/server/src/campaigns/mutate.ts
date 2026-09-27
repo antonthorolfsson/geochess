@@ -1,7 +1,7 @@
 import { parseRules, type CampaignEvent, type EventView, type ServerMessage } from '@empire/rules';
 import { eq } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import type { Tx } from '../db/client';
+import type { Db, Tx } from '../db/client';
 import { campaigns, events, members, users } from '../db/schema';
 import { conflict, forbidden, notFound } from '../lib/errors';
 import { toEventView } from './views';
@@ -37,30 +37,40 @@ export interface MutationScope {
   log: EventLog;
   /** Runs `fn` once the change has committed (e.g. notifications); failures are only logged. */
   afterCommit(fn: () => unknown): void;
+  /** Marks the change private: unless events are logged, only these players hear about it. */
+  notifyOnly(userIds: readonly string[]): void;
 }
 
 /**
  * Runs a state change on one campaign: serialized per campaign, inside a transaction holding the
  * campaign row lock. Afterwards every member (before or after the change) hears about it, unless
- * `notifyOnly` limits that to one player for a private change that logged no game events.
+ * `notifyOnly` limits that to the players concerned by a private change that logged no events.
  */
 export async function mutate<T>(
   ctx: AppContext,
   campaignId: string,
   fn: (scope: MutationScope) => Promise<T>,
-  { notifyOnly }: { notifyOnly?: string } = {},
+  { notifyOnly }: { notifyOnly?: string | readonly string[] } = {},
 ): Promise<T> {
   return ctx.locks.run(campaignId, async () => {
     const recipients = new Set<string>();
     const after: (() => unknown)[] = [];
     let logged: EventView[] = [];
+    let only = typeof notifyOnly === 'string' ? [notifyOnly] : notifyOnly;
     const result = await ctx.db.transaction(async (tx) => {
       const [row] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).for('update');
       if (!row) throw notFound('Campaign not found.');
       const campaign = { ...row, rules: parseRules(row.rules) };
       const before = await tx.select().from(members).where(eq(members.campaignId, campaignId));
       const log = new EventLog(tx, campaignId);
-      const value = await fn({ tx, campaign, members: before, log, afterCommit: (f) => after.push(f) });
+      const value = await fn({
+        tx,
+        campaign,
+        members: before,
+        log,
+        afterCommit: (f) => after.push(f),
+        notifyOnly: (userIds) => void (only = userIds),
+      });
       const current = await tx
         .select({ userId: members.userId })
         .from(members)
@@ -73,7 +83,7 @@ export async function mutate<T>(
       logged.length > 0
         ? { type: 'campaign.events', campaignId, events: logged }
         : { type: 'campaign.changed', campaignId };
-    ctx.hub.send(notifyOnly && logged.length === 0 ? [notifyOnly] : recipients, message);
+    ctx.hub.send(only && logged.length === 0 ? only : recipients, message);
     for (const f of after) {
       void Promise.resolve()
         .then(f)
@@ -102,7 +112,7 @@ export function requireActive(scope: MutationScope): void {
   if (scope.campaign.status !== 'active') throw conflict('The campaign is not underway.', 'not-active');
 }
 
-export async function userName(tx: Tx, userId: string): Promise<string> {
+export async function userName(tx: Tx | Db, userId: string): Promise<string> {
   const [row] = await tx.select({ name: users.name }).from(users).where(eq(users.id, userId));
   return row?.name ?? 'Unknown';
 }

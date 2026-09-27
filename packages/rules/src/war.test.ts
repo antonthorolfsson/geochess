@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseRules } from './config';
+import type { Accord, Renunciation } from './diplomacy';
 import { indexDataset } from './graph';
 import { makeTerritory, warDataset } from './test-fixtures';
 import {
@@ -55,6 +56,8 @@ function board(
     acquired?: Record<string, number>;
     wars?: ActiveWar[];
     truces?: Truce[];
+    accords?: Accord[];
+    renunciations?: Renunciation[];
     round?: number;
     rules?: WarBoard['rules'];
   } = {},
@@ -69,6 +72,8 @@ function board(
     ),
     wars: opts.wars ?? [],
     truces: opts.truces ?? [],
+    accords: opts.accords ?? [],
+    renunciations: opts.renunciations ?? [],
   };
 }
 
@@ -116,6 +121,22 @@ describe('war targets', () => {
     expect(checkTarget(board({ truces, round: 2 }), ANN, 'B5')).toBe('truce');
     expect(checkTarget(board({ truces, round: 2 }), BO, 'A4')).toBe('truce');
     expect(checkTarget(board({ truces, round: 3 }), ANN, 'B5')).toBeNull();
+  });
+
+  it('respect accords both ways until the round they end', () => {
+    const accords: Accord[] = [{ id: 'a1', players: [BO, ANN], endsRound: 4 }];
+    expect(checkTarget(board({ accords, round: 3 }), ANN, 'B5')).toBe('accord');
+    expect(checkTarget(board({ accords, round: 3 }), BO, 'A4')).toBe('accord');
+    expect(attackableTargets(board({ accords, round: 3 }), ANN).size).toBe(0);
+    expect(checkTarget(board({ accords, round: 4 }), ANN, 'B5')).toBeNull();
+  });
+
+  it('keep an accord breaker from attacking the betrayed player until the next round', () => {
+    const renunciations: Renunciation[] = [{ breakerId: ANN, partnerId: BO, untilRound: 3 }];
+    expect(checkTarget(board({ renunciations, round: 2 }), ANN, 'B5')).toBe('renounced');
+    // The betrayed player may strike first.
+    expect(checkTarget(board({ renunciations, round: 2 }), BO, 'A4')).toBeNull();
+    expect(checkTarget(board({ renunciations, round: 3 }), ANN, 'B5')).toBeNull();
   });
 
   it('need a bordering country that can launch the attack', () => {
@@ -232,7 +253,16 @@ describe('suggested stakes', () => {
     const gridIdx = indexDataset({ ...warDataset(), territories: [...cells, target], seaLanes: [] });
     const holdings = new Map(cells.map((t) => [t.id, { ownerId: ANN, acquiredRound: 0 }]));
     holdings.set('T', { ownerId: BO, acquiredRound: 0 });
-    const b: WarBoard = { idx: gridIdx, rules, round: 1, holdings, wars: [], truces: [] };
+    const b: WarBoard = {
+      idx: gridIdx,
+      rules,
+      round: 1,
+      holdings,
+      wars: [],
+      truces: [],
+      accords: [],
+      renunciations: [],
+    };
     const plan = suggestStake(b, ANN, 'T', { minValue: 13 });
     expect(plan?.value).toBe(13);
     expect(checkStake(b, ANN, 'T', plan!.launchId, plan!.stake, { minValue: 13 })).toBeNull();
@@ -292,7 +322,16 @@ describe('clock modifiers', () => {
     const starIdx = indexDataset({ ...warDataset(), territories: [hub, ...spokes], seaLanes: [] });
     const holdings = new Map(spokes.map((s) => [s.id, { ownerId: ANN, acquiredRound: 0 }]));
     holdings.set('HUB', { ownerId: BO, acquiredRound: 0 });
-    const b: WarBoard = { idx: starIdx, rules, round: 1, holdings, wars: [], truces: [] };
+    const b: WarBoard = {
+      idx: starIdx,
+      rules,
+      round: 1,
+      holdings,
+      wars: [],
+      truces: [],
+      accords: [],
+      renunciations: [],
+    };
     expect(clockModifiers(b, ANN, 'HUB').net).toBe(-25);
   });
 

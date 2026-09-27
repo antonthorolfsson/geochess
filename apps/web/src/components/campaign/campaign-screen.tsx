@@ -11,24 +11,25 @@ import { useCampaign, useMapData, useMe } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
-import { countryName, outcomeText } from '@/lib/wars';
+import { countryName, outcomeText, playerName } from '@/lib/wars';
+import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar } from '../map/world-map';
-import { Notice, Spinner } from '../ui';
+import { Notice, SegmentTabs, Spinner } from '../ui';
 import { CountrySearch } from './country-search';
-import { Dispatches, DraftPanel, DraftStatus, Standings } from './draft-panel';
+import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
 import { LobbyPanel } from './lobby-panel';
 import { TerritoryPanel } from './territory-panel';
 import { WarDetail, type StakePreview } from './war-detail';
 import { WarsPanel } from './wars-panel';
 
-type Tab = 'lobby' | 'map' | 'wars' | 'draft' | 'empire';
+type Tab = 'lobby' | 'map' | 'wars' | 'draft' | 'diplo' | 'empire';
 
 const AT_WAR: { id: Tab; label: string }[] = [
   { id: 'map', label: 'Map' },
   { id: 'wars', label: 'Wars' },
-  { id: 'draft', label: 'Standings' },
+  { id: 'diplo', label: 'Diplo' },
   { id: 'empire', label: 'Empire' },
 ];
 
@@ -36,15 +37,21 @@ const TABS: Record<CampaignStatus, { id: Tab; label: string }[]> = {
   lobby: [
     { id: 'lobby', label: 'Lobby' },
     { id: 'map', label: 'Map' },
+    { id: 'diplo', label: 'Diplo' },
   ],
   draft: [
     { id: 'map', label: 'Map' },
     { id: 'draft', label: 'Draft' },
+    { id: 'diplo', label: 'Diplo' },
     { id: 'empire', label: 'Empire' },
   ],
   active: AT_WAR,
   finished: AT_WAR,
 };
+
+/** What the desktop's left column shows: the lobby, draft or war room, or diplomacy. */
+type Side = 'main' | 'diplo';
+const MAIN_LABEL: Record<CampaignStatus, string> = { lobby: 'Lobby', draft: 'Draft', active: 'Wars', finished: 'Wars' };
 
 export function CampaignScreen({ id }: { id: string }) {
   const router = useRouter();
@@ -91,10 +98,13 @@ function CenteredMessage({ children }: { children: ReactNode }) {
   return <div className="flex min-h-dvh flex-col items-center justify-center p-6 text-center">{children}</div>;
 }
 
-/** Opens and closes panels through the query string (?war=, ?game=), so links and the back button work. */
+/**
+ * Opens and closes panels through the query string (?war=, ?game=, ?chat=, ?accord=), so links and
+ * the back button work.
+ */
 function usePanelParams() {
   const searchParams = useSearchParams();
-  const set = useCallback((key: 'war' | 'game', value: string | null) => {
+  const set = useCallback((key: 'war' | 'game' | 'chat' | 'accord', value: string | null) => {
     const params = new URLSearchParams(window.location.search);
     if (value) params.set(key, value);
     else params.delete(key);
@@ -103,7 +113,15 @@ function usePanelParams() {
     if (value) window.history.pushState(null, '', url);
     else window.history.replaceState(null, '', url);
   }, []);
-  return { warId: searchParams.get('war'), gameId: searchParams.get('game'), set };
+  return {
+    warId: searchParams.get('war'),
+    gameId: searchParams.get('game'),
+    /** The player whose private conversation is open. */
+    chatWith: searchParams.get('chat'),
+    /** An accord to show, e.g. from a notification. */
+    accordId: searchParams.get('accord'),
+    set,
+  };
 }
 
 function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology }) {
@@ -123,7 +141,40 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
   const openWar = panels.warId ? campaign.wars.find((w) => w.id === panels.warId) : undefined;
   const myGames = useMyGames(model);
   const myMoves = myGames.filter((g) => g.myMove).length;
-  const answers = model.awaitingMe.length;
+  const answers = model.answersNeeded;
+  const unread = useUnread(campaign.id);
+  const [side, setSide] = useState<Side>('main');
+  const [diploView, setDiploView] = useState<DiploView>('dispatches');
+
+  // A conversation or accord in the address (a notification, the back button) opens Diplo on it.
+  const { chatWith, accordId } = panels;
+  useEffect(() => {
+    if (!chatWith) return;
+    setDiploView('messages');
+    setTab('diplo');
+    setSide('diplo');
+  }, [chatWith]);
+  useEffect(() => {
+    if (!accordId) return;
+    setDiploView('accords');
+    setTab('diplo');
+    setSide('diplo');
+  }, [accordId]);
+  const changeDiploView = (view: DiploView) => {
+    if (view !== 'messages' && chatWith) panels.set('chat', null);
+    if (view !== 'accords' && accordId) panels.set('accord', null);
+    setDiploView(view);
+  };
+  // Leaving Diplo drops its address, so a notification for the same conversation opens it again.
+  const diploShown = isDesktop ? side === 'diplo' : tab === 'diplo';
+  const wasDiploShown = useRef(diploShown);
+  useEffect(() => {
+    if (wasDiploShown.current && !diploShown) {
+      if (chatWith) panels.set('chat', null);
+      if (accordId) panels.set('accord', null);
+    }
+    wasDiploShown.current = diploShown;
+  }, [diploShown, chatWith, accordId, panels]);
 
   // Jump to the natural first tab when the campaign moves on (e.g. the host starts the draft).
   const status = campaign.status;
@@ -170,9 +221,34 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
         navigator.vibrate?.(120);
         // In a live campaign the clocks are about to start, so go straight to the board.
         if (current.campaign.rules.war.pace === 'live') openGame(e.payload.gameId);
+      } else if (
+        e.type === 'accord.signed' &&
+        e.actorId !== me &&
+        (e.payload.proposerId === me || e.payload.recipientId === me)
+      ) {
+        setToast(`Accord signed with ${playerName(current, e.actorId ?? '')}`);
+      } else if (e.type === 'accord.broken' && e.payload.partnerId === me) {
+        setToast(`${playerName(current, e.payload.breakerId)} broke your accord`);
+        navigator.vibrate?.([80, 60, 80]);
       }
     }
   });
+  // Private messages, unless that conversation is already on screen.
+  useServerMessages((message) => {
+    if (message.type !== 'chat.message' || message.campaignId !== campaign.id) return;
+    const m = message.message;
+    if (m.recipientId !== me || m.body === null) return;
+    if (diploShown && diploView === 'messages' && chatWith === m.authorId) return;
+    setToast(`Message from ${playerName(modelRef.current, m.authorId)}`);
+  });
+  // New accord proposals arrive with a refetch, since only the two players are told.
+  const seenProposals = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set(model.proposalsToMe.map((a) => a.id));
+    const fresh = seenProposals.current && model.proposalsToMe.find((a) => !seenProposals.current!.has(a.id));
+    if (fresh) setToast(`${playerName(model, fresh.proposerId)} proposes an accord`);
+    seenProposals.current = ids;
+  }, [model]);
   // Results arrive with a refetch, so the war's outcome is in the model by then.
   const lastResolved = useRef<string | null>(null);
   useEffect(() => {
@@ -184,9 +260,17 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
   }, [model, me]);
 
   useEffect(() => {
-    const flag = model.myTurn ? '(Your pick) ' : myMoves > 0 ? '(Your move) ' : answers > 0 ? '(Answer needed) ' : '';
+    const flag = model.myTurn
+      ? '(Your pick) '
+      : myMoves > 0
+        ? '(Your move) '
+        : answers > 0
+          ? '(Answer needed) '
+          : unread.direct > 0
+            ? '(New message) '
+            : '';
     document.title = `${flag}${campaign.name} · Empire Chess`;
-  }, [model.myTurn, myMoves, answers, campaign.name]);
+  }, [model.myTurn, myMoves, answers, unread.direct, campaign.name]);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
 
@@ -220,6 +304,13 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
   };
   const closeWar = () => panels.set('war', null);
   const closeGame = () => panels.set('game', null);
+  const openChat = (userId: string) => panels.set('chat', userId);
+  const closeChat = () => panels.set('chat', null);
+  /** From a dispatch: on phones the war opens in the Wars tab. */
+  const showWarFromDiplo = (warId: string) => {
+    showWar(warId);
+    if (!isDesktop) setTab('wars');
+  };
 
   const mapWars: MapWar[] = useMemo(
     () =>
@@ -262,9 +353,24 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
     <div className="space-y-6 p-4">
       <WarsPanel model={model} onOpenWar={showWar} onOpenGame={openGame} />
       <Standings model={model} />
-      <Dispatches model={model} onSelect={flyTo} onOpenWar={showWar} />
     </div>
   );
+  const diploPanel = (
+    <DiploPanel
+      model={model}
+      view={diploView}
+      onView={changeDiploView}
+      chatWith={chatWith}
+      onOpenChat={openChat}
+      onCloseChat={closeChat}
+      focusAccordId={accordId}
+      onSelect={flyTo}
+      onOpenWar={showWarFromDiplo}
+    />
+  );
+  // Badges: amber when something needs the player, plain for unread channel messages.
+  const warsNeedMe = model.awaitingMe.length + myMoves;
+  const diploNeedsMe = model.proposalsToMe.length + unread.direct;
   const leftPanel =
     campaign.status === 'lobby' ? (
       <LobbyPanel model={model} onSelect={flyTo} />
@@ -280,8 +386,31 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
 
       <div className="relative flex min-h-0 flex-1">
         {isDesktop && (
-          <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-line" aria-label="Campaign">
-            {leftPanel}
+          <aside className="flex w-[340px] shrink-0 flex-col border-r border-line" aria-label="Campaign">
+            <SegmentTabs<Side>
+              label="Campaign"
+              value={side}
+              onChange={setSide}
+              tabs={[
+                {
+                  id: 'main',
+                  label: MAIN_LABEL[campaign.status],
+                  badge: model.myTurn ? 1 : warsNeedMe,
+                  alert: true,
+                },
+                {
+                  id: 'diplo',
+                  label: 'Diplo',
+                  badge: diploNeedsMe || unread.channel,
+                  alert: diploNeedsMe > 0,
+                },
+              ]}
+            />
+            {side === 'diplo' ? (
+              <div className="min-h-0 flex-1">{diploPanel}</div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto">{leftPanel}</div>
+            )}
           </aside>
         )}
 
@@ -341,10 +470,11 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
 
           {/* Phones: other tabs cover the map (which stays mounted to keep its zoom). */}
           {!isDesktop && tab !== 'map' && (
-            <div className="absolute inset-0 overflow-y-auto bg-gunmetal">
+            <div className={`absolute inset-0 bg-gunmetal ${tab === 'diplo' ? 'flex flex-col' : 'overflow-y-auto'}`}>
               {tab === 'lobby' && <LobbyPanel model={model} onSelect={flyTo} />}
               {tab === 'wars' && (warPanel ?? warRoom)}
               {tab === 'draft' && <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />}
+              {tab === 'diplo' && diploPanel}
               {tab === 'empire' && <EmpirePanel model={model} onSelect={flyTo} />}
             </div>
           )}
@@ -372,7 +502,11 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
           aria-label="Sections"
         >
           {tabs.map((t) => {
-            const alert = (t.id === 'draft' && model.myTurn) || (t.id === 'wars' && (answers > 0 || myMoves > 0));
+            const alert =
+              (t.id === 'draft' && model.myTurn) ||
+              (t.id === 'wars' && warsNeedMe > 0) ||
+              (t.id === 'diplo' && diploNeedsMe > 0);
+            const quiet = t.id === 'diplo' && !alert && unread.channel > 0;
             return (
               <button
                 key={t.id}
@@ -390,6 +524,9 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
                 {t.label}
                 {alert && tab !== t.id && (
                   <span className="absolute top-3 ml-1 size-2 rounded-full bg-amber" aria-label="needs you" />
+                )}
+                {quiet && tab !== t.id && (
+                  <span className="absolute top-3 ml-1 size-2 rounded-full bg-paper/70" aria-label="unread messages" />
                 )}
               </button>
             );

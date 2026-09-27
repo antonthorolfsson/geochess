@@ -1,6 +1,7 @@
 import type { Color, LiveClockSpec, TimeControl } from './chess';
 import type { CampaignRules, Pace } from './config';
 import type { TerritoryId } from './dataset';
+import { accordBetween, renunciationAgainst, type Accord, type Renunciation } from './diplomacy';
 import type { UserId } from './draft';
 import { bordersAny, getTerritory, reachableWithin, type DatasetIndex } from './graph';
 
@@ -78,12 +79,25 @@ export interface WarBoard {
   wars: readonly ActiveWar[];
   /** Truces in force. */
   truces: readonly Truce[];
+  /** Accords in force: neither partner may declare war on the other. */
+  accords: readonly Accord[];
+  /** Accords renounced this round: the breaker can't declare war on the former partner yet. */
+  renunciations: readonly Renunciation[];
 }
 
-/** How long the defender has to answer a declaration, and the attacker to answer a counter. */
+/**
+ * How long the defender has to answer a declaration, and the attacker to answer a counter. Accord
+ * proposals get the same window.
+ */
 export const RESPONSE_WINDOW_MS: Record<Pace, number> = {
   live: 5 * 60_000,
   correspondence: 24 * 60 * 60_000,
+};
+
+/** The answer window in words. */
+export const RESPONSE_WINDOW_TEXT: Record<Pace, string> = {
+  live: '5 minutes',
+  correspondence: '24 hours',
 };
 
 /** `pct` percent of a whole number, rounded up, without floating-point surprises. */
@@ -151,6 +165,8 @@ export type TargetRejection =
   | 'own-country'
   | 'in-war'
   | 'truce'
+  | 'accord'
+  | 'renounced'
   | 'not-bordering'
   | 'no-launcher'
   | 'stake-too-small';
@@ -161,6 +177,8 @@ export const TARGET_REJECTION_MESSAGES: Record<TargetRejection, string> = {
   'own-country': 'That country is already yours.',
   'in-war': 'That country is already caught up in a war.',
   truce: 'You have a truce with its owner.',
+  accord: 'You have an accord with its owner.',
+  renounced: 'You renounced your accord with its owner, so you must wait for the next round to attack them.',
   'not-bordering': 'It must border one of your countries, by land or sea lane.',
   'no-launcher': 'None of your countries bordering it can launch an attack: they are in other wars or newly won.',
   'stake-too-small': 'The countries bordering it cannot raise a big enough stake.',
@@ -185,6 +203,8 @@ function targetCheck(
   if (holding.ownerId === attackerId) return 'own-country';
   if (locks.has(targetId)) return 'in-war';
   if (truceBetween(board, attackerId, holding.ownerId)) return 'truce';
+  if (accordBetween(board, attackerId, holding.ownerId)) return 'accord';
+  if (renunciationAgainst(board, attackerId, holding.ownerId)) return 'renounced';
   const bordering = board.idx.neighbors(targetId).filter((id) => board.holdings.get(id)?.ownerId === attackerId);
   if (bordering.length === 0) return 'not-bordering';
   const launchable = bordering.filter((id) => stakeable.has(id));

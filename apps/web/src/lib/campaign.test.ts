@@ -1,4 +1,4 @@
-import { DEFAULT_RULES, indexDataset, type CampaignView, type WarView } from '@empire/rules';
+import { DEFAULT_RULES, indexDataset, type AccordView, type CampaignView, type WarView } from '@empire/rules';
 import { lineDataset } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
 import { buildModel, totalValue } from './campaign';
@@ -12,6 +12,7 @@ const member = (userId: string, color: number) => ({
   color,
   autodraft: false,
   tokens: 1,
+  reputation: 100,
   joinedAt: '2026-01-01T00:00:00.000Z',
 });
 
@@ -35,6 +36,7 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     wars: [],
     truces: [],
     acquired: {},
+    accords: [],
     ...overrides,
   };
 }
@@ -163,5 +165,58 @@ describe('wars in the model', () => {
     expect(model.activeWars).toEqual([]);
     expect(model.pastWars.map((w) => w.id)).toEqual(['w1']);
     expect(model.targets.size).toBe(0);
+  });
+});
+
+describe('accords in the model', () => {
+  const holdings = { A: 'ann', B: 'ann', C: 'ann', D: 'bo', E: 'bo', F: 'bo' };
+  const underway = (accords: AccordView[]) => campaign({ status: 'active', round: 2, draft: null, holdings, accords });
+  const accord = (overrides: Partial<AccordView> = {}): AccordView => ({
+    id: 'a1',
+    proposerId: 'ann',
+    recipientId: 'bo',
+    status: 'active',
+    rounds: 3,
+    terms: null,
+    proposedRound: 1,
+    proposedAt: '2026-01-01T00:00:00.000Z',
+    respondBy: null,
+    signedRound: 1,
+    signedAt: '2026-01-01T00:00:00.000Z',
+    endsRound: 4,
+    endedRound: null,
+    endedAt: null,
+    brokenBy: null,
+    renews: null,
+    ...overrides,
+  });
+
+  it('keeps accord partners off each other’s target list', () => {
+    const signed = buildModel(underway([accord()]), user('bo'), idx)!;
+    expect(signed.targets.size).toBe(0);
+    expect(signed.accordWith.get('ann')?.id).toBe('a1');
+    expect(signed.accordsInForce.map((a) => a.id)).toEqual(['a1']);
+    // Once its end round starts, the accord no longer holds.
+    const over = buildModel({ ...underway([accord()]), round: 4 }, user('bo'), idx)!;
+    expect([...over.targets]).toEqual(['C']);
+    expect(over.accordWith.size).toBe(0);
+  });
+
+  it('holds a breaker back for the rest of the round, but not the betrayed player', () => {
+    const broken = underway([accord({ status: 'broken', brokenBy: 'ann', endedRound: 2 })]);
+    expect(buildModel(broken, user('ann'), idx)!.targets.size).toBe(0);
+    expect([...buildModel(broken, user('bo'), idx)!.targets]).toEqual(['C']);
+  });
+
+  it('counts proposals waiting for my answer among the answers I owe', () => {
+    const proposal = accord({ status: 'proposed', signedRound: null, signedAt: null, endsRound: null });
+    const bo = buildModel(underway([proposal]), user('bo'), idx)!;
+    expect(bo.proposalsToMe.map((a) => a.id)).toEqual(['a1']);
+    expect(bo.answersNeeded).toBe(1);
+    expect(bo.proposalWith.get('ann')?.id).toBe('a1');
+    const ann = buildModel(underway([proposal]), user('ann'), idx)!;
+    expect(ann.proposalsToMe).toEqual([]);
+    expect(ann.proposalWith.get('bo')?.id).toBe('a1');
+    expect(ann.answersNeeded).toBe(0);
   });
 });

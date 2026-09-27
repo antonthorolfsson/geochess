@@ -100,7 +100,7 @@ export function NotificationsToggle() {
         description={
           state === 'blocked'
             ? 'Blocked in your browser settings.'
-            : 'Wars declared on you, answers you need to give, and your moves.'
+            : 'Wars declared on you, answers you need to give, your moves, accords and private messages.'
         }
       />
       {error && <p className="text-sm text-[#f19a92]">{error}</p>}

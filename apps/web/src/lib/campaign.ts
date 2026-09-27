@@ -1,10 +1,14 @@
 import {
+  accordsInForce,
   activeWar,
   attackableTargets,
   draftListStatus,
   legalPicks,
+  partnerIn,
   picksUntilTurn,
+  renunciationsFrom,
   upcomingPickers,
+  type AccordView,
   type AutodraftFallback,
   type CampaignView,
   type DatasetIndex,
@@ -60,6 +64,16 @@ export interface CampaignModel {
   awaitingMe: WarView[];
   /** The unresolved war each locked country is caught up in (as target, stake or offer). */
   warOf: Map<TerritoryId, WarView>;
+  /** Accords in force between any two players, most recently signed first. */
+  accordsInForce: AccordView[];
+  /** Accord proposals waiting for my answer. */
+  proposalsToMe: AccordView[];
+  /** My accord in force with each partner, by their id. */
+  accordWith: Map<string, AccordView>;
+  /** The proposal waiting between me and each other player, whichever way it goes, by their id. */
+  proposalWith: Map<string, AccordView>;
+  /** Everything waiting for my answer: wars and accord proposals. */
+  answersNeeded: number;
 }
 
 export function buildModel(campaign: CampaignView, user: SessionUser, idx: DatasetIndex): CampaignModel | null {
@@ -89,6 +103,8 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
     holdings: new Map([...owners].map(([id, ownerId]) => [id, { ownerId, acquiredRound: campaign.acquired[id] ?? 0 }])),
     wars: campaign.wars.filter((w) => w.status !== 'resolved').map(activeWar),
     truces: campaign.truces,
+    accords: accordsInForce(campaign.accords, campaign.round),
+    renunciations: renunciationsFrom(campaign.accords, campaign.round),
   };
   const activeWars = campaign.wars.filter((w) => w.status !== 'resolved');
   const warOf = new Map<TerritoryId, WarView>();
@@ -98,6 +114,19 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
       warOf.set(id, war);
     }
   }
+
+  const inForce = campaign.accords.filter((a) => board.accords.some((x) => x.id === a.id));
+  const accordWith = new Map<string, AccordView>();
+  for (const a of inForce)
+    if (a.proposerId === me.userId || a.recipientId === me.userId) accordWith.set(partnerIn(a, me.userId), a);
+  const pending = campaign.accords.filter((a) => a.status === 'proposed');
+  const proposalWith = new Map(pending.map((a) => [partnerIn(a, me.userId), a]));
+  const proposalsToMe = pending.filter((a) => a.recipientId === me.userId);
+  const awaitingMe = activeWars.filter(
+    (w) =>
+      (w.status === 'declared' && w.defenderId === me.userId) ||
+      (w.status === 'countered' && w.attackerId === me.userId),
+  );
 
   return {
     campaign,
@@ -127,12 +156,13 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
     activeWars,
     pastWars: campaign.wars.filter((w) => w.status === 'resolved'),
     targets: campaign.status === 'active' ? attackableTargets(board, me.userId) : new Set(),
-    awaitingMe: activeWars.filter(
-      (w) =>
-        (w.status === 'declared' && w.defenderId === me.userId) ||
-        (w.status === 'countered' && w.attackerId === me.userId),
-    ),
+    awaitingMe,
     warOf,
+    accordsInForce: inForce,
+    proposalsToMe,
+    accordWith,
+    proposalWith,
+    answersNeeded: awaitingMe.length + proposalsToMe.length,
   };
 }
 

@@ -9,6 +9,7 @@ import { registerCampaignRoutes } from './campaigns/routes';
 import type { AppContext } from './context';
 import type { DatasetProvider } from './datasets';
 import type { Db } from './db/client';
+import { registerDiplomacyRoutes } from './diplomacy/routes';
 import type { Env } from './env';
 import { HttpError, forbidden } from './lib/errors';
 import { KeyedMutex } from './lib/mutex';
@@ -108,6 +109,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAuthRoutes(app, ctx);
   registerCampaignRoutes(app, ctx);
   registerWarRoutes(app, ctx);
+  registerDiplomacyRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);
   registerRealtimeRoutes(app, ctx);
   return app;

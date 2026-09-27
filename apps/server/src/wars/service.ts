@@ -1,6 +1,7 @@
 import {
   INITIAL_FEN,
   RESPONSE_WINDOW_MS,
+  RESPONSE_WINDOW_TEXT,
   STAKE_REJECTION_MESSAGES,
   TARGET_REJECTION_MESSAGES,
   afterGame,
@@ -33,6 +34,7 @@ import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { mutate, requireActive, requireHost, requireMember, userName, type MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import { campaigns, games, holdings, members, wars } from '../db/schema';
+import { keepFinishedAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { Notice } from '../notifications/notifier';
@@ -50,7 +52,7 @@ function notify(ctx: AppContext, scope: MutationScope, notice: Notice): void {
 }
 
 function windowText(scope: MutationScope): string {
-  return scope.campaign.rules.war.pace === 'live' ? '5 minutes' : '24 hours';
+  return RESPONSE_WINDOW_TEXT[scope.campaign.rules.war.pace];
 }
 
 function responseDeadline(ctx: AppContext, scope: MutationScope): Date {
@@ -521,7 +523,10 @@ async function resolveWar(
 // ---------------------------------------------------------------------------------------------
 // Rounds and deadlines
 
-/** The host starts the next round: everyone's tokens refill, and locks and truces count down. */
+/**
+ * The host starts the next round: everyone's tokens refill, locks and truces count down, and
+ * accords whose time is up run their course.
+ */
 export async function nextRound(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'start the next round');
@@ -538,6 +543,7 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
     }
     scope.campaign = { ...scope.campaign, round };
     await scope.log.add({ type: 'round.started', payload: { round } }, userId, round);
+    await keepFinishedAccords(ctx, scope);
   });
 }
 

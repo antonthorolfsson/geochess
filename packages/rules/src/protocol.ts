@@ -2,6 +2,7 @@
 import type { Clocks, GameEndReason, GameResult, TimeControl } from './chess';
 import type { CampaignRules } from './config';
 import type { TerritoryId } from './dataset';
+import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
 import type { Transfer, Truce, WarCounter, WarOutcome } from './war';
 
@@ -78,6 +79,37 @@ export type CampaignEvent =
         /** Tokens paid as tribute. */
         tokens?: number;
       };
+    }
+  /**
+   * Two players signed an accord: neither may declare war on the other until `endsRound` starts.
+   * `renews` is the accord it replaced, when they renewed one already in force.
+   */
+  | {
+      type: 'accord.signed';
+      payload: {
+        accordId: string;
+        proposerId: string;
+        recipientId: string;
+        rounds: number;
+        endsRound: number;
+        terms: string | null;
+        renews: string | null;
+      };
+    }
+  /** An accord was renounced before it ran its course. */
+  | { type: 'accord.broken'; payload: { accordId: string; breakerId: string; partnerId: string } }
+  /** An accord ran its course. */
+  | { type: 'accord.kept'; payload: { accordId: string; players: [string, string] } }
+  | {
+      type: 'reputation.changed';
+      payload: {
+        userId: string;
+        delta: number;
+        /** Reputation after the change. */
+        reputation: number;
+        reason: 'accord-broken' | 'accord-kept';
+        accordId: string;
+      };
     };
 
 export type CampaignEventType = CampaignEvent['type'];
@@ -97,6 +129,8 @@ export interface MemberView {
   autodraft: boolean;
   /** War tokens: one declaration each. Public, like the map. */
   tokens: number;
+  /** Public standing for keeping accords: starts at 100, falls when an accord is broken. */
+  reputation: number;
   joinedAt: string;
 }
 
@@ -136,6 +170,92 @@ export interface CampaignView {
   truces: Truce[];
   /** The round each country last changed hands in a war or tribute; drafted countries are absent. */
   acquired: Record<TerritoryId, number>;
+  /**
+   * Accords in force and recently ended ones (public), plus the viewer's own proposals, which only
+   * the two players see.
+   */
+  accords: AccordView[];
+}
+
+export interface AccordView {
+  id: string;
+  proposerId: string;
+  recipientId: string;
+  status: AccordStatus;
+  /** The length the proposer chose. */
+  rounds: number;
+  /** Free text both players agreed to. Public once signed; the game doesn't enforce it. */
+  terms: string | null;
+  proposedRound: number;
+  proposedAt: string;
+  /** While proposed: when the proposal lapses without an answer. */
+  respondBy: string | null;
+  signedRound: number | null;
+  signedAt: string | null;
+  /** Once signed: the accord holds until this round starts. */
+  endsRound: number | null;
+  /** When it ended: kept, broken, renewed, or (for proposals) declined, withdrawn or lapsed. */
+  endedRound: number | null;
+  endedAt: string | null;
+  brokenBy: string | null;
+  /** The accord this one replaced, when the partners renewed. */
+  renews: string | null;
+}
+
+export interface ProposeAccordInput {
+  partnerId: string;
+  rounds: number;
+  terms?: string | null;
+}
+
+/** A chat message in the campaign channel or a private conversation. */
+export interface MessageView {
+  id: number;
+  authorId: string;
+  /** Null in the campaign channel; the other player in a private conversation. */
+  recipientId: string | null;
+  /** Null once deleted by its author or removed by the host. */
+  body: string | null;
+  removed: 'author' | 'host' | null;
+  createdAt: string;
+}
+
+export interface SendMessageInput {
+  body: string;
+  /** The other player, for a private message; omitted or null for the campaign channel. */
+  to?: string | null;
+}
+
+/**
+ * The activity feed: dispatches (the event log) and the campaign channel in one timeline.
+ * - `wars`: war dispatches and round starts.
+ * - `accords`: accords and reputation.
+ * - `chat`: the campaign channel.
+ */
+export const FEED_FILTERS = ['all', 'wars', 'accords', 'chat'] as const;
+export type FeedFilter = (typeof FEED_FILTERS)[number];
+
+export type FeedItem = { kind: 'event'; event: EventView } | { kind: 'message'; message: MessageView };
+
+export interface FeedPage {
+  /** Newest first. */
+  items: FeedItem[];
+  /** Pass as `before` to load older items; null once the start is reached. */
+  next: string | null;
+}
+
+export interface MessagesPage {
+  /** Newest first. */
+  messages: MessageView[];
+  /** Pass as `before` to load older messages; null once the start is reached. */
+  next: number | null;
+}
+
+/** Unread messages for the viewer: the campaign channel, and each private conversation. */
+export interface ChatSummary {
+  channelUnread: number;
+  /** One per other player the viewer has exchanged private messages with. */
+  conversations: { userId: string; unread: number; last: MessageView }[];
 }
 
 /**
@@ -234,8 +354,10 @@ export interface CampaignSummary {
   maxPlayers: number;
   myColor: number;
   currentPicker: string | null;
-  /** Wars waiting for the viewer's answer, plus games waiting for the viewer's move. */
+  /** Wars and accord proposals waiting for the viewer's answer, plus games waiting for their move. */
   attention: number;
+  /** Private messages the viewer hasn't read. */
+  unread: number;
   createdAt: string;
 }
 
@@ -263,4 +385,11 @@ export type ServerMessage =
   | { type: 'campaign.changed'; campaignId: string }
   | { type: 'campaign.deleted'; campaignId: string }
   /** A game's new state after a move, draw offer or result; boards apply it without refetching. */
-  | { type: 'game.update'; campaignId: string; game: GameView };
+  | { type: 'game.update'; campaignId: string; game: GameView }
+  /**
+   * A new chat message, or one that was deleted or removed. Channel messages go to every member,
+   * private ones to their two players.
+   */
+  | { type: 'chat.message'; campaignId: string; message: MessageView }
+  /** The player read a conversation (on any device), so unread counts changed. */
+  | { type: 'chat.read'; campaignId: string };

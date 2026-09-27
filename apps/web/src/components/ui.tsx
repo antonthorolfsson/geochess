@@ -86,3 +86,53 @@ export function ValueBadge({ value, className = '' }: { value: number; className
     </span>
   );
 }
+
+export interface SegmentTab<T extends string> {
+  id: T;
+  label: string;
+  /** A count beside the label, e.g. unread messages. */
+  badge?: number;
+  /** Shows the count in signal amber: something needs the player. */
+  alert?: boolean;
+}
+
+/** A row of tabs across the top of a panel, the current one underlined in amber. */
+export function SegmentTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  label,
+}: {
+  tabs: SegmentTab<T>[];
+  value: T;
+  onChange(id: T): void;
+  label: string;
+}) {
+  return (
+    <nav className="flex shrink-0 border-b border-line" aria-label={label}>
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onChange(t.id)}
+          aria-current={value === t.id ? 'page' : undefined}
+          className={`relative flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 px-1.5 text-[0.78rem] font-bold tracking-[0.1em] uppercase ${
+            value === t.id ? 'text-paper' : 'text-faint hover:text-muted'
+          }`}
+        >
+          <span className="truncate">{t.label}</span>
+          {t.badge ? (
+            <span
+              className={`min-w-5 shrink-0 rounded-full px-1.5 text-center text-[0.7rem] leading-5 tracking-normal tabular-nums ${
+                t.alert ? 'bg-amber text-gunmetal' : 'bg-raised text-paper'
+              }`}
+            >
+              {t.badge}
+            </span>
+          ) : null}
+          {value === t.id && <span className="absolute inset-x-3 bottom-0 h-0.5 bg-amber" aria-hidden="true" />}
+        </button>
+      ))}
+    </nav>
+  );
+}

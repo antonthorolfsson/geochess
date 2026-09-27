@@ -1,9 +1,10 @@
-import { activeTruces, activeWar, type Truce, type WarBoard } from '@empire/rules';
+import { accordsInForce, activeTruces, activeWar, renunciationsFrom, type Truce, type WarBoard } from '@empire/rules';
 import { and, eq, gte, ne, or } from 'drizzle-orm';
 import type { CampaignRow } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import type { Tx } from '../db/client';
 import { holdings, wars, type games } from '../db/schema';
+import { warAccords } from '../diplomacy/accords';
 
 export type WarRow = typeof wars.$inferSelect;
 export type GameRow = typeof games.$inferSelect;
@@ -37,6 +38,7 @@ export async function loadBoard(ctx: AppContext, tx: Tx, campaign: CampaignRow):
     .from(holdings)
     .where(eq(holdings.campaignId, campaign.id));
   const warRows = await relevantWars(tx, campaign);
+  const accordRows = await warAccords(tx, campaign);
   return {
     idx: ctx.datasets.get(campaign.datasetVersion),
     rules: campaign.rules,
@@ -44,5 +46,7 @@ export async function loadBoard(ctx: AppContext, tx: Tx, campaign: CampaignRow):
     holdings: new Map(rows.map((r) => [r.territoryId, { ownerId: r.ownerId, acquiredRound: r.acquiredRound }])),
     wars: warRows.filter((w) => w.status !== 'resolved').map(activeWar),
     truces: trucesFrom(campaign, warRows),
+    accords: accordsInForce(accordRows, campaign.round),
+    renunciations: renunciationsFrom(accordRows, campaign.round),
   };
 }

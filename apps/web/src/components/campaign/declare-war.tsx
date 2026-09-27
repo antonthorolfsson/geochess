@@ -2,7 +2,9 @@
 
 import {
   TARGET_REJECTION_MESSAGES,
+  accordBetween,
   checkTarget,
+  renunciationAgainst,
   stakeFloor,
   stakeableFromRound,
   truceBetween,
@@ -62,12 +64,19 @@ export function WarAction({
 
   const rejection = checkTarget(board, me, territory.id);
   if (rejection) {
+    const owner = playerName(model, ownerId);
     const truce = rejection === 'truce' ? truceBetween(board, me, ownerId) : undefined;
+    const accord = rejection === 'accord' ? accordBetween(board, me, ownerId) : undefined;
+    const renounced = rejection === 'renounced' ? renunciationAgainst(board, me, ownerId) : undefined;
     return (
       <p className="text-[0.95rem] text-muted">
         {truce
-          ? `You have a truce with ${playerName(model, ownerId)} until round ${truce.endsRound}.`
-          : TARGET_REJECTION_MESSAGES[rejection]}
+          ? `You have a truce with ${owner} until round ${truce.endsRound}.`
+          : accord
+            ? `You have an accord with ${owner}: no war between you until round ${accord.endsRound} starts.`
+            : renounced
+              ? `You broke your accord with ${owner}, so you can't declare war on them until round ${renounced.untilRound} starts.`
+              : TARGET_REJECTION_MESSAGES[rejection]}
       </p>
     );
   }

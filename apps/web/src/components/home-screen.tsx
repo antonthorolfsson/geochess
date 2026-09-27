@@ -90,6 +90,11 @@ function Dashboard({ user }: { user: SessionUser }) {
                       {yourPick ? 'Your pick' : `${c.attention} waiting`}
                     </span>
                   )}
+                  {c.unread > 0 && (
+                    <span className="rounded-[3px] border border-line-strong px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap uppercase">
+                      {c.unread} {c.unread === 1 ? 'message' : 'messages'}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

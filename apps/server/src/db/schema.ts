@@ -1,5 +1,7 @@
 import {
+  ACCORD_STATUSES,
   AUTODRAFT_FALLBACKS,
+  REPUTATION_START,
   type CampaignRules,
   type Clocks,
   type GameEndReason,
@@ -7,6 +9,7 @@ import {
   type WarCounter,
 } from '@empire/rules';
 import {
+  bigint,
   bigserial,
   boolean,
   index,
@@ -111,6 +114,8 @@ export const members = pgTable(
     autodraftFallback: text('autodraft_fallback', { enum: AUTODRAFT_FALLBACKS }).notNull().default('best'),
     /** War tokens: one declaration each. */
     tokens: integer('tokens').notNull().default(0),
+    /** Public standing for keeping accords. */
+    reputation: integer('reputation').notNull().default(REPUTATION_START),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -212,6 +217,85 @@ export const games = pgTable(
     finishedAt: timestamp('finished_at', { withTimezone: true }),
   },
   (t) => [index('games_war').on(t.warId), index('games_deadline').on(t.status, t.deadline)],
+);
+
+/**
+ * Non-aggression accords between two players, from proposal to end. Proposals are private to the
+ * two players; signed accords are public.
+ */
+export const accords = pgTable(
+  'accords',
+  {
+    id: text('id').primaryKey(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    proposerId: text('proposer_id')
+      .notNull()
+      .references(() => users.id),
+    recipientId: text('recipient_id')
+      .notNull()
+      .references(() => users.id),
+    status: text('status', { enum: ACCORD_STATUSES }).notNull(),
+    /** The length the proposer chose. */
+    rounds: integer('rounds').notNull(),
+    terms: text('terms'),
+    proposedRound: integer('proposed_round').notNull(),
+    proposedAt: timestamp('proposed_at', { withTimezone: true }).notNull(),
+    /** While proposed: when the proposal lapses without an answer. */
+    respondBy: timestamp('respond_by', { withTimezone: true }),
+    signedRound: integer('signed_round'),
+    signedAt: timestamp('signed_at', { withTimezone: true }),
+    /** Once signed: the accord holds until this round starts. */
+    endsRound: integer('ends_round'),
+    endedRound: integer('ended_round'),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    brokenBy: text('broken_by'),
+    /** The accord this one replaced, when the partners renewed. */
+    renews: text('renews'),
+  },
+  (t) => [index('accords_campaign').on(t.campaignId, t.status), index('accords_respond_by').on(t.respondBy)],
+);
+
+/** Chat: the campaign channel and private conversations between two players. */
+export const messages = pgTable(
+  'messages',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    /** `channel`, or the two players' ids in order, joined by a colon. */
+    conversation: text('conversation').notNull(),
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id),
+    /** Null in the channel; the other player in a private conversation. */
+    recipientId: text('recipient_id').references(() => users.id),
+    /** Emptied when the message is deleted or removed. */
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+    /** The author (deleted) or the host (removed). */
+    removedBy: text('removed_by'),
+  },
+  (t) => [index('messages_conversation').on(t.campaignId, t.conversation, t.id)],
+);
+
+/** How far each player has read each conversation, for unread counts on every device. */
+export const chatReads = pgTable(
+  'chat_reads',
+  {
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    conversation: text('conversation').notNull(),
+    lastReadId: bigint('last_read_id', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.userId, t.conversation] })],
 );
 
 /** Append-only campaign history. Feeds, graphs and timelapses are derived from it. */

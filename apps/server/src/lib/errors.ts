@@ -15,3 +15,4 @@ export const unauthorized = (message = 'Sign in to continue.') => new HttpError(
 export const forbidden = (message = "You can't do that.") => new HttpError(403, message, 'forbidden');
 export const notFound = (message = 'Not found.') => new HttpError(404, message, 'not-found');
 export const conflict = (message: string, code?: string) => new HttpError(409, message, code);
+export const tooManyRequests = (message: string) => new HttpError(429, message, 'rate-limited');

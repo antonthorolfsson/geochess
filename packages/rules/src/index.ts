@@ -2,6 +2,7 @@ export * from './chess';
 export * from './colors';
 export * from './config';
 export * from './dataset';
+export * from './diplomacy';
 export * from './draft';
 export * from './graph';
 export * from './protocol';

@@ -1,14 +1,19 @@
 import type { AppContext } from '../context';
+import { lapseProposals } from '../diplomacy/accords';
 import { armAllFlags, flagOverdueGames } from './games';
 import { expireResponses } from './service';
 
 /** How often the server looks for deadlines that have passed. Live flag-falls have their own timers. */
 const POLL_MS = 5_000;
 
-/** Everything due by now: unanswered declarations and counter-offers, flag-falls, half-settled games. */
+/**
+ * Everything due by now: unanswered declarations and counter-offers, flag-falls, half-settled
+ * games, and accord proposals nobody answered.
+ */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
   await flagOverdueGames(ctx);
+  await lapseProposals(ctx);
 }
 
 /**

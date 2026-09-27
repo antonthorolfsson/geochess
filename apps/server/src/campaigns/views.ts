@@ -10,7 +10,10 @@ import {
 } from '@empire/rules';
 import { and, asc, count, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import { campaigns, events, games, holdings, members, users, wars } from '../db/schema';
+import { accords, campaigns, events, games, holdings, members, users, wars } from '../db/schema';
+import { visibleAccords } from '../diplomacy/accords';
+import { unreadPrivateMessages } from '../diplomacy/chat';
+import { toAccordView } from '../diplomacy/views';
 import { notFound } from '../lib/errors';
 import { relevantWars, trucesFrom, type GameRow } from '../wars/board';
 import { toWarView } from '../wars/views';
@@ -50,6 +53,7 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
           color: members.color,
           autodraft: members.autodraft,
           tokens: members.tokens,
+          reputation: members.reputation,
           joinedAt: members.joinedAt,
         })
         .from(members)
@@ -133,6 +137,7 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         acquired: Object.fromEntries(
           holdingRows.filter((h) => h.acquiredRound > 0).map((h) => [h.territoryId, h.acquiredRound]),
         ),
+        accords: (await visibleAccords(tx, campaignId, viewerId)).map(toAccordView),
       };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
@@ -158,11 +163,9 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
     )
     .groupBy(members.campaignId);
   const countById = new Map(counts.map((r) => [r.campaignId, r.n]));
-  const attention = await attentionCounts(
-    ctx,
-    userId,
-    rows.map((r) => r.c.id),
-  );
+  const ids = rows.map((r) => r.c.id);
+  const attention = await attentionCounts(ctx, userId, ids);
+  const unread = await unreadPrivateMessages(ctx, userId, ids);
   return rows.map(({ c, myColor }) => ({
     id: c.id,
     name: c.name,
@@ -174,11 +177,12 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
     myColor,
     currentPicker: currentPicker(c),
     attention: attention.get(c.id) ?? 0,
+    unread: unread.get(c.id) ?? 0,
     createdAt: c.createdAt.toISOString(),
   }));
 }
 
-/** Per campaign: wars waiting for the player's answer, plus games waiting for their move. */
+/** Per campaign: wars and accord proposals waiting for the player's answer, plus games waiting for their move. */
 async function attentionCounts(ctx: AppContext, userId: string, campaignIds: string[]): Promise<Map<string, number>> {
   const answers = await ctx.db
     .select({ campaignId: wars.campaignId, n: count() })
@@ -207,8 +211,17 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
       ),
     )
     .groupBy(games.campaignId);
+  const proposals = await ctx.db
+    .select({ campaignId: accords.campaignId, n: count() })
+    .from(accords)
+    .where(
+      and(inArray(accords.campaignId, campaignIds), eq(accords.status, 'proposed'), eq(accords.recipientId, userId)),
+    )
+    .groupBy(accords.campaignId);
   const out = new Map<string, number>();
-  for (const { campaignId, n } of [...answers, ...moves]) out.set(campaignId, (out.get(campaignId) ?? 0) + n);
+  for (const { campaignId, n } of [...answers, ...moves, ...proposals]) {
+    out.set(campaignId, (out.get(campaignId) ?? 0) + n);
+  }
   return out;
 }
 

@@ -3,10 +3,17 @@ import type {
   AutodraftFallback,
   CampaignSummary,
   CampaignView,
+  ChatSummary,
   DeclareWarInput,
+  FeedFilter,
+  FeedPage,
   GameView,
   InvitePreview,
   MeResponse,
+  MessageView,
+  MessagesPage,
+  ProposeAccordInput,
+  SendMessageInput,
   WarReply,
   WarResponse,
 } from '@empire/rules';
@@ -88,6 +95,31 @@ export const api = {
   replyToWar: (id: string, warId: string, input: WarReply) =>
     request('POST', `/campaigns/${id}/wars/${warId}/reply`, input),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
+
+  proposeAccord: (id: string, input: ProposeAccordInput) =>
+    request<{ id: string }>('POST', `/campaigns/${id}/accords`, input),
+  answerAccord: (id: string, accordId: string, answer: 'accept' | 'decline') =>
+    request('POST', `/campaigns/${id}/accords/${accordId}/answer`, { answer }),
+  withdrawAccord: (id: string, accordId: string) => request('POST', `/campaigns/${id}/accords/${accordId}/withdraw`),
+  renounceAccord: (id: string, accordId: string) => request('POST', `/campaigns/${id}/accords/${accordId}/renounce`),
+
+  feed: (id: string, filter: FeedFilter, before?: string) =>
+    request<FeedPage>(
+      'GET',
+      `/campaigns/${id}/feed?filter=${filter}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+    ),
+  conversation: (id: string, peerId: string, before?: number) =>
+    request<MessagesPage>(
+      'GET',
+      `/campaigns/${id}/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}`,
+    ),
+  sendMessage: (id: string, input: SendMessageInput) =>
+    request<MessageView>('POST', `/campaigns/${id}/messages`, input),
+  removeMessage: (id: string, messageId: number) =>
+    request<MessageView>('DELETE', `/campaigns/${id}/messages/${messageId}`),
+  chatSummary: (id: string) => request<ChatSummary>('GET', `/campaigns/${id}/chat`),
+  markRead: (id: string, peerId: string | null, lastId: number) =>
+    request('POST', `/campaigns/${id}/chat/read`, { with: peerId, lastId }),
 
   game: (gameId: string) => request<GameView>('GET', `/games/${gameId}`),
   move: (gameId: string, uci: string, ply: number) => request<GameView>('POST', `/games/${gameId}/move`, { uci, ply }),

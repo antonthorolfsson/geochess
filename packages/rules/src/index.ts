@@ -5,5 +5,7 @@ export * from './dataset';
 export * from './diplomacy';
 export * from './draft';
 export * from './graph';
+export * from './openings';
 export * from './protocol';
+export * from './stats';
 export * from './war';

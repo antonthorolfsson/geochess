@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "data:build": "pnpm --filter @empire/data generate",
+    "data:openings": "pnpm --filter @empire/data openings",
     "db:generate": "pnpm --filter @empire/server db:generate",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

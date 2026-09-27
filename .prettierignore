@@ -4,6 +4,7 @@ LICENSE
 empire-chess-implementation-plan.md
 # Generated or managed by tools
 packages/data/datasets/
+packages/data/openings/
 # Hand-aligned comments for human review
 packages/data/config/
 packages/data/raw/

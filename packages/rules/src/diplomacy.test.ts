@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCORD_TERMS_MAX,
+  REPUTATION_PER_ROUND,
   accordBetween,
   accordEndsRound,
+  accordsHeldThrough,
   accordsInForce,
   checkProposal,
   cleanText,
   conversationKey,
   feedShows,
   partnerIn,
+  firstSignedRound,
   renunciationAgainst,
   renunciationsFrom,
+  reputationForKeeping,
+  type AccordHistory,
   type AccordRecord,
 } from './diplomacy';
 import type { FeedItem } from './protocol';
@@ -51,6 +56,60 @@ describe('accords in force', () => {
     const board = { round: 3, accords: accordsInForce(records, 3) };
     expect(accordBetween(board, BO, ANN)?.id).toBe('a1');
     expect(accordBetween(board, ANN, CY)).toBeUndefined();
+  });
+});
+
+describe('reputation for accords', () => {
+  const held = (over: Partial<AccordHistory> = {}): AccordHistory => ({
+    id: 'a1',
+    proposerId: ANN,
+    recipientId: BO,
+    status: 'active',
+    signedRound: 1,
+    renews: null,
+    ...over,
+  });
+  const paying = (accords: AccordHistory[], round: number) => accordsHeldThrough(accords, round).map((a) => a.id);
+
+  it('is paid for each whole round an accord held, from the round after it was signed', () => {
+    // Signed during round 1: round 1 doesn't count, round 2 is paid when round 3 starts.
+    expect(paying([held()], 2)).toEqual([]);
+    expect(paying([held()], 3)).toEqual(['a1']);
+    expect(paying([held()], 4)).toEqual(['a1']);
+  });
+
+  it('is never paid for a one-round accord, nor for the draft', () => {
+    // A one-round accord signed in round 2 ends when round 3 starts, having held no whole round.
+    expect(paying([held({ signedRound: 2 })], 3)).toEqual([]);
+    // Signed during the draft: nothing when the draft ends, then round 1 is paid when round 2 starts.
+    expect(paying([held({ signedRound: 0 })], 1)).toEqual([]);
+    expect(paying([held({ signedRound: 0 })], 2)).toEqual(['a1']);
+  });
+
+  it('carries on through renewals, however many', () => {
+    const first = held({ status: 'renewed' });
+    const second = held({ id: 'a2', status: 'renewed', signedRound: 2, renews: 'a1' });
+    const third = held({ id: 'a3', signedRound: 2, renews: 'a2' });
+    // Renewed twice during round 2: the partners were covered all through it.
+    expect(paying([first, second, third], 3)).toEqual(['a3']);
+    expect(firstSignedRound(third, [first, second, third])).toBe(1);
+    // Without the history, a renewal counts from its own signing.
+    expect(paying([third], 3)).toEqual([]);
+  });
+
+  it('stops when an accord is broken, and never pays proposals', () => {
+    expect(paying([held({ status: 'broken' }), held({ id: 'a2', status: 'proposed', signedRound: null })], 5)).toEqual(
+      [],
+    );
+  });
+
+  it('can be worked out before signing', () => {
+    expect(reputationForKeeping(4, 3)).toBe(2 * REPUTATION_PER_ROUND);
+    expect(reputationForKeeping(4, 1)).toBe(0);
+    expect(reputationForKeeping(0, 3)).toBe(2 * REPUTATION_PER_ROUND);
+    // Renewing an accord in force since round 2 keeps this round paid too.
+    expect(reputationForKeeping(4, 3, 2)).toBe(3 * REPUTATION_PER_ROUND);
+    expect(reputationForKeeping(4, 3, 4)).toBe(2 * REPUTATION_PER_ROUND);
   });
 });
 
@@ -118,6 +177,7 @@ describe('feed filters', () => {
     expect(feedShows('wars', event('round.started'))).toBe(true);
     expect(feedShows('wars', event('accord.signed'))).toBe(false);
     expect(feedShows('accords', event('reputation.changed'))).toBe(true);
+    expect(feedShows('accords', event('reputation.earned'))).toBe(true);
     expect(feedShows('all', event('draft.pick'))).toBe(true);
     expect(feedShows('chat', event('draft.pick'))).toBe(false);
     expect(feedShows('chat', message(null))).toBe(true);

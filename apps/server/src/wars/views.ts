@@ -1,4 +1,8 @@
 import { colorToMove, type GameSummary, type GameView, type WarView } from '@empire/rules';
+import { and, asc, eq } from 'drizzle-orm';
+import type { AppContext } from '../context';
+import { games, members, wars } from '../db/schema';
+import { notFound } from '../lib/errors';
 import type { GameRow, WarRow } from './board';
 
 export function toGameSummary(game: GameRow): GameSummary {
@@ -33,6 +37,26 @@ export function toGameView(game: GameRow, now: Date): GameView {
     drawOfferBy: game.drawOfferBy,
     serverNow: now.toISOString(),
   };
+}
+
+/**
+ * One war, for members: the campaign view carries only unresolved and recent wars, so older ones
+ * (linked from dispatches and empire pages) are read on their own.
+ */
+export async function warView(ctx: AppContext, campaignId: string, warId: string, viewerId: string): Promise<WarView> {
+  const [member] = await ctx.db
+    .select({ userId: members.userId })
+    .from(members)
+    .where(and(eq(members.campaignId, campaignId), eq(members.userId, viewerId)));
+  const [war] = member
+    ? await ctx.db
+        .select()
+        .from(wars)
+        .where(and(eq(wars.id, warId), eq(wars.campaignId, campaignId)))
+    : [];
+  if (!war) throw notFound('War not found.');
+  const rows = await ctx.db.select().from(games).where(eq(games.warId, war.id)).orderBy(asc(games.createdAt));
+  return toWarView(war, rows);
 }
 
 /** `games` are the war's games in the order they were played. */

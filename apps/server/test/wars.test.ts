@@ -180,6 +180,23 @@ describe('a correspondence war', () => {
     expect(after.wars[0]).toMatchObject({ outcome: 'defender' });
   });
 
+  it('can be read on its own by members, long after it ends', async () => {
+    const { ann, bo, id, declare, respond, game, play, war } = await setup();
+    const { body } = await declare('B5', 'A4', ['A4']);
+    await respond(body.id, { response: 'accept' });
+    await play(await game(await war(body.id)), SCHOLARS_MATE);
+    const read = await bo.get<WarView>(`/api/campaigns/${id}/wars/${body.id}`);
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ id: body.id, status: 'resolved', outcome: 'attacker', targetId: 'B5' });
+    expect(read.body.games.map((g) => g.result)).toEqual(['1-0']);
+
+    const cy = await signIn(server.app, 'Cy');
+    expect((await cy.get(`/api/campaigns/${id}/wars/${body.id}`)).status).toBe(404);
+    expect((await ann.get(`/api/campaigns/${id}/wars/nothing`)).status).toBe(404);
+    const other = await setup();
+    expect((await ann.get(`/api/campaigns/${other.id}/wars/${body.id}`)).status).toBe(404);
+  });
+
   it('refuses moves out of turn, stale or illegal, and hides games from outsiders', async () => {
     const { ann, bo, war, declare, respond, game } = await setup();
     const { body } = await declare('B5', 'A4', ['A4']);

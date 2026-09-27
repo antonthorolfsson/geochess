@@ -7,6 +7,7 @@ import type { KeyedMutex } from './lib/mutex';
 import type { Timers } from './lib/timers';
 import type { Notifier } from './notifications/notifier';
 import type { Hub } from './realtime/hub';
+import type { OpeningNamer } from './stats/openings';
 
 /** Services shared by every route module. */
 export interface AppContext {
@@ -25,4 +26,6 @@ export interface AppContext {
   gameLocks: KeyedMutex;
   /** Live games' flag timers. */
   timers: Timers;
+  /** Names games' openings for the chess profiles. */
+  openings: OpeningNamer;
 }

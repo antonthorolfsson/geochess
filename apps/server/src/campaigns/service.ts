@@ -20,7 +20,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import type { AppContext } from '../context';
 import { campaigns, holdings, members } from '../db/schema';
-import { keepFinishedAccords } from '../diplomacy/accords';
+import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { parse } from '../lib/http';
 import { cryptoRandom, newId, newInviteCode } from '../lib/ids';
@@ -279,7 +279,7 @@ async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: Draf
   if (complete) {
     await openCampaign(ctx, scope);
     await scope.log.add({ type: 'draft.completed', payload: {} }, null, 0);
-    await keepFinishedAccords(ctx, scope);
+    await startRoundForAccords(ctx, scope);
   }
 }
 
@@ -374,7 +374,7 @@ export async function endDraft(ctx: AppContext, campaignId: string, userId: stri
     await openCampaign(ctx, scope);
     const unclaimed = run.idx.ids.length - run.owners.size;
     await scope.log.add({ type: 'draft.ended', payload: { unclaimed, autoPicked: picks.length, picks } }, userId, 0);
-    await keepFinishedAccords(ctx, scope);
+    await startRoundForAccords(ctx, scope);
   });
 }
 

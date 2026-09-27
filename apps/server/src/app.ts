@@ -18,6 +18,8 @@ import { createNotifier, type Notifier } from './notifications/notifier';
 import { registerNotificationRoutes } from './notifications/routes';
 import { Hub } from './realtime/hub';
 import { registerRealtimeRoutes } from './realtime/routes';
+import { OpeningNamer } from './stats/openings';
+import { registerStatsRoutes } from './stats/routes';
 import { registerWarRoutes } from './wars/routes';
 import { startScheduler } from './wars/scheduler';
 
@@ -69,6 +71,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     locks: new KeyedMutex(),
     gameLocks: new KeyedMutex(),
     timers,
+    openings: new OpeningNamer({
+      onError: (err) => app.log.error({ err }, 'could not read the opening names; games go unnamed'),
+    }),
   };
   app.decorate('ctx', ctx);
   const scheduler = scheduling ? startScheduler(ctx) : null;
@@ -110,6 +115,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerCampaignRoutes(app, ctx);
   registerWarRoutes(app, ctx);
   registerDiplomacyRoutes(app, ctx);
+  registerStatsRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);
   registerRealtimeRoutes(app, ctx);
   return app;

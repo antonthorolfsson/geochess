@@ -11,9 +11,11 @@ import {
   checkProposal,
   cleanText,
   diplomacyOpen,
+  firstSignedRound,
   isPartyTo,
   partnerIn,
   renunciationAgainst,
+  reputationForKeeping,
   truceBetween,
   type AccordView,
 } from '@empire/rules';
@@ -25,9 +27,20 @@ import { keys } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
 import { playerName, timeLeft } from '@/lib/wars';
 import { PlayerName } from '../campaign/player-name';
+import { useEmpireHref } from '../campaign/room-context';
 import { Notice } from '../ui';
 
 const roundsText = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
+
+/** What keeping an accord of `rounds` with `partnerId`, signed now, earns each of you, in words. */
+function keepingText(model: CampaignModel, rounds: number, partnerId: string | null): string {
+  const inForce = partnerId ? model.accordWith.get(partnerId) : undefined;
+  const since = inForce ? firstSignedRound(inForce, model.campaign.accords) : null;
+  const earns = reputationForKeeping(model.campaign.round, rounds, since);
+  return earns > 0
+    ? `Kept to the end, it earns you both ${earns} reputation.`
+    : 'It earns no reputation: that comes with each whole round an accord holds.';
+}
 
 /** Accords: proposals to answer, the viewer's accords and proposals, a way to propose, and every empire's standing. */
 export function AccordsView({
@@ -195,7 +208,7 @@ function ProposalToMe({ model, accord }: { model: CampaignModel; accord: AccordV
       </div>
       <p className="text-[0.95rem]">
         No war between you for {roundsText(accord.rounds)}: signed now, it holds until round {ends} starts.
-        {renewal && ' It replaces the accord you have now.'}
+        {renewal && ' It replaces the accord you have now.'} {keepingText(model, accord.rounds, accord.proposerId)}
       </p>
       {accord.terms && <Terms>{accord.terms}</Terms>}
       <div className="flex gap-2">
@@ -399,7 +412,8 @@ function ProposeForm({
       <p className="text-sm text-muted">
         Signed now, it holds until round {accordEndsRound(campaign.round, rounds)} starts. Neither of you can declare
         war on the other while it holds.
-        {renewal && ` It replaces your accord with ${playerName(model, partner)}.`}
+        {renewal && ` It replaces your accord with ${playerName(model, partner)}.`}{' '}
+        {keepingText(model, rounds, partner || null)}
       </p>
       <label htmlFor={ids.terms} className="block">
         <span className="label mb-1 block">Terms (optional)</span>
@@ -442,6 +456,7 @@ function Empires({
   onPropose?: (userId: string) => void;
 }) {
   const me = model.me.userId;
+  const empireHref = useEmpireHref(model.campaign.id);
   const rows = [...model.campaign.members].sort((a, b) => b.reputation - a.reputation || a.name.localeCompare(b.name));
   const standing = (userId: string): string | null => {
     const accord = model.accordWith.get(userId);
@@ -468,7 +483,7 @@ function Empires({
             <li key={m.userId} className="px-3 py-2">
               <div className="flex min-h-8 items-center gap-2">
                 <span className="min-w-0 flex-1">
-                  <PlayerName member={m} you={m.userId === me} size="sm" />
+                  <PlayerName member={m} you={m.userId === me} size="sm" href={empireHref(m.userId)} />
                 </span>
                 <span className="shrink-0 text-lg font-semibold tabular-nums">{m.reputation}</span>
               </div>

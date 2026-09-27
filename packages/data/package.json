@@ -6,10 +6,12 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {
-    "./datasets/*": "./datasets/*"
+    "./datasets/*": "./datasets/*",
+    "./openings/*": "./openings/*"
   },
   "scripts": {
     "generate": "tsx scripts/build.ts",
+    "openings": "tsx scripts/openings.ts",
     "preview": "tsx scripts/preview.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

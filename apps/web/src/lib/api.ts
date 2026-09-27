@@ -1,6 +1,7 @@
 import type {
   ApiError as ApiErrorBody,
   AutodraftFallback,
+  CampaignStats,
   CampaignSummary,
   CampaignView,
   ChatSummary,
@@ -16,6 +17,7 @@ import type {
   SendMessageInput,
   WarReply,
   WarResponse,
+  WarView,
 } from '@empire/rules';
 
 export class ApiError extends Error {
@@ -92,6 +94,7 @@ export const api = {
   declareWar: (id: string, input: DeclareWarInput) => request<{ id: string }>('POST', `/campaigns/${id}/wars`, input),
   respondToWar: (id: string, warId: string, input: WarResponse) =>
     request('POST', `/campaigns/${id}/wars/${warId}/respond`, input),
+  war: (id: string, warId: string) => request<WarView>('GET', `/campaigns/${id}/wars/${warId}`),
   replyToWar: (id: string, warId: string, input: WarReply) =>
     request('POST', `/campaigns/${id}/wars/${warId}/reply`, input),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
@@ -120,6 +123,8 @@ export const api = {
   chatSummary: (id: string) => request<ChatSummary>('GET', `/campaigns/${id}/chat`),
   markRead: (id: string, peerId: string | null, lastId: number) =>
     request('POST', `/campaigns/${id}/chat/read`, { with: peerId, lastId }),
+
+  stats: (id: string) => request<CampaignStats>('GET', `/campaigns/${id}/stats`),
 
   game: (gameId: string) => request<GameView>('GET', `/games/${gameId}`),
   move: (gameId: string, uci: string, ply: number) => request<GameView>('POST', `/games/${gameId}/move`, { uci, ply }),

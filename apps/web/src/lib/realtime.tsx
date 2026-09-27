@@ -70,6 +70,7 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
         default:
           if (message.type === 'campaign.events') {
             upsertFeedItems(queryClient, message.campaignId, eventItems(message.events));
+            void queryClient.invalidateQueries({ queryKey: keys.stats(message.campaignId) });
           }
           // While draft-list edits are in flight, a refetch would briefly undo them on screen; the
           // last edit refetches when it lands.
@@ -90,7 +91,7 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
         attempt = 0;
         setConnected(true);
         // Catch up on anything missed while disconnected.
-        for (const key of ['campaign', 'game', 'feed', 'conversation', 'chat']) {
+        for (const key of ['campaign', 'game', 'feed', 'conversation', 'chat', 'stats']) {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
         void queryClient.invalidateQueries({ queryKey: keys.campaigns });

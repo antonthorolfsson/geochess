@@ -11,6 +11,7 @@ import { EmpireSwatch } from '../hatch';
 import { Notice } from '../ui';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
+import { useEmpireHref } from './room-context';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 
@@ -149,6 +150,7 @@ function UpNext({ model }: { model: CampaignModel }) {
 }
 
 export function Standings({ model }: { model: CampaignModel }) {
+  const empireHref = useEmpireHref(model.campaign.id);
   const rows = model.campaign.members
     .map((m) => {
       const ids = model.holdingsByUser.get(m.userId) ?? [];
@@ -184,7 +186,12 @@ export function Standings({ model }: { model: CampaignModel }) {
           {rows.map(({ member, count, value }) => (
             <tr key={member.userId}>
               <td className="max-w-0 py-1.5">
-                <PlayerName member={member} you={member.userId === model.me.userId} size="sm" />
+                <PlayerName
+                  member={member}
+                  you={member.userId === model.me.userId}
+                  size="sm"
+                  href={empireHref(member.userId)}
+                />
                 <span className="block pl-6 text-xs text-muted tabular-nums">
                   {countries(count)}
                   {member.autodraft && model.campaign.status === 'draft' && ' · auto-draft'}

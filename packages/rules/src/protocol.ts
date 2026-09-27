@@ -1,9 +1,10 @@
 /** Shapes exchanged between the web client and the game server. */
-import type { Clocks, GameEndReason, GameResult, TimeControl } from './chess';
+import type { Clocks, Color, GameEndReason, GameResult, TimeControl } from './chess';
 import type { CampaignRules } from './config';
 import type { TerritoryId } from './dataset';
 import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
+import type { Opening } from './openings';
 import type { Transfer, Truce, WarCounter, WarOutcome } from './war';
 
 export type CampaignStatus = 'lobby' | 'draft' | 'active' | 'finished';
@@ -107,9 +108,18 @@ export type CampaignEvent =
         delta: number;
         /** Reputation after the change. */
         reputation: number;
+        /** `accord-kept` is from before reputation was paid by the round: +5 when an accord ran its course. */
         reason: 'accord-broken' | 'accord-kept';
         accordId: string;
       };
+    }
+  /**
+   * A round started, and the accords that held through the whole round before it paid both
+   * partners. One entry per player who gained, with their reputation after it.
+   */
+  | {
+      type: 'reputation.earned';
+      payload: { heldRound: number; gains: { userId: string; delta: number; reputation: number }[] };
     };
 
 export type CampaignEventType = CampaignEvent['type'];
@@ -342,6 +352,149 @@ export interface GameView extends GameSummary {
   /** A standing draw offer, by player id. */
   drawOfferBy: string | null;
   serverNow: string;
+}
+
+/**
+ * Statistics for every empire in a campaign, derived from its history on each request. Everything
+ * here is public within the campaign: holdings, wars, games and signed accords.
+ */
+export interface CampaignStats {
+  history: HistoryView;
+  /** One per member. */
+  empires: EmpireRecordView[];
+  /** How each held country came to its current owner. */
+  acquisitions: Record<TerritoryId, Acquisition>;
+}
+
+/**
+ * Empire sizes over the campaign. Round 0 is the end of the draft (or now, while it runs); each
+ * later point is the end of a round, the last one being now. Until round 1 starts, round 0 is the
+ * only point.
+ */
+export interface HistoryView {
+  points: HistoryPoint[];
+  /** Wars that moved territory, oldest first. */
+  wars: HistoryWar[];
+}
+
+export interface HistoryPoint {
+  round: number;
+  /** Game value each player held, by player id. */
+  value: Record<string, number>;
+  /** Countries each player held, by player id. */
+  countries: Record<string, number>;
+}
+
+export interface HistoryWar {
+  warId: string;
+  /** The round it resolved in. */
+  round: number;
+  attackerId: string;
+  defenderId: string;
+  outcome: WarOutcome;
+  transfers: Transfer[];
+}
+
+/** Drafted (with the zero-based pick number, when known), or won in a war or as tribute. */
+export type Acquisition =
+  { via: 'draft'; pick: number | null } | { via: 'war' | 'tribute'; warId: string; round: number; from: string };
+
+export interface EmpireRecordView {
+  userId: string;
+  wars: WarRecord;
+  accords: AccordTally;
+  chess: ChessProfile;
+}
+
+/** Wars from one side, by how they ended. */
+export interface WarTally {
+  won: number;
+  lost: number;
+  /** Drawn, so the defender held. */
+  drawn: number;
+  /** Settled by tribute: taken when attacking, paid when defending. */
+  tribute: number;
+  /** Called off by the attacker (or their silence). */
+  withdrawn: number;
+  underway: number;
+}
+
+export interface WarRecord {
+  attacking: WarTally;
+  defending: WarTally;
+  /** War tokens taken and paid as tribute. */
+  tokensTaken: number;
+  tokensPaid: number;
+  /** Countries won and lost in wars and tribute, oldest first. */
+  gained: CountryChange[];
+  lost: CountryChange[];
+}
+
+export interface CountryChange {
+  territoryId: TerritoryId;
+  warId: string;
+  round: number;
+  /** Who it came from (gained) or went to (lost). */
+  otherId: string;
+  via: 'war' | 'tribute';
+}
+
+/** Signed accords only: proposals stay private to their two players. */
+export interface AccordTally {
+  signed: number;
+  kept: number;
+  /** Renounced by this player. */
+  broken: number;
+  /** Renounced by the partner. */
+  betrayed: number;
+  inForce: number;
+}
+
+export interface ResultTally {
+  won: number;
+  drawn: number;
+  lost: number;
+}
+
+export type PlayerResult = keyof ResultTally;
+
+/** A player's games in the campaign. Results are the games' own, so a drawn Armageddon is a draw. */
+export interface ChessProfile {
+  /** Finished games. */
+  played: number;
+  /** Games being played now. */
+  underway: number;
+  asWhite: ResultTally;
+  asBlack: ResultTally;
+  /** How finished games ended, from this player's side. */
+  endings: Partial<Record<GameEndReason, ResultTally>>;
+  /** Average length of finished games, in moves. */
+  averageMoves: number | null;
+  /** Opening families played, most played first. */
+  openings: OpeningStat[];
+  /** Finished games, most recent first. */
+  games: GameLine[];
+}
+
+export interface OpeningStat extends ResultTally {
+  /** The opening family, e.g. "Sicilian Defense". */
+  family: string;
+  /** The side this player had. */
+  color: Color;
+  games: number;
+}
+
+export interface GameLine {
+  gameId: string;
+  warId: string;
+  opponentId: string;
+  color: Color;
+  armageddon: boolean;
+  result: PlayerResult;
+  reason: GameEndReason | null;
+  moves: number;
+  opening: Opening | null;
+  finishedAt: string | null;
 }
 
 export interface CampaignSummary {

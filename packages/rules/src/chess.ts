@@ -76,6 +76,11 @@ export class ChessGame {
     return makeFen(this.pos.toSetup());
   }
 
+  /** The position without move counters, as repetition and opening names compare it. */
+  get positionKey(): string {
+    return positionKey(this.pos);
+  }
+
   /** Plays a move given in UCI (castling as e1g1 or e1h1); returns its SAN, or null if it's illegal. */
   play(uci: string): string | null {
     const parsed = parseUci(uci);
@@ -88,6 +93,14 @@ export class ChessGame {
     this.sans.push(san);
     this.record();
     return san;
+  }
+
+  /** Plays a move given in SAN (Nf3, O-O, exd8=Q); returns its UCI, or null if it isn't legal here. */
+  playSan(san: string): string | null {
+    const move = parseSan(this.pos, san);
+    if (!move || !('from' in move)) return null;
+    const uci = standardUci(this.pos, move);
+    return this.play(uci) === null ? null : uci;
   }
 
   /** A move typed by a player, in SAN (Nf3, O-O, exd8=Q) or UCI (g1f3), as UCI; null if not legal here. */

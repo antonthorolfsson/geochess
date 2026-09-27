@@ -2,13 +2,14 @@
 
 import type { CampaignStatus, TerritoryId } from '@empire/rules';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Topology } from 'topojson-specification';
 import { ApiError, errorMessage } from '@/lib/api';
 import { buildModel, type CampaignModel } from '@/lib/campaign';
-import { useCampaign, useMapData, useMe } from '@/lib/queries';
+import { useCampaign, useMapData, useMe, useWar } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
 import { countryName, outcomeText, playerName } from '@/lib/wars';
@@ -20,6 +21,7 @@ import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
 import { LobbyPanel } from './lobby-panel';
+import { CampaignRoomProvider } from './room-context';
 import { TerritoryPanel } from './territory-panel';
 import { WarDetail, type StakePreview } from './war-detail';
 import { WarsPanel } from './wars-panel';
@@ -53,7 +55,8 @@ const TABS: Record<CampaignStatus, { id: Tab; label: string }[]> = {
 type Side = 'main' | 'diplo';
 const MAIN_LABEL: Record<CampaignStatus, string> = { lobby: 'Lobby', draft: 'Draft', active: 'Wars', finished: 'Wars' };
 
-export function CampaignScreen({ id }: { id: string }) {
+/** A campaign: the map room, with any page opened over it (an empire's statistics) as `children`. */
+export function CampaignScreen({ id, children }: { id: string; children?: ReactNode }) {
   const router = useRouter();
   const me = useMe();
   const campaign = useCampaign(id);
@@ -61,8 +64,11 @@ export function CampaignScreen({ id }: { id: string }) {
   const user = me.data?.user;
 
   useEffect(() => {
-    if (me.data && !me.data.user) router.replace(`/login?next=${encodeURIComponent(`/c/${id}`)}`);
-  }, [me.data, router, id]);
+    // Back to the same place after signing in: an empire's page, or a war or game from a link.
+    if (me.data && !me.data.user) {
+      router.replace(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+    }
+  }, [me.data, router]);
 
   const model = useMemo(
     () => (campaign.data && user && mapData.data ? buildModel(campaign.data, user, mapData.data.idx) : null),
@@ -91,7 +97,11 @@ export function CampaignScreen({ id }: { id: string }) {
       </CenteredMessage>
     );
   }
-  return <CampaignRoom model={model} topo={mapData.data.topo} />;
+  return (
+    <CampaignRoom model={model} topo={mapData.data.topo}>
+      {children}
+    </CampaignRoom>
+  );
 }
 
 function CenteredMessage({ children }: { children: ReactNode }) {
@@ -102,18 +112,30 @@ function CenteredMessage({ children }: { children: ReactNode }) {
  * Opens and closes panels through the query string (?war=, ?game=, ?chat=, ?accord=), so links and
  * the back button work.
  */
-function usePanelParams() {
+function usePanelParams(campaignId: string, overPage: boolean) {
   const searchParams = useSearchParams();
-  const set = useCallback((key: 'war' | 'game' | 'chat' | 'accord', value: string | null) => {
-    const params = new URLSearchParams(window.location.search);
-    if (value) params.set(key, value);
-    else params.delete(key);
-    const query = params.toString();
-    const url = query ? `?${query}` : window.location.pathname;
-    if (value) window.history.pushState(null, '', url);
-    else window.history.replaceState(null, '', url);
-  }, []);
+  const router = useRouter();
+  const set = useCallback(
+    (key: 'war' | 'game' | 'chat' | 'accord', value: string | null) => {
+      const params = new URLSearchParams(window.location.search);
+      if (value) params.set(key, value);
+      else params.delete(key);
+      const query = params.toString();
+      // Panels are part of the map room: opening one from a page over it (a live game starting
+      // while an empire's statistics are open) goes back to the map room.
+      if (overPage) {
+        if (value) router.push(`/c/${campaignId}?${query}`);
+        return;
+      }
+      const url = query ? `?${query}` : window.location.pathname;
+      if (value) window.history.pushState(null, '', url);
+      else window.history.replaceState(null, '', url);
+    },
+    [campaignId, overPage, router],
+  );
   return {
+    /** The whole query, kept by links that leave the map room and come back (empire pages). */
+    query: searchParams.toString(),
     warId: searchParams.get('war'),
     gameId: searchParams.get('game'),
     /** The player whose private conversation is open. */
@@ -124,9 +146,13 @@ function usePanelParams() {
   };
 }
 
-function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology }) {
+function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: Topology; children?: ReactNode }) {
   const { campaign } = model;
   const me = model.me.userId;
+  const router = useRouter();
+  // A page open over the map room, such as an empire's statistics.
+  const overPage = useSelectedLayoutSegment() !== null;
+  const { userId: empireOf } = useParams<{ userId?: string }>();
   const { connected } = useRealtime();
   const isDesktop = useIsDesktop();
   const tabs = TABS[campaign.status];
@@ -137,8 +163,11 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
   const [showTargets, setShowTargets] = useState(false);
   const [preview, setPreview] = useState<StakePreview | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const panels = usePanelParams();
-  const openWar = panels.warId ? campaign.wars.find((w) => w.id === panels.warId) : undefined;
+  const panels = usePanelParams(campaign.id, overPage);
+  // Older wars aren't in the campaign view; a link to one (a dispatch, an empire's record) reads it.
+  const warInView = panels.warId ? campaign.wars.find((w) => w.id === panels.warId) : undefined;
+  const olderWar = useWar(campaign.id, panels.warId && !warInView ? panels.warId : null);
+  const openWar = warInView ?? olderWar.data;
   const myGames = useMyGames(model);
   const myMoves = myGames.filter((g) => g.myMove).length;
   const answers = model.answersNeeded;
@@ -175,6 +204,17 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
     }
     wasDiploShown.current = diploShown;
   }, [diploShown, chatWith, accordId, panels]);
+
+  // Phones show a war over the map or in the Wars tab, so a war opened by a link (from a page over
+  // the map room, or the back button) brings the Wars tab up if another is showing.
+  const { warId } = panels;
+  const tabRef = useRef(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  });
+  useEffect(() => {
+    if (warId && !isDesktop && tabRef.current !== 'map' && tabRef.current !== 'wars') setTab('wars');
+  }, [warId, isDesktop]);
 
   // Jump to the natural first tab when the campaign moves on (e.g. the host starts the draft).
   const status = campaign.status;
@@ -259,18 +299,17 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
     if (fresh && (latest.attackerId === me || latest.defenderId === me)) setToast(outcomeText(model, latest));
   }, [model, me]);
 
-  useEffect(() => {
-    const flag = model.myTurn
-      ? '(Your pick) '
-      : myMoves > 0
-        ? '(Your move) '
-        : answers > 0
-          ? '(Answer needed) '
-          : unread.direct > 0
-            ? '(New message) '
-            : '';
-    document.title = `${flag}${campaign.name} · Empire Chess`;
-  }, [model.myTurn, myMoves, answers, unread.direct, campaign.name]);
+  const flag = model.myTurn
+    ? '(Your pick) '
+    : myMoves > 0
+      ? '(Your move) '
+      : answers > 0
+        ? '(Answer needed) '
+        : unread.direct > 0
+          ? '(New message) '
+          : '';
+  const page = empireOf ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · ` : '';
+  useDocumentTitle(`${flag}${page}${campaign.name} · Empire Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
 
@@ -295,13 +334,27 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
     setFocus({ id, nonce: Date.now() });
     setTab('map');
   };
+  /** From a page over the map room: back to the map, on the country. */
+  const showCountry = (id: TerritoryId) => {
+    flyTo(id);
+    router.push(`/c/${campaign.id}`);
+  };
   const showWar = (warId: string) => {
     setSelected(null);
     if (panels.gameId) panels.set('game', null);
     panels.set('war', warId);
-    const war = campaign.wars.find((w) => w.id === warId);
-    if (war && isDesktop) setFocus({ id: war.targetId, nonce: Date.now() });
   };
+  // Desktop: the map follows the war that opens, however it was opened (here, a link, the back button).
+  const shownWar = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openWar) {
+      shownWar.current = null;
+      return;
+    }
+    if (shownWar.current === openWar.id) return;
+    shownWar.current = openWar.id;
+    if (isDesktop) setFocus({ id: openWar.targetId, nonce: Date.now() });
+  }, [openWar, isDesktop]);
   const closeWar = () => panels.set('war', null);
   const closeGame = () => panels.set('game', null);
   const openChat = (userId: string) => panels.set('chat', userId);
@@ -382,11 +435,25 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <CampaignHeader model={model} connected={connected} myMoves={myMoves} answers={answers} />
+      <CampaignHeader
+        model={model}
+        connected={connected}
+        myMoves={myMoves}
+        answers={answers}
+        back={
+          overPage
+            ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
+            : { href: '/', label: 'All campaigns' }
+        }
+      />
 
       <div className="relative flex min-h-0 flex-1">
         {isDesktop && (
-          <aside className="flex w-[340px] shrink-0 flex-col border-r border-line" aria-label="Campaign">
+          <aside
+            className="flex w-[340px] shrink-0 flex-col border-r border-line"
+            aria-label="Campaign"
+            inert={overPage}
+          >
             <SegmentTabs<Side>
               label="Campaign"
               value={side}
@@ -414,7 +481,8 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
           </aside>
         )}
 
-        <main className="relative min-w-0 flex-1">
+        {/* A page over the map room leaves it mounted, as it was, but out of reach until it closes. */}
+        <main className="relative min-w-0 flex-1" inert={overPage}>
           <WorldMap
             topo={topo}
             dataset={model.idx.dataset}
@@ -445,15 +513,6 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
               Values
             </MapToggle>
           </div>
-
-          {toast && (
-            <div
-              role="status"
-              className="sheet-in pointer-events-none absolute top-18 left-1/2 z-30 -translate-x-1/2 rounded-[3px] bg-amber px-4 py-2 text-center font-stencil text-xl tracking-wide whitespace-nowrap text-gunmetal shadow-xl"
-            >
-              {toast}
-            </div>
-          )}
 
           {/* Phones: a sheet over the map for the selected country or war, or the campaign at a glance. */}
           {!isDesktop && tab === 'map' && (
@@ -489,9 +548,26 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
           <aside
             className={`shrink-0 overflow-y-auto border-l border-line ${gamePanel ? 'w-[460px]' : 'w-[360px]'}`}
             aria-label="Details"
+            inert={overPage}
           >
             {gamePanel || warPanel || territoryPanel || <EmpirePanel model={model} onSelect={flyTo} />}
           </aside>
+        )}
+
+        <CampaignRoomProvider value={{ model, showCountry }}>
+          {/* One element either way, so opening and closing a page doesn't remount Next's router below. */}
+          <div className={overPage ? 'absolute inset-0 z-40 overflow-y-auto bg-gunmetal' : 'hidden'}>{children}</div>
+        </CampaignRoomProvider>
+
+        {toast && (
+          <div
+            role="status"
+            className={`sheet-in pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 rounded-[3px] bg-amber px-4 py-2 text-center font-stencil text-xl tracking-wide whitespace-nowrap text-gunmetal shadow-xl ${
+              overPage ? 'top-3' : 'top-18'
+            }`}
+          >
+            {toast}
+          </div>
         )}
       </div>
 
@@ -513,19 +589,22 @@ function CampaignRoom({ model, topo }: { model: CampaignModel; topo: Topology })
                 type="button"
                 onClick={() => {
                   setTab(t.id);
-                  if (panels.gameId) closeGame();
+                  if (overPage) router.push(`/c/${campaign.id}`);
+                  else if (panels.gameId) closeGame();
                 }}
-                aria-current={tab === t.id ? 'page' : undefined}
+                aria-current={tab === t.id && !overPage ? 'page' : undefined}
                 className={`relative min-h-14 text-sm font-bold tracking-[0.12em] uppercase ${
-                  tab === t.id ? 'text-paper' : 'text-faint'
+                  tab === t.id && !overPage ? 'text-paper' : 'text-faint'
                 }`}
               >
-                {tab === t.id && <span className="absolute inset-x-6 top-0 h-0.5 bg-amber" aria-hidden="true" />}
+                {tab === t.id && !overPage && (
+                  <span className="absolute inset-x-6 top-0 h-0.5 bg-amber" aria-hidden="true" />
+                )}
                 {t.label}
-                {alert && tab !== t.id && (
+                {alert && (tab !== t.id || overPage) && (
                   <span className="absolute top-3 ml-1 size-2 rounded-full bg-amber" aria-label="needs you" />
                 )}
-                {quiet && tab !== t.id && (
+                {quiet && (tab !== t.id || overPage) && (
                   <span className="absolute top-3 ml-1 size-2 rounded-full bg-paper/70" aria-label="unread messages" />
                 )}
               </button>
@@ -557,11 +636,14 @@ function CampaignHeader({
   connected,
   myMoves,
   answers,
+  back,
 }: {
   model: CampaignModel;
   connected: boolean;
   myMoves: number;
   answers: number;
+  /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
+  back: { href: string; label: string };
 }) {
   const { campaign } = model;
   const statusLine = {
@@ -574,8 +656,8 @@ function CampaignHeader({
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-line bg-gunmetal px-2 pt-[env(safe-area-inset-top)]">
       <Link
-        href="/"
-        aria-label="All campaigns"
+        href={back.href}
+        aria-label={back.label}
         className="flex size-11 items-center justify-center text-xl text-muted hover:text-paper"
       >
         ←

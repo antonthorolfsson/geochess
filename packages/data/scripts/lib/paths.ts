@@ -6,3 +6,5 @@ export const CONFIG_DIR = path.join(DATA_DIR, 'config');
 /** Download cache and scratch output (gitignored). */
 export const RAW_DIR = path.join(DATA_DIR, 'raw');
 export const DATASETS_DIR = path.join(DATA_DIR, 'datasets');
+/** The opening names table, built from the Lichess openings list. */
+export const OPENINGS_DIR = path.join(DATA_DIR, 'openings');

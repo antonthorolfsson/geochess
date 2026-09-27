@@ -10,6 +10,8 @@ const wholeNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 export const formatCount = (n: number | null) => (n === null ? '—' : compactNumber.format(n));
 export const formatUsd = (n: number | null) => (n === null ? '—' : compactUsd.format(n));
 export const formatArea = (km2: number | null) => (km2 === null ? '—' : `${wholeNumber.format(km2)} km²`);
+/** Area in a few characters, for large totals: "25.3M km²". */
+export const formatAreaCompact = (km2: number | null) => (km2 === null ? '—' : `${compactNumber.format(km2)} km²`);
 export const formatInt = (n: number) => wholeNumber.format(n);
 
 export function ordinal(n: number): string {

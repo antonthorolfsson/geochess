@@ -12,8 +12,12 @@ export const ACCORD_TERMS_MAX = 280;
 export const REPUTATION_START = 100;
 /** Reputation lost for renouncing an accord before it runs its course. */
 export const REPUTATION_BROKEN = -20;
-/** Reputation each partner gains when an accord runs its course. */
-export const REPUTATION_KEPT = 5;
+/**
+ * Reputation each partner gains for every whole round an accord holds, paid when the next round
+ * starts. The draft doesn't count, since no war can be declared in it; nor does the round an
+ * accord is signed in, unless it renews one already in force.
+ */
+export const REPUTATION_PER_ROUND = 2;
 
 /** Longest chat message, in characters. */
 export const MESSAGE_MAX = 1000;
@@ -75,6 +79,56 @@ export function accordsInForce(records: readonly AccordRecord[], round: number):
       ? [{ id: a.id, players: [a.proposerId, a.recipientId] as const, endsRound: a.endsRound }]
       : [],
   );
+}
+
+/** An accord as the reputation rules see it: when it was signed, and what it renewed. */
+export interface AccordHistory extends Pick<AccordRecord, 'id' | 'proposerId' | 'recipientId' | 'status'> {
+  signedRound: number | null;
+  /** The accord this one replaced, when the partners renewed. */
+  renews: string | null;
+}
+
+/**
+ * When the partners' unbroken run of accords began: a renewal carries on the accord it replaced,
+ * so a chain of renewals counts from its first signing. Links missing from `accords` end the walk.
+ */
+export function firstSignedRound(accord: AccordHistory, accords: readonly AccordHistory[]): number | null {
+  return runStart(accord, new Map(accords.map((a) => [a.id, a])));
+}
+
+function runStart(accord: AccordHistory, byId: ReadonlyMap<string, AccordHistory>): number | null {
+  let first = accord;
+  for (let hops = 0; first.renews && hops < byId.size; hops++) {
+    const previous = byId.get(first.renews);
+    if (!previous) break;
+    first = previous;
+  }
+  return first.signedRound;
+}
+
+/**
+ * The accords that pay their partners when `round` starts: those in force through the whole of
+ * the round before it. `accords` are a campaign's active accords as they stand just before the
+ * round starts (so including those running their course now), with the renewed ones behind them.
+ */
+export function accordsHeldThrough<T extends AccordHistory>(accords: readonly T[], round: number): T[] {
+  const byId = new Map(accords.map((a) => [a.id, a]));
+  return accords.filter((a) => {
+    if (a.status !== 'active') return false;
+    const since = runStart(a, byId);
+    // In force since before the last round began. The draft is round 0 and pays nothing itself.
+    return since !== null && since <= round - 2;
+  });
+}
+
+/**
+ * What each partner gains from an accord of `rounds` signed in `round`, if it's kept to the end.
+ * `renewingSince` is when the partners' run of accords began, if this one would renew it: then the
+ * current round counts too, if the run began before it.
+ */
+export function reputationForKeeping(round: number, rounds: number, renewingSince: number | null = null): number {
+  const current = renewingSince !== null && renewingSince < round ? 1 : 0;
+  return REPUTATION_PER_ROUND * (rounds - 1 + current);
 }
 
 /** Accords renounced recently enough that the breaker still can't declare war on the former partner. */
@@ -182,7 +236,7 @@ export function feedShows(filter: FeedFilter, item: FeedItem): boolean {
     case 'wars':
       return type.startsWith('war.') || type === 'round.started';
     case 'accords':
-      return type.startsWith('accord.') || type === 'reputation.changed';
+      return type.startsWith('accord.') || type.startsWith('reputation.');
     case 'chat':
       return false;
   }

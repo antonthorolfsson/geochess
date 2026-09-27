@@ -11,7 +11,7 @@ const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 export function dispatchTone(type: EventView['type']): 'war' | 'accord' | 'broken' | 'plain' {
   if (type === 'accord.broken') return 'broken';
   if (type.startsWith('war.')) return 'war';
-  if (type.startsWith('accord.') || type === 'reputation.changed') return 'accord';
+  if (type.startsWith('accord.') || type.startsWith('reputation.')) return 'accord';
   return 'plain';
 }
 
@@ -162,6 +162,21 @@ export function DispatchLine({
             ({delta > 0 ? '+' : '−'}
             {Math.abs(delta)})
           </span>
+          .
+        </span>
+      );
+    }
+    case 'reputation.earned': {
+      const { heldRound, gains } = event.payload;
+      return (
+        <span className="text-muted">
+          Accords held through round {heldRound} earned reputation:{' '}
+          {gains.map((g, i) => (
+            <span key={g.userId}>
+              {i > 0 && ', '}
+              {name(g.userId)} <span className="tabular-nums">+{g.delta}</span>
+            </span>
+          ))}
           .
         </span>
       );

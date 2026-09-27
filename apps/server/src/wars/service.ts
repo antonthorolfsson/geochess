@@ -34,7 +34,7 @@ import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { mutate, requireActive, requireHost, requireMember, userName, type MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import { campaigns, games, holdings, members, wars } from '../db/schema';
-import { keepFinishedAccords } from '../diplomacy/accords';
+import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { Notice } from '../notifications/notifier';
@@ -543,7 +543,7 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
     }
     scope.campaign = { ...scope.campaign, round };
     await scope.log.add({ type: 'round.started', payload: { round } }, userId, round);
-    await keepFinishedAccords(ctx, scope);
+    await startRoundForAccords(ctx, scope);
   });
 }
 

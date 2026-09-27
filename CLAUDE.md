@@ -11,6 +11,7 @@ when starting new work.**
 - `pnpm dev`: game server (port 4000) and web app (port 3000) with live reload
 - `pnpm test`, `pnpm typecheck`, `pnpm build`: run across all packages
 - `pnpm data:build`: rebuild the country dataset (downloads are cached in `packages/data/raw/`)
+- `pnpm data:openings`: rebuild the opening names table from the Lichess openings list
 - `pnpm db:generate`: new SQL migration after editing `apps/server/src/db/schema.ts`
 
 ## Layout and rules of the road
@@ -28,13 +29,17 @@ when starting new work.**
   `games.ts` handles moves under a per-game lock, which may take the campaign lock inside it but
   never the other way round. Deadlines are rows in the database, polled by `scheduler.ts`, with
   in-process timers for live flag-falls. Tests drive time through the injectable `ctx.now()`.
+- Empire statistics are derived on each request, never stored: `apps/server/src/stats/` gathers the
+  rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and
   pushes `chat.message` only to the players who can read it.
 - `apps/web` is Next.js 16. Its bundled docs in `apps/web/node_modules/next/dist/docs/` are the
   reference, since APIs differ from older versions (async `params`, `proxy.ts`, Turbopack default).
-  Pages are thin server components that hand off to client screens in `src/components/`.
+  Pages are thin server components that hand off to client screens in `src/components/`. The
+  campaign screen lives in `app/c/[id]/layout.tsx`, so pages under it (an empire's statistics) open
+  over the map room without resetting it; they read it with `useCampaignRoom()`.
 - Local database is embedded PGlite (`apps/server/.data/`), so no setup is needed; set
   `DATABASE_URL` for Postgres.
 - Visual language: see section 9 of the plan. Tokens are in `apps/web/src/app/globals.css`;

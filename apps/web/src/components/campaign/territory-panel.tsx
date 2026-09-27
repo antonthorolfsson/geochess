@@ -12,6 +12,7 @@ import { Notice, ValueBadge } from '../ui';
 import { WarAction } from './declare-war';
 import { DraftListButton } from './draft-list';
 import { PlayerName } from './player-name';
+import { useEmpireHref } from './room-context';
 import type { StakePreview } from './war-detail';
 
 const STAT_ROWS: { key: StatKey; label: string; format(n: number | null): string }[] = [
@@ -52,6 +53,7 @@ export function TerritoryPanel({
   });
   const { reset } = claim;
   useEffect(() => reset(), [territoryId, reset]);
+  const empireHref = useEmpireHref(campaignId);
 
   const t = model.idx.byId.get(territoryId);
   if (!t) return null;
@@ -88,7 +90,7 @@ export function TerritoryPanel({
         <div>
           <div className="label mb-1">Held by</div>
           {owner ? (
-            <PlayerName member={owner} you={owner.userId === model.me.userId} />
+            <PlayerName member={owner} you={owner.userId === model.me.userId} href={empireHref(owner.userId)} />
           ) : (
             <span className="inline-flex items-center gap-2 text-muted">
               <span className="size-4 rounded-[2px] border border-line-strong bg-olive" aria-hidden="true" />

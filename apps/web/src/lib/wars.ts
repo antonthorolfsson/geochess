@@ -3,6 +3,7 @@ import {
   type GameEndReason,
   type GameResult,
   type GameSummary,
+  type PlayerResult,
   type TimeControl,
   type WarView,
 } from '@empire/rules';
@@ -23,6 +24,15 @@ const REASONS: Record<GameEndReason, string> = {
   agreement: 'by agreement',
   'timeout-vs-insufficient-material': 'on time against a lone king',
 };
+
+/** How a game ended: "by checkmate", "on time". */
+export const reasonText = (reason: GameEndReason) => REASONS[reason];
+
+/** How a game ended, for one player: "Won by checkmate", "Drawn by agreement", "Lost on time". */
+export function endingText(result: PlayerResult, reason: GameEndReason | null): string {
+  const how = reason ? ` ${REASONS[reason]}` : '';
+  return `${{ won: 'Won', drawn: 'Drawn', lost: 'Lost' }[result]}${how}`;
+}
 
 /** "White wins by checkmate", "Draw by agreement". */
 export function resultText(result: GameResult, reason: GameEndReason | null): string {

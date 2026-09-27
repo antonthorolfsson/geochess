@@ -14,6 +14,8 @@ export const keys = {
   /** Mutation key for saving a draft list, so bursts of edits can be told apart from other changes. */
   draftList: (campaignId: string) => ['draft-list', campaignId] as const,
   game: (gameId: string) => ['game', gameId] as const,
+  stats: (campaignId: string) => ['stats', campaignId] as const,
+  war: (campaignId: string, warId: string) => ['war', campaignId, warId] as const,
 };
 
 /** Don't retry answers the server meant, like 404 or 403. */
@@ -30,6 +32,25 @@ export function useCampaigns(enabled: boolean) {
 
 export function useCampaign(id: string) {
   return useQuery({ queryKey: keys.campaign(id), queryFn: () => api.campaign(id), retry: retryServerErrors });
+}
+
+/** Every empire's statistics, refetched whenever the campaign's history moves on. */
+export function useCampaignStats(id: string) {
+  return useQuery({ queryKey: keys.stats(id), queryFn: () => api.stats(id), retry: retryServerErrors });
+}
+
+/**
+ * A war the campaign view doesn't carry (it has unresolved and recent wars only), read on its own
+ * for links to older wars. Resolved wars don't change.
+ */
+export function useWar(campaignId: string, warId: string | null) {
+  return useQuery({
+    queryKey: keys.war(campaignId, warId ?? ''),
+    enabled: Boolean(warId),
+    queryFn: () => api.war(campaignId, warId!),
+    retry: retryServerErrors,
+    staleTime: Infinity,
+  });
 }
 
 /** A game as the board shows it: the server's view, and when it arrived, for running the clocks. */

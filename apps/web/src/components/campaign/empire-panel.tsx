@@ -1,13 +1,16 @@
 'use client';
 
 import type { StatKey, TerritoryId } from '@empire/rules';
+import Link from 'next/link';
 import { totalValue, type CampaignModel } from '@/lib/campaign';
 import { formatArea, formatCount, formatUsd, ordinal } from '@/lib/format';
 import { Stat, ValueBadge } from '../ui';
 import { PlayerName } from './player-name';
+import { useEmpireHref } from './room-context';
 
-/** A first look at the player's empire; the full statistics page comes in a later phase. */
+/** A first look at the player's empire, with a link to its full statistics page. */
 export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelect(id: TerritoryId): void }) {
+  const empireHref = useEmpireHref(model.campaign.id);
   const ids = model.holdingsByUser.get(model.me.userId) ?? [];
   const all = model.idx.dataset.territories;
   const mine = ids
@@ -37,9 +40,16 @@ export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelec
 
   return (
     <div className="space-y-6 p-4">
-      <header>
-        <div className="label mb-1">Your empire</div>
-        <PlayerName member={model.me} size="lg" />
+      <header className="space-y-3">
+        <div>
+          <div className="label mb-1">Your empire</div>
+          <PlayerName member={model.me} size="lg" />
+        </div>
+        {model.campaign.status !== 'lobby' && (
+          <Link href={empireHref(model.me.userId)} className="btn btn-ghost btn-sm">
+            Full statistics
+          </Link>
+        )}
       </header>
 
       {mine.length === 0 ? (

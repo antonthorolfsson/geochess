@@ -1,18 +1,17 @@
-# Handover: Phase 3 done, Phase 4 (stats and history) next
+# Handover: Phase 4 done, Phase 5 (playtest) next
 
-_Written 2026-09-27 at the end of the session that built Phase 3 (diplomacy). Read this first,
-then the plan._
+_Written 2026-09-27 at the end of the session that built Phase 4 (stats and history). Read this
+first, then the plan._
 
 ## Start here
 
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
-   section 2 (game design, "Empire statistics page") and section 8 (Phase 4).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (228 tests).
-3. Phases 1 and 2 are committed (`4955ca2`, "First commit, phase 1 and 2"). Phase 3 is not: the
-   user hasn't asked for a commit. Don't commit or push unless asked.
-4. Before building Phase 4, go through its [open questions](#open-questions-to-settle-first) and
-   [what still needs the user](#what-still-needs-the-user).
+   section 8 (Phase 5, the playtest) and section 11 (risks).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (269 tests).
+3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
+   hasn't asked for a commit. Don't commit or push unless asked.
+4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
 
 ## Where things stand
 
@@ -74,9 +73,13 @@ scripted players:
 - **Breaking.** "Renounce" ends an accord at once for everyone to see; the breaker loses 20
   reputation and can't declare war on the former partner until the next round starts
   (`renounced`), while the betrayed player may strike first.
-- **Reputation.** Starts at 100; −20 for breaking; +5 to both partners when an accord runs its
-  course (at the round start that ends it, including round 1 when the draft closes). Shown in the
-  standings (Rep column), on the Diplo tab, and in the dispatches (`reputation.changed` events).
+- **Reputation.** Starts at 100; −20 for breaking; +2 to both partners for every whole round an
+  accord holds, paid when the next round starts (the draft doesn't count, and renewing carries an
+  accord on). Shown in the standings (Rep column), on the Diplo tab and the empire pages, and in
+  the dispatches (`reputation.changed` for a break, one `reputation.earned` per round start). The
+  propose form and proposals say what keeping the accord to the end earns. (Until 2026-09-27 a
+  kept accord paid +5 when it ran its course; see
+  [Phase 3 reputation, revised](#phase-3-reputation-revised-2026-09-27).)
 - **Chat.** A campaign channel and one-to-one private messages from the lobby on: text up to
   1,000 characters, kept for the campaign; authors delete their own, the host removes channel
   messages. Unread counts per conversation are kept on the server, so badges clear on every
@@ -92,6 +95,42 @@ scripted players:
 - **Links and alerts.** `?chat=<player>` opens a conversation and `?accord=<id>` highlights an
   accord (notifications use both). Toasts for proposals, signatures, betrayals and private
   messages; "Answer needed" counts accord proposals too; the page title flags new messages.
+
+**Phase 4 (Stats and history)** is complete and verified in the browser on desktop and phone, on
+a scripted four-player campaign with six rounds of wars:
+
+- **An empire page per player** at `/c/[id]/empire/[userId]`, open to every member. It opens over
+  the map room without resetting it (the campaign screen now lives in the `/c/[id]` layout): the
+  header arrow goes back to the map, phone tabs close it, and toasts still show. Reached from
+  "Full statistics" in the Empire tab or column, any player's name in the standings, a war, a
+  country's "Held by" or the accords list, and the "Other empires" row on the page itself.
+- **Real-world totals**: population, GDP, GDP (PPP), area, military spending and armed forces,
+  each with its share of the world, where the empire would rank among the world's countries and
+  among the campaign's empires, gaps and estimates noted. Comparisons in words: "Your economy would
+  rank 3rd in the world, between China and Germany."
+- **History graph**: every empire's game value (or country count) at the end of each round from
+  the draft on. The empire the page is about is drawn in its color with its wars marked; rivals
+  are quiet lines that light up from the readout under the chart, which gives every empire's value
+  and change at the round under the pointer (or keyboard), and that round's wars as links. A table
+  view has every number.
+- **War record**: won, drawn and lost as attacker and defender, settled by tribute, called off,
+  underway; tribute tokens; countries won and lost, each linking to its war; accords signed, in
+  force, kept, broken and betrayed, with reputation.
+- **Chess profile**: the campaign's pace, games won, drawn and lost overall and by colour, how
+  games ended, average length, opening families as White and Black with results, and every
+  finished game linking to its board. Ratings wait for Phase 6.
+- **Countries**: every holding with value, population, GDP and area, and how it was acquired
+  (drafted with the pick number, won from someone in a round, or taken as tribute); sortable.
+- **Live**: the page refetches whenever the campaign's history moves on (`campaign.events`).
+
+An independent review found three bugs, all fixed and verified in the browser: a live game
+starting while an empire page was open opened its board hidden under the page (panels opened from
+a page now go back to the map room); the chart readout snapped back to "now" when the pointer left
+the chart (a picked round now stays until another is picked); and links to wars older than the
+campaign view's 30 most recent resolved ones did nothing (the war panel now reads them on their
+own, `GET /api/campaigns/:id/wars/:warId`).
+
+Tests: rules 117, data 53, web 30, server 69.
 
 ## Phase 2 decisions (settled with the user on 2026-09-27)
 
@@ -142,17 +181,17 @@ Numbers quoted come from simulating 30 full contiguous drafts per player count o
 
 All at the proposed defaults except round counting, which stays as round starts.
 
-| Topic      | Decision                                                                                                                                                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rounds     | "N rounds" keeps counting round starts, for truces, locks and accords.                                                                                                                                     |
-| Kinds      | One kind: a non-aggression accord between two players, with optional free-text terms shown publicly but not enforced. Alliances wait for Phase 6 champions.                                                |
-| Length     | Chosen when proposed, in rounds (default 3). Renewed by signing a new one, which replaces the one in force.                                                                                                |
-| Forming    | One player proposes; the other accepts or declines within the answer window (24 h / 5 min); silence declines. Proposals are private; signed accords are public.                                            |
-| Wars       | Accords block declarations both ways, like a truce. Wars already underway carry on.                                                                                                                        |
-| Breaking   | Either partner can renounce at any time: the accord ends at once, everyone is told, the breaker loses reputation and can't declare war on the former partner until the next round starts.                  |
-| Reputation | Starts at 100. Breaking costs 20; an accord that runs its course gives both players 5. Shown in standings and on the Diplo tab, with changes in the dispatches. No other effect yet.                       |
-| Chat       | Campaign channel plus one-to-one private messages, text only (up to 1,000 characters), kept for the campaign; authors delete their own, the host removes channel messages. Push for private messages only. |
-| Feed       | Dispatches and the campaign channel in one timeline with filters (all, wars, accords, chat) in the Diplo tab; private messages and accords beside it; the war room keeps wars and standings.               |
+| Topic      | Decision                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rounds     | "N rounds" keeps counting round starts, for truces, locks and accords.                                                                                                                                                               |
+| Kinds      | One kind: a non-aggression accord between two players, with optional free-text terms shown publicly but not enforced. Alliances wait for Phase 6 champions.                                                                          |
+| Length     | Chosen when proposed, in rounds (default 3). Renewed by signing a new one, which replaces the one in force.                                                                                                                          |
+| Forming    | One player proposes; the other accepts or declines within the answer window (24 h / 5 min); silence declines. Proposals are private; signed accords are public.                                                                      |
+| Wars       | Accords block declarations both ways, like a truce. Wars already underway carry on.                                                                                                                                                  |
+| Breaking   | Either partner can renounce at any time: the accord ends at once, everyone is told, the breaker loses reputation and can't declare war on the former partner until the next round starts.                                            |
+| Reputation | Starts at 100. Breaking costs 20; every whole round an accord holds gives both players 2 (revised from +5 per accord kept, see below). Shown in standings and on the Diplo tab, with changes in the dispatches. No other effect yet. |
+| Chat       | Campaign channel plus one-to-one private messages, text only (up to 1,000 characters), kept for the campaign; authors delete their own, the host removes channel messages. Push for private messages only.                           |
+| Feed       | Dispatches and the campaign channel in one timeline with filters (all, wars, accords, chat) in the Diplo tab; private messages and accords beside it; the war room keeps wars and standings.                                         |
 
 ### Defaults taken while building Phase 3 (not asked; easy to change)
 
@@ -163,8 +202,8 @@ All at the proposed defaults except round counting, which stays as round starts.
   propose to the same player at most 4 times an hour (so propose-and-withdraw can't flood them).
   Terms are up to 280 characters. Accord notices carry one tag per pair of players, so the email
   cooldown covers every proposal between them.
-- **Renewal replaces at once:** the old accord is marked `renewed` and earns nothing; the new one
-  earns the +5 when it runs its course, so partners who keep renewing are paid once, at the end.
+- **Renewal replaces at once:** the old accord is marked `renewed` and the new one carries it on,
+  so the rounds keep earning.
 - **Reputation has no floor**; it can go below zero.
 - **Chat limits:** 8 messages per 10 seconds per player; private-message pushes at most once a
   minute per conversation, previewing 140 characters; chat never emails. Deleted messages show
@@ -179,22 +218,76 @@ All at the proposed defaults except round counting, which stays as round starts.
 - **Feed order:** by time, and a message and a dispatch in the same millisecond put the dispatch
   first (the server merges the two lists per page, so paging never skips an item).
 
-### Phase 3 questions for the user
+### Phase 3 reputation, revised (2026-09-27)
 
-An independent review raised two design points that are the user's call; nothing was changed:
+An independent review found two loopholes in "+5 per accord kept": 1-round accords every round
+farmed +5 each (and a 1-round accord signed in the draft paid +5 while restricting nothing), and
+renewing forfeited the +5, so letting an accord lapse and re-signing paid more. The user chose to
+pay by the round instead:
 
-- **Reputation farming.** Two friends can sign a 1-round accord every round for +5 each, and a
-  1-round accord signed during the draft restricts nothing (no wars before round 1) yet pays +5
-  when the draft closes. A possible rule: an accord pays only if it held through at least one
-  round in which war was possible.
-- **Renewal forfeits the +5.** The replaced accord is marked `renewed` and earns nothing, so
-  renewing pays less than letting an accord run out and signing a new one. A possible rule: a
-  renewal counts as keeping the old accord if it held through at least one round start.
+- When round R starts, every accord in force through the whole of round R−1 pays both partners
+  `REPUTATION_PER_ROUND` (2). "Whole round" means the partners' unbroken run of accords began
+  before round R−1 did: `accordsHeldThrough()` walks back through `renews` links, so a renewal
+  carries the accord on, while a lapse followed by a new accord loses the round in between.
+- The round an accord is signed in doesn't count, so a 1-round accord never pays; the draft
+  (round 0) doesn't count, so nothing is paid when it ends. A 3-round accord earns 4.
+- Running its course pays nothing extra; breaking still costs 20 and the round it's broken in
+  isn't paid. The payments at one round start are logged as a single `reputation.earned` event.
+- Campaigns already underway: accords kept before the change keep their +5; accords in force earn
+  by the round from the next round start on.
+
+## Phase 4 decisions (settled with the user on 2026-09-27)
+
+All at the proposed defaults.
+
+| Topic         | Decision                                                                                                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Whose stats   | Every empire's page is public within the campaign, like the map. The Empire tab opens your own.                                                                                                       |
+| Where         | A full-screen page per empire (`/c/[id]/empire/[userId]`) with a back link; the Empire tab and column keep the summary, with a "Full statistics" link.                                                |
+| History graph | Game value per round for every empire on one chart, the viewed empire emphasized, its wars marked where territory changed hands, and a toggle for country count.                                      |
+| War record    | Wins, losses and draws as attacker and defender, tribute paid and taken, withdrawals, accords kept and broken, and the countries won and lost, each linking to its war.                               |
+| Chess profile | The campaign's games only: results by colour, how games ended, average length and the most-played openings named from the Lichess openings list (CC0, downloaded with the user's OK). No ratings yet. |
+| Updates       | Recomputed from the event log on each request (no stored aggregates); the page refetches when `campaign.events` arrive.                                                                               |
+
+### Defaults taken while building Phase 4 (not asked; easy to change)
+
+- **History is worked backwards** from today's holdings, undoing each `war.resolved` event's
+  transfers, so the last point always matches the map, even for campaigns whose log is incomplete
+  (test fixtures, early data). Round 0 is the end of the draft; there is no graph before round 1.
+- **One point per round end**, not per war: several wars in a round are one step and one marker,
+  and the readout lists them.
+- **Emphasis, not eight colors**: the viewed empire's line is in its color and rivals are gray
+  until picked in the readout. The map colors fail as thin lines on gunmetal (Plum and Cobalt too
+  dark, Ice and Sage too close), so each `EmpireColor` has a `line` step for charts: same hue,
+  lightened to 3:1 and given chroma 0.10 where needed. Map fills are unchanged.
+- **Markers** only for the viewed empire's wars that moved territory (not draws, withdrawals or
+  token tributes). The y axis fits the data rather than starting at zero.
+- **World rankings** compare the empire's total with every territory in the dataset (bundled
+  regions included), and name neighbours in the ranking other than the empire's own countries.
+  Totals sum the countries that have a figure, noting how many don't; "est." marks totals that
+  include an estimate.
+- **The chess profile counts game results**, not war outcomes: a drawn Armageddon is a draw there,
+  though the war went to Black. Openings are grouped by family (the name before the colon) per
+  colour, top five each; a game is named by the last named position among its first 36 plies (the
+  longest named line), matched by position, so transpositions count. Game length is in full moves.
+- **Accords in the record** are signed ones only; proposals stay private.
+- **Every empire at once**: `GET /api/campaigns/:id/stats` returns all empires (at most 8), so
+  switching between them is instant.
+- **Reading the chart**: the readout shows the round under the mouse, else the round picked with a
+  click, tap or the arrow keys (it stays until another is picked, Escape or "Show now" clears it),
+  else now. Screen readers hear picked rounds only.
+- **Panels and pages**: links to empire pages keep the address's query, so a panel open underneath
+  (a war being answered, a conversation) stays mounted, and "Back to the map" returns to it. A
+  panel opened while a page is up (a live game starting) goes back to the map room. The page's
+  heading takes focus when it opens.
+- **Opening names are remembered** per finished game in server memory (up to 20,000 games).
+- The page in the lobby is only reachable by URL; it says empires take shape in the draft.
 
 ## What still needs the user
 
-- **The two Phase 3 questions** [above](#phase-3-questions-for-the-user): reputation farming and
-  renewal.
+- **Planning the playtest** (Phase 5): who plays, which pace, the rules to start from, and which
+  numbers to watch (the plan names country values, the token economy, the stake range, time
+  controls and round length).
 - **Map canon:** de facto borders per Natural Earth (Crimea with Russia; a one-line flip is in
   `packages/data/config/canon.yaml`), Western Sahara whole, Taiwan and Kosovo separate,
   Somaliland in Somalia, Northern Cyprus in Cyprus, 6 microstate regions, value overrides for
@@ -222,7 +315,17 @@ pnpm format       # Prettier
     scheduler will auto-accept and time out), "Blitz Night" (live), "Tiebreak" (Armageddon
     underway) and "Settings Check" (a lobby). From Phase 3, hosted by Field Marshal: "Diplomacy
     Check" (with Bo and Cy, round 3: chat, private messages, a broken accord, one kept, and Field
-    Marshal's accord with Cy in force) and "Lobby Chat Check" (with Bo, a lobby with chat).
+    Marshal's accord with Cy in force) and "Lobby Chat Check" (with Bo, a lobby with chat). From
+    Phase 4, hosted by Field Marshal: "History Check" (with Bo, Cy and Di, round 6 after six rounds
+    of scripted wars, accords kept and broken, and Bo's declaration on Cy waiting for an answer)
+    and "Draft Stats Check" (with Bo, free draft, a few picks in). "History Check" was later played on
+    to round 10 (36 resolved wars, so the oldest are out of the campaign view), and "Blitz Night"
+    moved to round 2 with one more war, which Bo resigned.
+  - A campaign with real history is quickest to script against the dev server: sign four players
+    in with `/api/auth/dev`, create and join, start and end the draft, then per round ask the rules
+    for targets (`attackableTargets`, `suggestStake` over a `WarBoard` built from the campaign
+    view) and play a short scripted game (Scholar's mate, Fool's mate, a knight shuffle to a
+    threefold draw, or a few opening moves and a resignation).
 - **Dev servers.** The user often runs `pnpm dev` in their own terminal, whose output isn't
   visible from here. Check with `ps` before starting anything, and don't kill their processes.
   `tsx watch` restarts the server when shared code changes (and applies new migrations); Next
@@ -262,8 +365,9 @@ pnpm format       # Prettier
   - `config.ts`: rules schema with the `war` settings; `parseRules` fills defaults, and stored
     rules are always read through it.
   - `diplomacy.ts`: accord lengths and terms, `checkProposal`, `accordsInForce` and
-    `renunciationsFrom` (what the war rules see), reputation constants, `feedShows` (which feed
-    filter shows what) and `conversationKey`. `WarBoard` carries `accords` and `renunciations`.
+    `renunciationsFrom` (what the war rules see), reputation (`accordsHeldThrough`,
+    `reputationForKeeping` and the constants), `feedShows` (which feed filter shows what) and
+    `conversationKey`. `WarBoard` carries `accords` and `renunciations`.
   - `protocol.ts`: API and WebSocket types, including `WarView`, `GameView`, `AccordView`,
     `MessageView`, the feed types, and the war and accord events.
 - **Every campaign state change goes through `mutate()`** in
@@ -281,8 +385,9 @@ pnpm format       # Prettier
   - `board.ts` loads the `WarBoard`; `views.ts` shapes rows for the API.
   - Truces aren't stored: they're derived from wars resolved recently.
 - **Diplomacy** ([apps/server/src/diplomacy/](../apps/server/src/diplomacy/)):
-  - `accords.ts`: propose, answer, withdraw, renounce through `mutate()`; `keepFinishedAccords()`
-    runs at every round start (and when the draft ends); `lapseProposals()` runs in the scheduler.
+  - `accords.ts`: propose, answer, withdraw, renounce through `mutate()`; `startRoundForAccords()`
+    runs at every round start (and when the draft ends): it pays the accords held through the
+    round before, then lets finished ones run their course. `lapseProposals()` runs in the scheduler.
     Private changes (proposals, declines, withdrawals, lapses) log no events and call
     `scope.notifyOnly([...])`, so only the two players are pushed `campaign.changed`.
   - `chat.ts` (`ChatService`): messages don't change the campaign, so they skip the campaign lock
@@ -291,6 +396,19 @@ pnpm format       # Prettier
     with a two-part cursor (`"<event id>.<message id>"`). Read positions live in `chat_reads`.
   - Proposals are the second private field of `CampaignView`: `accords` holds public accords plus
     the viewer's own proposals.
+- **Statistics** ([apps/server/src/stats/](../apps/server/src/stats/)): `service.ts` reads the
+  campaign's holdings, wars, `war.resolved` events, games and signed accords in one read-only
+  transaction and hands them to `campaignStats()` in `packages/rules/src/stats.ts` (history,
+  acquisitions, war records, accord tallies, chess profiles). `openings.ts` (`OpeningNamer`) names
+  each game's opening from `packages/data/openings/openings.json` via `OpeningBook` in
+  `packages/rules/src/openings.ts`. Real-world totals and rankings are worked out on the client
+  (`apps/web/src/lib/empire.ts`) from the dataset it already has.
+- **Pages over the map room.** `app/c/[id]/layout.tsx` renders `CampaignScreen`, and child routes
+  (the empire page) render inside it as an overlay while the map, tabs and panels stay mounted.
+  `useSelectedLayoutSegment()` tells the screen a page is open; covered regions are `inert`; the
+  overlay reads the model through `useCampaignRoom()` (`components/campaign/room-context.tsx`),
+  which also has `useEmpireHref()` for links to empire pages. `usePanelParams().set` pushes
+  `?war=`-style state in place on the map room, and navigates back to it from a page.
 - **Time** comes from `ctx.now()`, injectable for tests. The hub measures each socket's round
   trip (`hub.latency(userId)`) for lag compensation.
 - **Real time on the client.** `campaign.events` messages refetch the campaign and go into the
@@ -312,8 +430,11 @@ pnpm format       # Prettier
   `parse(schema, value)` and throw `HttpError` helpers for player-facing messages. Game views are
   for campaign members only, and moves for the two players.
 - **Web app structure.**
-  - Pages are thin server components; `/c/[id]` wraps the screen in `Suspense` because it reads
-    `useSearchParams`.
+  - Pages are thin server components; the `/c/[id]` layout wraps the screen in `Suspense`
+    because it reads `useSearchParams`, and the `/c/[id]` page itself renders nothing.
+  - Empire page components are in `components/empire/`: `empire-screen.tsx` (header, totals,
+    countries), `history-chart.tsx` (SVG chart, readout and table), `war-record.tsx`,
+    `chess-profile.tsx`. Player names link to empire pages through `PlayerName`'s `href`.
   - `buildModel()` in [apps/web/src/lib/campaign.ts](../apps/web/src/lib/campaign.ts) derives the
     war board, targets, active and past wars, what's waiting on the viewer, and each locked
     country's war. `useMyGames()` adds whose move it is in each of the viewer's games.
@@ -333,39 +454,29 @@ pnpm format       # Prettier
   Stencil for names and headlines only; plain button labels; 44px tap targets; reduced motion
   respected. The board theme is `.board-theme` in `globals.css`.
 
-## What's next: Phase 4 (stats and history)
+## What's next: Phase 5 (playtest)
 
-Plan section 8: an empire statistics page with real-world data and comparisons, a history graph
-and war record built from the event log, and a chess profile. Done when every empire has a
-complete stats page that updates after each war. Section 2 ("Empire statistics page") lists the
-contents: totals and share of the world (population, area, GDP nominal and PPP, military
-spending), real-world comparisons ("your economy would rank 3rd"), the country list, a history
-graph of empire size with wars marked, the war record (wins, losses and draws as attacker and
-defender, surprise wars launched, treaties broken) and the chess profile (rating, openings,
-standard vs. Chess960 results). The Empire panel already shows totals, shares and three rankings.
+Plan section 8: run a real campaign with the friend group, tune country values, the token economy,
+the stake range, time controls and round length, and gather feedback before Phase 6. Worth doing
+first:
 
-### Open questions to settle first
-
-Go through these with the user before writing code, as was done for Phases 2 and 3. Each has a
-proposed default; none is decided.
-
-| Question      | Proposed default                                                                                                                                                                              |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Whose stats   | Every empire's page is public within the campaign, like the map: tap a player anywhere to open theirs. The Empire tab opens your own.                                                         |
-| Where         | A full-screen page per empire (`/c/[id]/empire/[userId]`) with a back link, rather than growing the side panel; the Empire tab and column keep a summary with a link.                         |
-| History graph | Game value per round for every empire on one chart (yours emphasized), wars marked where territory changed hands; a toggle for country count. Built from `draft.*` and `war.resolved` events. |
-| War record    | Wins, losses and draws as attacker and defender, tributes paid and taken, withdrawals, accords kept and broken, and the countries won and lost, each linking to its war.                      |
-| Chess profile | Games played, wins, losses and draws by colour and pace, the most-played openings named from the Lichess openings list (CC0), and average game length. Ratings wait for Phase 6 (Glicko-2).   |
-| Updates       | Recomputed from the event log on request (no stored aggregates); the page refetches when `campaign.events` arrive.                                                                            |
+- Have the group review the map canon (`REPORT.md`).
+- A production deployment (HTTPS, VAPID keys, one origin for `/api` and `/ws`), so push can be
+  tried on real phones; iPhones need the app on the home screen.
+- Host tools the plan names for stalled campaigns: pause, or replace an inactive player.
 
 Smaller follow-ups, none blocking:
 
 - Browsing earlier positions by clicking a move; move sounds.
-- Host tools the plan names for stalled campaigns: pause, or replace an inactive player.
 - The home screen's "waiting" count refreshes on focus, not on every move.
 - A campaign view carries active wars plus the 30 most recently resolved, the 150 most recent
-  events, and the 30 most recently ended accords; the feed pages through everything.
+  events, and the 30 most recently ended accords; the feed pages through everything, the stats
+  page reads everything, and the war panel reads older wars on their own. Dispatch lines still only
+  link wars in the view.
+- `games` has no `campaign_id` index; the stats service reads games by war (indexed) instead, and
+  `attentionCounts` scans them. Fine at friend-group scale.
 - Chat: @mentions with push, group conversations, and showing accords on the map were left out.
+- The opening name could show on the board during a game (the server would add it to `GameView`).
 - `answerWindow` in `war-detail.tsx` is unused (left from Phase 2).
 
 ## Gotchas
@@ -386,26 +497,32 @@ Smaller follow-ups, none blocking:
   e1g1 as well.
 - **Prettier ignores** `packages/data/config/` and the plan document.
 - **zsh:** a bare `===` in `echo` triggers equals-expansion; quote it.
+- **Page titles:** Next inserts its own `<title>` (ahead of the old one) when the route changes, so
+  setting `document.title` once doesn't stick. The campaign screen uses `useDocumentTitle()`, which
+  re-applies the title whenever the head changes.
+- **SVG focus rings:** browsers draw a `:focus` outline on a focusable `<svg>` after a click, even
+  when `:focus-visible` doesn't match; the history chart turns it off and keeps an amber
+  `:focus-visible` ring.
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `test/datasets.test.ts`                                                                                                                                                                          |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                          |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation)                                                                                         |
-| `apps/web/src/components/` | `campaign/*` (screen, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `game/*` (board, game panel), `map/world-map.tsx`, `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `wars.ts` (war text, clocks), `use-chat-scroll.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`               |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                         |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                 |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                        |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation)                                                                                                                                                                                             |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `notifications.tsx`                   |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
 
 API: `/api/me`, `/api/auth/{dev,email,email/verify,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
 `/api/campaigns/:id/{invite/reset,me,leave,kick}`,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
-`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId/{respond,reply}`,
+`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply}`,
 `/api/campaigns/:id/round/next`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
-`/api/campaigns/:id/feed?filter=&before=`, `/api/campaigns/:id/messages` (send; `?with=` reads a
+`/api/campaigns/:id/stats`, `/api/campaigns/:id/feed?filter=&before=`, `/api/campaigns/:id/messages` (send; `?with=` reads a
 private conversation) and `…/messages/:messageId` (delete), `/api/campaigns/:id/chat` (unread
 counts) and `…/chat/read`, `/api/push/{key,subscribe,unsubscribe}`, `/api/invites/:code` and
 `…/join`, `/ws`.

@@ -30,6 +30,7 @@ import {
 } from '@/lib/wars';
 import { Notice, ValueBadge } from '../ui';
 import { PlayerName } from './player-name';
+import { useEmpireHref } from './room-context';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
 
 export interface StakePreview {
@@ -61,6 +62,7 @@ export function WarDetail({
   const target = idx.byId.get(war.targetId);
   const me = model.me.userId;
   const game = currentGame(war);
+  const empireHref = useEmpireHref(model.campaign.id);
 
   const country = (id: TerritoryId) => (
     <button
@@ -92,11 +94,19 @@ export function WarDetail({
       </header>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <PlayerName member={model.membersById.get(war.attackerId)} you={war.attackerId === me} />
+        <PlayerName
+          member={model.membersById.get(war.attackerId)}
+          you={war.attackerId === me}
+          href={empireHref(war.attackerId)}
+        />
         <span className="text-grease" aria-label="attacks">
           ⟶
         </span>
-        <PlayerName member={model.membersById.get(war.defenderId)} you={war.defenderId === me} />
+        <PlayerName
+          member={model.membersById.get(war.defenderId)}
+          you={war.defenderId === me}
+          href={empireHref(war.defenderId)}
+        />
       </div>
 
       <dl className="space-y-3">

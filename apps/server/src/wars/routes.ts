@@ -5,6 +5,7 @@ import type { AppContext } from '../context';
 import { parse } from '../lib/http';
 import { gameAction, gameView, playMove } from './games';
 import { declareWar, nextRound, replyToWar, respondToWar } from './service';
+import { warView } from './views';
 
 const id = z.string().min(1).max(40);
 const territory = z.string().min(1).max(40);
@@ -47,6 +48,12 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
     const input = parse(declareInput, req.body);
     reply.code(201);
     return declareWar(ctx, params.id, user.id, input);
+  });
+
+  app.get('/api/campaigns/:id/wars/:warId', async (req) => {
+    const user = requireUser(req);
+    const params = parse(warParams, req.params);
+    return warView(ctx, params.id, params.warId, user.id);
   });
 
   app.post('/api/campaigns/:id/wars/:warId/respond', async (req) => {

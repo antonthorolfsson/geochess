@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatArea, formatCount, formatUsd, ordinal, relativeTime } from './format';
+import { formatArea, formatAreaCompact, formatCount, formatUsd, ordinal, relativeTime } from './format';
 import { safeNext } from './paths';
 
 describe('number formatting', () => {
@@ -8,6 +8,7 @@ describe('number formatting', () => {
     expect(formatCount(38_400_000)).toBe('38.4M');
     expect(formatUsd(1_230_000_000_000)).toBe('$1.23T');
     expect(formatArea(312_696)).toBe('312,696 km²');
+    expect(formatAreaCompact(25_341_708)).toBe('25.3M km²');
   });
 
   it('shows a dash for missing data', () => {

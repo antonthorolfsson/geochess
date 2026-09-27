@@ -1,10 +1,11 @@
 import {
   PROPOSAL_REJECTION_MESSAGES,
   REPUTATION_BROKEN,
-  REPUTATION_KEPT,
+  REPUTATION_PER_ROUND,
   RESPONSE_WINDOW_MS,
   RESPONSE_WINDOW_TEXT,
   accordEndsRound,
+  accordsHeldThrough,
   checkProposal,
   cleanText,
   diplomacyOpen,
@@ -367,10 +368,46 @@ export async function renounceAccord(
 // Rounds and deadlines
 
 /**
- * When a round starts, accords whose last round has passed run their course: both partners gain
- * reputation. Runs inside the host's "Next round" change, after the round has moved on.
+ * What happens to accords when a round starts: those that held through the whole round before it
+ * pay both partners, then those whose last round has passed run their course. Runs inside the
+ * change that starts the round (the host's "Next round", or the draft ending), after the round
+ * has moved on.
  */
-export async function keepFinishedAccords(ctx: AppContext, scope: MutationScope): Promise<void> {
+export async function startRoundForAccords(ctx: AppContext, scope: MutationScope): Promise<void> {
+  await payHeldAccords(scope);
+  await keepFinishedAccords(ctx, scope);
+}
+
+/** Reputation for every accord in force all through the round just ended, logged as one dispatch. */
+async function payHeldAccords(scope: MutationScope): Promise<void> {
+  const round = scope.campaign.round;
+  const rows = await scope.tx
+    .select()
+    .from(accords)
+    .where(and(eq(accords.campaignId, scope.campaign.id), inArray(accords.status, ['active', 'renewed'])));
+  const gains = new Map<string, number>();
+  for (const accord of accordsHeldThrough(rows, round)) {
+    for (const userId of [accord.proposerId, accord.recipientId]) {
+      gains.set(userId, (gains.get(userId) ?? 0) + REPUTATION_PER_ROUND);
+    }
+  }
+  if (gains.size === 0) return;
+  const paid: { userId: string; delta: number; reputation: number }[] = [];
+  for (const { userId } of scope.members) {
+    const delta = gains.get(userId);
+    if (!delta) continue;
+    const [row] = await scope.tx
+      .update(members)
+      .set({ reputation: sql`${members.reputation} + ${delta}` })
+      .where(and(eq(members.campaignId, scope.campaign.id), eq(members.userId, userId)))
+      .returning({ reputation: members.reputation });
+    if (row) paid.push({ userId, delta, reputation: row.reputation });
+  }
+  await scope.log.add({ type: 'reputation.earned', payload: { heldRound: round - 1, gains: paid } }, null, round);
+}
+
+/** Accords whose last round has passed run their course. Their rounds have already been paid. */
+async function keepFinishedAccords(ctx: AppContext, scope: MutationScope): Promise<void> {
   const round = scope.campaign.round;
   const due = await scope.tx
     .select()
@@ -385,13 +422,12 @@ export async function keepFinishedAccords(ctx: AppContext, scope: MutationScope)
     const players: [string, string] = [accord.proposerId, accord.recipientId];
     await scope.log.add({ type: 'accord.kept', payload: { accordId: accord.id, players } }, null, round);
     for (const userId of players) {
-      await changeReputation(scope, userId, REPUTATION_KEPT, 'accord-kept', accord.id);
       const partnerId = partnerIn(accord, userId);
       const partner = await userName(scope.tx, partnerId);
       notify(ctx, scope, {
         userId,
         title: `Your accord with ${partner} has run its course`,
-        body: `Your reputation rises by ${REPUTATION_KEPT}. You may declare war on each other again.`,
+        body: 'You may declare war on each other again.',
         url: accordUrl(scope.campaign.id, accord.id),
         tag: accordTag(scope.campaign.id, partnerId),
       });

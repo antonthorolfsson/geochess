@@ -47,12 +47,27 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
   private until signed; a signed accord stops both players declaring war on each other until it
   runs its course. Either side can renounce it at any time, in public, and the breaker must wait a
   round before attacking the betrayed player.
-- Reputation: every empire starts at 100, loses 20 for breaking an accord and gains 5 for each
-  accord kept to the end.
+- Reputation: every empire starts at 100, loses 20 for breaking an accord and gains 2 for every
+  whole round an accord holds.
 - Chat: a campaign channel and one-to-one private messages from the lobby on, with unread counts
   on every device and push notifications for private messages.
 - The Diplo tab: the dispatches and the campaign channel in one timeline with filters, private
   conversations, and everything about accords and reputation in one place.
+
+**Phase 4 (Stats and history)** is in place:
+
+- A statistics page for every empire, open to everyone in the campaign: tap a player's name in the
+  standings, a war or a country, or use "Full statistics" in the Empire tab.
+- Real-world totals and shares of the world (population, area, GDP, GDP at purchasing-power
+  parity, military spending, armed forces), where the empire would rank among today's countries
+  and among the campaign's empires ("Your economy would rank 3rd in the world, between China and
+  Germany"), and every country with how it was won.
+- A history graph of every empire's size, round by round, with the empire's wars marked, and a
+  table view.
+- The war record (won, drawn and lost as attacker and defender, tribute, countries won and lost)
+  and accords kept and broken.
+- A chess profile: results by colour, how games ended, average length, the games themselves and
+  the most-played openings, named from the Lichess openings list.
 
 ## Quick start
 
@@ -74,24 +89,25 @@ To try it on a phone, open `http://<your computer's LAN address>:3000` on the sa
 
 ## Repository layout
 
-| Path             | Package          | What it is                                                                                                                                                                                   |
-| ---------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, accords, chess and clocks (chessops), campaign settings, empire colors, API types. |
-| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, and the versioned datasets it builds.                                                                                               |
-| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                                  |
-| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars, the chess board (chessground), diplomacy and chat.                                                                              |
+| Path             | Package          | What it is                                                                                                                                                                                                                     |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, accords, chess and clocks (chessops), opening names, empire statistics, campaign settings, empire colors, API types. |
+| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, the versioned datasets it builds, and the opening names table.                                                                                                        |
+| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                                                                    |
+| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars, the chess board (chessground), diplomacy and chat, empire statistics.                                                                                             |
 
 ## Commands
 
-| Command            | What it does                                                             |
-| ------------------ | ------------------------------------------------------------------------ |
-| `pnpm dev`         | Runs the game server and the web app with live reload.                   |
-| `pnpm test`        | Unit tests for the rules and dataset, integration tests for the server.  |
-| `pnpm typecheck`   | Type-checks every package.                                               |
-| `pnpm build`       | Production builds of the server and web app.                             |
-| `pnpm data:build`  | Rebuilds the country dataset from Natural Earth and World Bank data.     |
-| `pnpm db:generate` | Generates a SQL migration after changing `apps/server/src/db/schema.ts`. |
-| `pnpm format`      | Formats the code with Prettier.                                          |
+| Command              | What it does                                                             |
+| -------------------- | ------------------------------------------------------------------------ |
+| `pnpm dev`           | Runs the game server and the web app with live reload.                   |
+| `pnpm test`          | Unit tests for the rules and dataset, integration tests for the server.  |
+| `pnpm typecheck`     | Type-checks every package.                                               |
+| `pnpm build`         | Production builds of the server and web app.                             |
+| `pnpm data:build`    | Rebuilds the country dataset from Natural Earth and World Bank data.     |
+| `pnpm data:openings` | Rebuilds the opening names table from the Lichess openings list.         |
+| `pnpm db:generate`   | Generates a SQL migration after changing `apps/server/src/db/schema.ts`. |
+| `pnpm format`        | Formats the code with Prettier.                                          |
 
 ## Configuration
 
@@ -119,7 +135,9 @@ Country shapes are from [Natural Earth](https://www.naturalearthdata.com/) (publ
 Country statistics are from the World Bank's
 [World Development Indicators](https://datatopics.worldbank.org/world-development-indicators/),
 licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Gaps are filled with
-clearly labeled estimates. See [packages/data/README.md](packages/data/README.md).
+clearly labeled estimates. Opening names come from the
+[Lichess openings list](https://github.com/lichess-org/chess-openings) (CC0). See
+[packages/data/README.md](packages/data/README.md).
 
 Every map decision (disputed territories, microstate regions, sea lanes, game values) lives in
 hand-editable YAML under `packages/data/config/`, and each build writes a review report to

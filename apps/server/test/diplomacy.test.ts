@@ -231,29 +231,44 @@ describe('a signed accord', () => {
     expect((await declare(bo, 'A4', 'B5')).body).toMatchObject({ error: { code: 'accord' } });
   });
 
-  it('pays both partners 5 reputation when it runs its course', async () => {
+  it('pays both partners 2 reputation for every whole round it holds', async () => {
     const { ann, view, accord, reputation, declare, nextRound, signed } = await setup();
-    const accordId = await signed();
-    await nextRound();
-    await nextRound();
+    const accordId = await signed(); // During round 1, for 3 rounds: over when round 4 starts.
+    await nextRound(); // Round 1 was only partly covered.
+    expect([await reputation(ANN), await reputation(BO)]).toEqual([100, 100]);
+    await nextRound(); // Round 2 held.
+    expect([await reputation(ANN), await reputation(BO), await reputation(CY)]).toEqual([102, 102, 100]);
+    expect((await view()).events.slice(-2)).toMatchObject([
+      { type: 'round.started' },
+      {
+        type: 'reputation.earned',
+        payload: {
+          heldRound: 2,
+          gains: [
+            { userId: ANN, delta: 2, reputation: 102 },
+            { userId: BO, delta: 2, reputation: 102 },
+          ],
+        },
+      },
+    ]);
     expect(await accord(accordId)).toMatchObject({ status: 'active' });
     expect((await declare(ann, 'B5', 'A4')).body).toMatchObject({ error: { code: 'accord' } });
-    await nextRound(); // Round 4 starts: the accord is over.
+
+    await nextRound(); // Round 4 starts: round 3 held, and the accord is over.
     expect(await accord(accordId)).toMatchObject({ status: 'kept', endedRound: 4 });
-    expect(await reputation(ANN)).toBe(105);
-    expect(await reputation(BO)).toBe(105);
-    const tail = (await view()).events.slice(-4).map((e) => e.type);
-    expect(tail).toEqual(['round.started', 'accord.kept', 'reputation.changed', 'reputation.changed']);
+    expect([await reputation(ANN), await reputation(BO)]).toEqual([104, 104]);
+    const tail = (await view()).events.slice(-3).map((e) => e.type);
+    expect(tail).toEqual(['round.started', 'reputation.earned', 'accord.kept']);
     await tick();
-    expect(server.notices.slice(-2).map((n) => n.title)).toEqual([
-      'Your accord with Bo has run its course',
-      'Your accord with Ann has run its course',
+    expect(server.notices.slice(-2)).toMatchObject([
+      { title: 'Your accord with Bo has run its course', body: 'You may declare war on each other again.' },
+      { title: 'Your accord with Ann has run its course' },
     ]);
     expect((await declare(ann, 'B5', 'A4')).status).toBe(201);
   });
 
-  it('can be signed during the draft, which counts as round 0', async () => {
-    const { ann, bo, id, accord, reputation, propose, answer } = await setup({ status: 'lobby' });
+  it('can be signed during the draft, which counts as round 0 and pays nothing', async () => {
+    const { ann, bo, id, accord, reputation, propose, answer, nextRound } = await setup({ status: 'lobby' });
     expect((await ann.post(`/api/campaigns/${id}/draft/start`)).status).toBe(200);
     const short = (await propose(ann, BO, 1)).body.id;
     const long = (await propose(bo, CY, 3)).body.id;
@@ -264,8 +279,10 @@ describe('a signed accord', () => {
     expect((await ann.post(`/api/campaigns/${id}/draft/end`)).status).toBe(200);
     expect(await accord(short)).toMatchObject({ status: 'kept', endedRound: 1 });
     expect(await accord(long)).toMatchObject({ status: 'active', endsRound: 3 });
-    expect(await reputation(ANN)).toBe(105);
-    expect(await reputation(CY)).toBe(100);
+    expect([await reputation(ANN), await reputation(BO), await reputation(CY)]).toEqual([100, 100, 100]);
+    // Round 1 is the first round of war, so the accord held since the draft is paid for it.
+    await nextRound();
+    expect([await reputation(ANN), await reputation(BO), await reputation(CY)]).toEqual([100, 102, 102]);
   });
 
   it('can be renewed by signing a new one, which replaces it', async () => {
@@ -280,6 +297,9 @@ describe('a signed accord', () => {
     expect(await accord(renewal)).toMatchObject({ status: 'active', endsRound: 7, renews: first });
     expect((await view()).accords.filter((a: AccordView) => a.status === 'active')).toHaveLength(1);
     expect((await view()).members.every((m) => m.reputation === 100)).toBe(true);
+    // Renewing carries the accord on: round 2, covered by one then the other, is paid.
+    await nextRound();
+    expect((await view()).members.map((m) => m.reputation)).toEqual([102, 102, 100]);
   });
 });
 

@@ -9,6 +9,7 @@ pnpm --filter @empire/data generate            # build datasets/<version>/ (offl
 pnpm --filter @empire/data generate --refresh  # re-download all sources first
 pnpm --filter @empire/data test                # check the committed dataset
 pnpm --filter @empire/data preview             # render SVG/PNG previews into raw/
+pnpm --filter @empire/data openings            # build openings/openings.json (offline after the first run)
 ```
 
 Downloads are cached in `raw/` (gitignored), so rebuilding is fast and needs no network. Only
@@ -46,6 +47,13 @@ single territory, so the coastline mesh includes them along ±180°. With the un
 that line is the map's edge; if you ever rotate the projection (a Pacific-centred view, a globe),
 drop those arcs from the coastline mesh, for example by skipping mesh line segments whose points
 all have |lon| = 180.
+
+The opening names table is separate from the versioned datasets: `openings/openings.json` holds
+every named position of the [Lichess openings list](https://github.com/lichess-org/chess-openings)
+(CC0), each line played out with chessops and stored by its final position (`ChessGame.positionKey`
+from `@empire/rules`), so games are named however they reached a position. The server names each
+game's opening with it for the chess profiles. Campaigns don't pin it: a renamed opening is
+harmless.
 
 ## What the build does
 
@@ -110,6 +118,7 @@ The game must show `Dataset.attribution` (for example on an About screen):
 - **Natural Earth**: public domain. Credit "Made with Natural Earth".
 - **World Bank World Development Indicators**: CC BY 4.0, attribution required:
   "World Bank, World Development Indicators, CC BY 4.0".
+- **Lichess openings list** (opening names): CC0, no attribution required, credited anyway.
 - **Gap estimates**, listed per figure in `REPORT.md`: IMF World Economic Outlook, Eurostat
   (CC BY 4.0), Statistics Netherlands (CBS, CC BY 4.0), SIPRI Military Expenditure Database
   (free to use with attribution), INSEE, UN World Population Prospects via UNFPA, the CIA World
@@ -121,7 +130,9 @@ The game must show `Dataset.attribution` (for example on an About screen):
 ```
 config/            hand-edited decisions (YAML)
 datasets/          committed outputs, one directory per version
+openings/          the opening names table (committed output)
 scripts/build.ts   the pipeline entry point
+scripts/openings.ts builds the opening names table
 scripts/preview.ts SVG/PNG previews for eyeballing the map
 scripts/lib/       pipeline modules (canon, geometry, adjacency, sealanes, stats, values, ...)
 test/              checks run against the latest committed dataset

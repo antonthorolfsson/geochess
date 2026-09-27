@@ -22,7 +22,7 @@ export async function startSession(db: Db, env: Env, reply: FastifyReply, userId
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   await db.insert(sessions).values({ tokenHash: hashToken(token), userId, expiresAt });
   reply.setCookie(SESSION_COOKIE, token, {
-    path: '/',
+    ...cookieScope(env),
     httpOnly: true,
     sameSite: 'lax',
     secure: env.secureCookies,
@@ -30,10 +30,15 @@ export async function startSession(db: Db, env: Env, reply: FastifyReply, userId
   });
 }
 
-export async function endSession(db: Db, req: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function endSession(db: Db, env: Env, req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const token = req.cookies[SESSION_COOKIE];
   if (token) await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
-  reply.clearCookie(SESSION_COOKIE, { path: '/' });
+  reply.clearCookie(SESSION_COOKIE, cookieScope(env));
+}
+
+/** Where the session cookie applies. Clearing it must name the same path and domain. */
+function cookieScope(env: Env): { path: string; domain?: string } {
+  return { path: '/', domain: env.COOKIE_DOMAIN };
 }
 
 export async function loadSessionUser(db: Db, token: string): Promise<SessionUser | null> {

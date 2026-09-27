@@ -42,6 +42,9 @@ when starting new work.**
   over the map room without resetting it; they read it with `useCampaignRoom()`.
 - Local database is embedded PGlite (`apps/server/.data/`), so no setup is needed; set
   `DATABASE_URL` for Postgres.
+- Production is https://geochess.xyz and deploys on every push to `main`: the web app on Vercel,
+  the game server on Render (`render.yaml`, `api.geochess.xyz`), Postgres on Supabase. See
+  `docs/deploy.md` before changing anything that touches origins, cookies or the server image.
 - Visual language: see section 9 of the plan. Tokens are in `apps/web/src/app/globals.css`;
   empire colors and hatching are in `packages/rules/src/colors.ts`. Stencil type only for empire
   names and headlines; buttons use plain literal labels.

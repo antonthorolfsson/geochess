@@ -1,0 +1,49 @@
+# Render Blueprint for the game server (https://render.com/docs/blueprint-spec). The web app
+# deploys to Vercel; docs/deploy.md describes the whole setup.
+services:
+  - type: web
+    name: geochess-server
+    runtime: docker
+    # Free instances sleep after 15 minutes without traffic; a Vercel cron job pings /api/health
+    # every 10 minutes (apps/web/vercel.json). Moving to "starter" removes the need for it.
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    # Redeploy only for changes the server is built from.
+    buildFilter:
+      paths:
+        - apps/server/**
+        - packages/rules/**
+        - packages/data/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - .dockerignore
+        - render.yaml
+    domains:
+      - api.geochess.xyz
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PUBLIC_URL
+        value: https://geochess.xyz
+      - key: COOKIE_DOMAIN
+        value: geochess.xyz
+      - key: DEV_LOGIN
+        value: '0'
+      - key: MAIL_FROM
+        value: Empire Chess <no-reply@geochess.xyz>
+      - key: VAPID_SUBJECT
+        value: https://geochess.xyz
+      # Secrets, entered in the Render dashboard when the Blueprint is first created.
+      - key: DATABASE_URL
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false

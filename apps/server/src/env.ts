@@ -8,10 +8,17 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   DATA_DIR: z.string().default('.data/pglite'),
   /**
-   * Public origin of the web app, used in emailed links and OAuth redirects. When unset, the
-   * origin of the incoming request is used, which suits local development on any host.
+   * Public origin of the web app, used in emailed links and OAuth redirects, and trusted for
+   * writes and sockets when it differs from this server's host. When unset, the origin of the
+   * incoming request is used, which suits local development on any host.
    */
   PUBLIC_URL: z.url().optional(),
+  /**
+   * Domain for the session cookie when this server has its own subdomain (the web app at
+   * geochess.xyz, the server at api.geochess.xyz), so sockets opened to it are signed in too.
+   * When unset, the cookie belongs to the host that set it.
+   */
+  COOKIE_DOMAIN: z.string().optional(),
   /** SMTP connection string for sign-in emails. When unset, links are logged to the console. */
   SMTP_URL: z.string().optional(),
   MAIL_FROM: z.string().default('Empire Chess <no-reply@localhost>'),

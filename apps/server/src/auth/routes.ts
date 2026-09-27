@@ -32,7 +32,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
-    await endSession(db, req, reply);
+    await endSession(db, env, req, reply);
     return { ok: true };
   });
 

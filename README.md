@@ -125,9 +125,12 @@ Everything is optional in development. For production, set at least:
 Push notifications need the service worker, which is only registered in production builds. On
 iPhones and iPads, push works once the app has been added to the home screen.
 
-In production, serve the web app and the game server from one origin: route `/api/*` and `/ws`
-to the game server and everything else to Next.js. Set `API_ORIGIN` for the web app if the game
-server isn't on `http://localhost:4000`.
+The web app proxies `/api/*` to the game server at `API_ORIGIN` (default
+`http://localhost:4000`). In production, either serve both from one origin (a reverse proxy
+routing `/api/*` and `/ws` to the game server), or give the game server its own subdomain: set
+`NEXT_PUBLIC_WS_URL` for the web app, and `PUBLIC_URL` and `COOKIE_DOMAIN` for the server so the
+socket there shares the session. The live game at geochess.xyz does the latter; see
+[docs/deploy.md](docs/deploy.md).
 
 ## Data and attribution
 

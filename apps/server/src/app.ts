@@ -12,6 +12,7 @@ import type { Db } from './db/client';
 import { registerDiplomacyRoutes } from './diplomacy/routes';
 import type { Env } from './env';
 import { HttpError, forbidden } from './lib/errors';
+import { isPublicOrigin } from './lib/http';
 import { KeyedMutex } from './lib/mutex';
 import { Timers } from './lib/timers';
 import { createNotifier, type Notifier } from './notifications/notifier';
@@ -87,11 +88,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(websocket);
 
   app.decorateRequest('user', null);
-  app.addHook('onRequest', async (req) => {
+  app.addHook('onRequest', async (req, reply) => {
+    // Responses are per player, and the proxy in front of /api in production (Vercel) caches
+    // whatever an upstream response allows.
+    reply.header('cache-control', 'no-store');
     // Cross-site request forgery guard, on top of SameSite=Lax session cookies.
     if (!SAFE_METHODS.has(req.method)) {
       const origin = req.headers.origin;
-      if (origin && new URL(origin).host !== req.host) throw forbidden('Cross-site request blocked.');
+      if (origin && !isPublicOrigin(deps.env, origin) && new URL(origin).host !== req.host) {
+        throw forbidden('Cross-site request blocked.');
+      }
     }
     const token = req.cookies[SESSION_COOKIE];
     req.user = token ? await loadSessionUser(ctx.db, token) : null;

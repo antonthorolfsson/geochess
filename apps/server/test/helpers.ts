@@ -21,8 +21,14 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-/** A server on an in-memory database with the six-territory test map (or `dataset`). */
-export async function startTestServer(dataset: Dataset = lineDataset()): Promise<TestServer> {
+/**
+ * A server on an in-memory database with the six-territory test map (or `dataset`), configured
+ * like development unless `env` says otherwise.
+ */
+export async function startTestServer(
+  dataset: Dataset = lineDataset(),
+  env: NodeJS.ProcessEnv = {},
+): Promise<TestServer> {
   const database = await openDatabase({ dataDir: null });
   const mail: TestServer['mail'] = [];
   const notices: Notice[] = [];
@@ -30,7 +36,7 @@ export async function startTestServer(dataset: Dataset = lineDataset()): Promise
   let now = Date.now();
   const app = await buildApp({
     db: database.db,
-    env: loadEnv({ NODE_ENV: 'test', DEV_LOGIN: '1' }),
+    env: loadEnv({ NODE_ENV: 'test', DEV_LOGIN: '1', ...env }),
     datasets: staticDatasetProvider([dataset]),
     mailer,
     notifier: { send: async (n) => void notices.push(n) },

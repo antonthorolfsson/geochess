@@ -1,0 +1,19 @@
+# The game server image is built from the repository root (apps/server/Dockerfile).
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.git
+.github
+.claude
+docs
+
+# Local databases and secrets never go into an image.
+**/.data
+**/.env
+**/.env.*
+
+# The map pipeline's download cache, and the web app, which deploys separately.
+packages/data/raw
+apps/web

@@ -29,6 +29,9 @@ export async function openDatabase(opts: { url?: string; dataDir: string | null 
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     const pool = new pg.Pool({ connectionString: opts.url });
+    // An idle connection dropped by the database or its pooler is replaced on next use; without a
+    // listener, node-postgres would take the whole server down over it.
+    pool.on('error', (err) => console.error(`Postgres dropped an idle connection: ${err.message}`));
     const db = drizzle({ client: pool, schema });
     await migrate(db, { migrationsFolder });
     return { db, kind: 'postgres', close: () => pool.end() };

@@ -461,8 +461,9 @@ the stake range, time controls and round length, and gather feedback before Phas
 first:
 
 - Have the group review the map canon (`REPORT.md`).
-- A production deployment (HTTPS, VAPID keys, one origin for `/api` and `/ws`), so push can be
-  tried on real phones; iPhones need the app on the home screen.
+- Try push on real phones once production is live (iPhones need the app on the home screen). The
+  deployment (Vercel, Render, Supabase, Resend at geochess.xyz) is described in
+  [deploy.md](deploy.md).
 - Host tools the plan names for stalled campaigns: pause, or replace an inactive player.
 
 Smaller follow-ups, none blocking:
@@ -489,7 +490,8 @@ Smaller follow-ups, none blocking:
 - **Zod 4:** `.prefault({})` for nested object defaults; `z.literal([...])` takes several values.
 - **Fastify 5:** `req.host` includes the port and `req.hostname` doesn't; `trustProxy` is on.
 - **WebSocket in development** connects straight to `:4000`; cookies ignore ports, so auth works.
-  In production a reverse proxy serves `/api` and `/ws` on the web origin.
+  In production it connects straight to `api.geochess.xyz`, and the session cookie is set on
+  `geochess.xyz` and its subdomains (`COOKIE_DOMAIN`) so it goes along.
 - **chessground** needs its CSS imported (`board.tsx` does), measures itself, and is redrawn by a
   `ResizeObserver` when its panel changes size. Its config is memoized so the 100 ms clock tick
   doesn't reset a drag.

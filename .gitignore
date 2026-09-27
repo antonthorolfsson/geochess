@@ -17,3 +17,6 @@ packages/data/raw/
 apps/web/public/datasets/
 
 .DS_Store
+
+# Vercel CLI project link
+.vercel/

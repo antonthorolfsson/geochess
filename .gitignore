@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+
+# Local database (PGlite) and env files
+.data/
+.env
+.env.local
+
+# Map pipeline download cache
+packages/data/raw/
+
+# Datasets are copied into the web app at dev/build time
+apps/web/public/datasets/
+
+.DS_Store

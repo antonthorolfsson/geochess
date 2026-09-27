@@ -1,0 +1,41 @@
+# Game values (integers 1-10) for every territory.
+#
+# 1. Each metric is log10-transformed, then min-max normalized to 0-1 across all territories.
+#    Logs keep China from dwarfing everyone: a country 10x larger is one step up, not ten.
+# 2. Score = weighted mean of the normalized metrics. If a territory lacks a metric (no data), that
+#    metric drops out and the remaining weights are renormalized.
+# 3. Territories are ranked by score and given values by the target distribution below.
+# 4. `overrides` then set individual values by hand.
+#
+# REPORT.md lists every territory with its score, inputs, generated value and final value.
+
+weights:
+  gdpNominalUsd: 0.3   # economic weight at market exchange rates
+  gdpPppUsd: 0.2       # domestic economic capacity
+  population: 0.3      # people
+  areaKm2: 0.2         # land; kept low so empty giants (Greenland) do not rank high on area alone
+
+# Share of territories that get each value, counted from the top. Compressed toward the low end so
+# that big powers are rare and most of the map is cheap to trade and fight over. Value 1 takes the
+# rest (about 16%).
+distribution:
+  10: 0.01
+  9: 0.025
+  8: 0.04
+  7: 0.06
+  6: 0.09
+  5: 0.12
+  4: 0.15
+  3: 0.17
+  2: 0.17
+
+# Hand-tuning, applied after the distribution: `ID: value` or `ID: { value: 7, reason: "..." }`.
+# Keep a reason with every override; it is printed in REPORT.md.
+overrides:
+  DEU:
+    value: 9
+    reason: "third-largest economy; ranks 10th (value 8) only because of its modest area and population"
+  ESH:
+    value: 2
+    reason: "no GDP figure, so it is scored on population and area alone and lands above richer peers such as Namibia and Botswana (2)"
+

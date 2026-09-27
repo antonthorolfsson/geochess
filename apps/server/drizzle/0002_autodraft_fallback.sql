@@ -1,0 +1,1 @@
+ALTER TABLE "members" ADD COLUMN "autodraft_fallback" text DEFAULT 'best' NOT NULL;

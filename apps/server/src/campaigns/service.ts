@@ -1,0 +1,405 @@
+import {
+  DEFAULT_RULES,
+  MIN_PLAYERS,
+  PICK_REJECTION_MESSAGES,
+  autoPick,
+  type AutodraftFallback,
+  campaignRulesSchema,
+  checkPick,
+  empireColor,
+  firstFreeColor,
+  isDraftComplete,
+  normalizeDraftList,
+  pickerAt,
+  refillTokens,
+  shuffled,
+  type CampaignRules,
+  type DatasetIndex,
+  type TerritoryId,
+} from '@empire/rules';
+import { and, eq } from 'drizzle-orm';
+import type { AppContext } from '../context';
+import { campaigns, holdings, members } from '../db/schema';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { parse } from '../lib/http';
+import { cryptoRandom, newId, newInviteCode } from '../lib/ids';
+import {
+  EventLog,
+  mutate,
+  requireHost,
+  requireLobby,
+  requireMember,
+  userName,
+  type CampaignRow,
+  type MutationScope,
+} from './mutate';
+
+/** Applies a partial rules change over `base` and validates the result. */
+function mergeRules(base: CampaignRules, patch: Record<string, unknown>): CampaignRules {
+  return parse(campaignRulesSchema, deepMerge(base, patch));
+}
+
+function deepMerge(base: unknown, patch: unknown): unknown {
+  if (!isPlainObject(base) || !isPlainObject(patch)) return patch === undefined ? base : patch;
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) out[key] = deepMerge(base[key], value);
+  return out;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Lobby
+
+export async function createCampaign(
+  ctx: AppContext,
+  hostId: string,
+  input: { name: string; rules?: Record<string, unknown> },
+): Promise<{ id: string }> {
+  const id = newId();
+  const rules = mergeRules(DEFAULT_RULES, input.rules ?? {});
+  await ctx.db.transaction(async (tx) => {
+    await tx.insert(campaigns).values({
+      id,
+      name: input.name,
+      hostId,
+      rules,
+      datasetVersion: ctx.datasets.latestVersion(),
+      inviteCode: newInviteCode(),
+    });
+    await tx.insert(members).values({ campaignId: id, userId: hostId, color: 0 });
+    await new EventLog(tx, id).add({ type: 'campaign.created', payload: { name: input.name } }, hostId, 0);
+  });
+  return { id };
+}
+
+export async function updateCampaign(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  input: { name?: string; rules?: Record<string, unknown> },
+): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'change the campaign settings');
+    const set: Partial<CampaignRow> = {};
+    if (input.name !== undefined) set.name = input.name;
+    if (input.rules !== undefined) {
+      requireLobby(scope, 'Rules are locked once the draft starts.');
+      const rules = mergeRules(scope.campaign.rules, input.rules);
+      if (rules.maxPlayers < scope.members.length) {
+        throw badRequest(`${scope.members.length} players have already joined.`, 'too-few-seats');
+      }
+      set.rules = rules;
+    }
+    if (Object.keys(set).length > 0) await scope.tx.update(campaigns).set(set).where(eq(campaigns.id, campaignId));
+  });
+}
+
+export async function resetInvite(ctx: AppContext, campaignId: string, userId: string): Promise<string> {
+  return mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'reset the invite link');
+    const inviteCode = newInviteCode();
+    await scope.tx.update(campaigns).set({ inviteCode }).where(eq(campaigns.id, campaignId));
+    return inviteCode;
+  });
+}
+
+export async function joinCampaign(ctx: AppContext, inviteCode: string, userId: string): Promise<{ id: string }> {
+  const [found] = await ctx.db.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.inviteCode, inviteCode));
+  if (!found) throw notFound('This invite link is no longer valid.');
+
+  return mutate(ctx, found.id, async (scope) => {
+    const { campaign, tx } = scope;
+    if (campaign.inviteCode !== inviteCode) throw notFound('This invite link is no longer valid.');
+    if (scope.members.some((m) => m.userId === userId)) return { id: campaign.id };
+    requireLobby(scope);
+    if (scope.members.length >= campaign.rules.maxPlayers) throw conflict('This campaign is full.', 'full');
+    const color = firstFreeColor(scope.members.map((m) => m.color));
+    if (color === null) throw conflict('This campaign is full.', 'full');
+    await tx.insert(members).values({ campaignId: campaign.id, userId, color });
+    await scope.log.add({ type: 'member.joined', payload: { userId, name: await userName(tx, userId) } }, userId, 0);
+    return { id: campaign.id };
+  });
+}
+
+export async function removeMember(
+  ctx: AppContext,
+  campaignId: string,
+  actorId: string,
+  targetId: string,
+): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    const kicked = actorId !== targetId;
+    if (kicked) requireHost(scope, actorId, 'remove players');
+    requireMember(scope, targetId);
+    requireLobby(scope, 'Players can only leave before the draft starts.');
+    if (targetId === scope.campaign.hostId) throw badRequest('The host cannot leave. Delete the campaign instead.');
+    await scope.tx.delete(members).where(and(eq(members.campaignId, campaignId), eq(members.userId, targetId)));
+    await scope.log.add(
+      { type: 'member.left', payload: { userId: targetId, name: await userName(scope.tx, targetId), kicked } },
+      actorId,
+      0,
+    );
+  });
+}
+
+export async function deleteCampaign(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await ctx.locks.run(campaignId, async () => {
+    const memberIds = await ctx.db.transaction(async (tx) => {
+      const [c] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).for('update');
+      if (!c) throw notFound('Campaign not found.');
+      if (c.hostId !== userId) throw forbidden('Only the host can delete the campaign.');
+      const rows = await tx.select({ userId: members.userId }).from(members).where(eq(members.campaignId, campaignId));
+      await tx.delete(campaigns).where(eq(campaigns.id, campaignId));
+      return rows.map((r) => r.userId);
+    });
+    ctx.hub.send(memberIds, { type: 'campaign.deleted', campaignId });
+  });
+}
+
+export async function updateMembership(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback },
+): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    const me = requireMember(scope, userId);
+    const where = and(eq(members.campaignId, campaignId), eq(members.userId, userId));
+    if (input.color !== undefined && input.color !== me.color) {
+      empireColor(input.color);
+      if (scope.members.some((m) => m.color === input.color)) throw conflict('That color is taken.', 'color-taken');
+      await scope.tx.update(members).set({ color: input.color }).where(where);
+    }
+    let resume = false;
+    if (input.autodraftFallback !== undefined && input.autodraftFallback !== me.autodraftFallback) {
+      await scope.tx.update(members).set({ autodraftFallback: input.autodraftFallback }).where(where);
+      me.autodraftFallback = input.autodraftFallback;
+      resume = true;
+    }
+    if (input.autodraft !== undefined && input.autodraft !== me.autodraft) {
+      await scope.tx.update(members).set({ autodraft: input.autodraft }).where(where);
+      me.autodraft = input.autodraft;
+      resume = true;
+    }
+    // Switching auto-draft on, or from waiting to picking, during your own turn picks right away.
+    if (resume && me.autodraft && scope.campaign.status === 'draft') await advanceDraft(ctx, scope);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Draft
+
+interface DraftRun {
+  scope: MutationScope;
+  idx: DatasetIndex;
+  order: string[];
+  pickIndex: number;
+  owners: Map<TerritoryId, string>;
+}
+
+async function loadDraft(ctx: AppContext, scope: MutationScope): Promise<DraftRun> {
+  const rows = await scope.tx
+    .select({ territoryId: holdings.territoryId, ownerId: holdings.ownerId })
+    .from(holdings)
+    .where(eq(holdings.campaignId, scope.campaign.id));
+  return {
+    scope,
+    idx: ctx.datasets.get(scope.campaign.datasetVersion),
+    order: scope.campaign.draftOrder ?? [],
+    pickIndex: scope.campaign.pickIndex,
+    owners: new Map(rows.map((r) => [r.territoryId, r.ownerId])),
+  };
+}
+
+/** Claims a country for a player. `log: false` leaves the logging to the caller (ending the draft logs one summary). */
+async function claim(
+  run: DraftRun,
+  userId: string,
+  territoryId: TerritoryId,
+  auto: boolean,
+  actorId: string | null,
+  { log = true }: { log?: boolean } = {},
+) {
+  const { tx, campaign } = run.scope;
+  await tx.insert(holdings).values({
+    campaignId: campaign.id,
+    territoryId,
+    ownerId: userId,
+    acquiredRound: 0,
+    pickNumber: run.pickIndex,
+  });
+  run.owners.set(territoryId, userId);
+  if (log) {
+    const payload = { userId, territoryId, pickNumber: run.pickIndex, auto };
+    await run.scope.log.add({ type: 'draft.pick', payload }, actorId, 0);
+  }
+  run.pickIndex++;
+  // A claimed country comes off every draft list, so lists only ever hold what's still free.
+  for (const m of run.scope.members) {
+    if (!m.draftList.includes(territoryId)) continue;
+    m.draftList = m.draftList.filter((id) => id !== territoryId);
+    await tx
+      .update(members)
+      .set({ draftList: m.draftList })
+      .where(and(eq(members.campaignId, campaign.id), eq(members.userId, m.userId)));
+  }
+}
+
+/**
+ * The pick made on a player's behalf, working through their draft list first. Auto-draft honors
+ * the player's choice to wait once the list runs out; an explicit "pick for me" or host pick
+ * always picks.
+ */
+function pickFor(run: DraftRun, userId: string, by: 'auto-draft' | 'request'): TerritoryId | null {
+  const member = run.scope.members.find((m) => m.userId === userId);
+  const fallback = by === 'auto-draft' ? (member?.autodraftFallback ?? 'best') : 'best';
+  return autoPick(run.idx, run.scope.campaign.rules, run.owners, userId, member?.draftList ?? [], fallback);
+}
+
+/**
+ * Makes the picks of every player on auto-draft whose turn comes up, saves the draft position,
+ * and opens the campaign once every territory is claimed.
+ */
+async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: DraftRun): Promise<void> {
+  const run = loaded ?? (await loadDraft(ctx, scope));
+  const autodrafters = new Set(scope.members.filter((m) => m.autodraft).map((m) => m.userId));
+  while (!isDraftComplete(run.idx, run.pickIndex)) {
+    const picker = pickerAt(run.order, run.pickIndex);
+    if (!autodrafters.has(picker)) break;
+    const choice = pickFor(run, picker, 'auto-draft');
+    if (!choice) break; // Waiting for the player: nothing on their list can be claimed.
+    await claim(run, picker, choice, true, null);
+  }
+  const complete = isDraftComplete(run.idx, run.pickIndex);
+  await scope.tx.update(campaigns).set({ pickIndex: run.pickIndex }).where(eq(campaigns.id, scope.campaign.id));
+  if (complete) {
+    await openCampaign(ctx, scope);
+    await scope.log.add({ type: 'draft.completed', payload: {} }, null, 0);
+  }
+}
+
+/** The draft is over: round 1 begins and everyone gets their first war tokens. */
+async function openCampaign(ctx: AppContext, scope: MutationScope): Promise<void> {
+  const { tx, campaign } = scope;
+  await tx
+    .update(campaigns)
+    .set({ status: 'active', round: 1, startedAt: ctx.now() })
+    .where(eq(campaigns.id, campaign.id));
+  await tx
+    .update(members)
+    .set({ draftList: [], tokens: refillTokens(campaign.rules, 0) })
+    .where(eq(members.campaignId, campaign.id));
+  scope.campaign = { ...campaign, status: 'active', round: 1 };
+}
+
+export async function startDraft(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'start the draft');
+    requireLobby(scope, 'The draft has already started.');
+    if (scope.members.length < MIN_PLAYERS) {
+      throw conflict(`You need at least ${MIN_PLAYERS} players to start the draft.`, 'too-few-players');
+    }
+    const order = shuffled(
+      scope.members.map((m) => m.userId),
+      cryptoRandom,
+    );
+    await scope.tx
+      .update(campaigns)
+      .set({ status: 'draft', draftOrder: order, pickIndex: 0, draftStartedAt: ctx.now() })
+      .where(eq(campaigns.id, campaignId));
+    scope.campaign = { ...scope.campaign, status: 'draft', draftOrder: order, pickIndex: 0 };
+    await scope.log.add({ type: 'draft.started', payload: { order } }, userId, 0);
+    await advanceDraft(ctx, scope);
+  });
+}
+
+/** A player's own pick, or (with `territoryId` null) the auto-draft pick for whoever is up. */
+export async function makePick(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  territoryId: TerritoryId | null,
+): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireMember(scope, userId);
+    if (scope.campaign.status !== 'draft') throw conflict('The draft is not running.', 'draft-not-running');
+    const run = await loadDraft(ctx, scope);
+    if (territoryId === null) {
+      const picker = pickerAt(run.order, run.pickIndex);
+      if (picker !== userId && scope.campaign.hostId !== userId) {
+        throw forbidden('Only the host can pick for another player.');
+      }
+      const choice = pickFor(run, picker, 'request');
+      if (!choice) throw conflict('Nothing is left to claim.', 'draft-complete');
+      await claim(run, picker, choice, true, userId);
+    } else {
+      const rejection = checkPick(run.idx, scope.campaign.rules, run, userId, territoryId);
+      if (rejection) {
+        const message = PICK_REJECTION_MESSAGES[rejection];
+        throw rejection === 'not-your-turn' ? conflict(message, rejection) : badRequest(message, rejection);
+      }
+      await claim(run, userId, territoryId, false, userId);
+    }
+    await advanceDraft(ctx, scope, run);
+  });
+}
+
+/**
+ * The host closes the draft early. The remaining picks are made automatically, in draft order,
+ * from each player's draft list and then the most valuable country, so the map is always full.
+ * One summary event is logged rather than a pick event each.
+ */
+export async function endDraft(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'end the draft');
+    if (scope.campaign.status !== 'draft') throw conflict('The draft is not running.', 'draft-not-running');
+    const run = await loadDraft(ctx, scope);
+    const picks: { userId: string; territoryId: TerritoryId }[] = [];
+    while (!isDraftComplete(run.idx, run.pickIndex)) {
+      const picker = pickerAt(run.order, run.pickIndex);
+      const choice = pickFor(run, picker, 'request');
+      if (!choice) break;
+      await claim(run, picker, choice, true, null, { log: false });
+      picks.push({ userId: picker, territoryId: choice });
+    }
+    await scope.tx.update(campaigns).set({ pickIndex: run.pickIndex }).where(eq(campaigns.id, campaignId));
+    await openCampaign(ctx, scope);
+    const unclaimed = run.idx.ids.length - run.owners.size;
+    await scope.log.add({ type: 'draft.ended', payload: { unclaimed, autoPicked: picks.length, picks } }, userId, 0);
+  });
+}
+
+/**
+ * Replaces a player's draft list, from the lobby until the draft ends. Unknown, repeated and
+ * already-claimed countries are dropped. Only the player is told, since the list is private,
+ * unless the new list lets their waiting auto-draft pick right away.
+ */
+export async function setDraftList(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  territoryIds: string[],
+): Promise<TerritoryId[]> {
+  return mutate(
+    ctx,
+    campaignId,
+    async (scope) => {
+      const me = requireMember(scope, userId);
+      if (scope.campaign.status !== 'lobby' && scope.campaign.status !== 'draft') {
+        throw conflict('The draft is over.', 'draft-over');
+      }
+      const run = await loadDraft(ctx, scope);
+      me.draftList = normalizeDraftList(run.idx, run.owners, territoryIds);
+      await scope.tx
+        .update(members)
+        .set({ draftList: me.draftList })
+        .where(and(eq(members.campaignId, campaignId), eq(members.userId, userId)));
+      if (me.autodraft && scope.campaign.status === 'draft') await advanceDraft(ctx, scope, run);
+      return me.draftList;
+    },
+    { notifyOnly: userId },
+  );
+}

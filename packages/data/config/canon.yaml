@@ -1,0 +1,428 @@
+# Map canon: which Natural Earth (NE) features become which playable territories, and what they
+# are called. Adjacency, statistics and values all follow from these decisions, so this file comes
+# first. Rebuild with `pnpm --filter @empire/data generate` after editing and review REPORT.md.
+#
+# Principles (change them here, and the players should agree):
+#   - Boundaries are de facto, exactly as Natural Earth 1:50m draws them. Notably NE draws Crimea
+#     as part of Russia and the rest of occupied Ukraine as Ukraine, Kosovo and Taiwan as their own
+#     units, and Kashmir along the lines of control. One deliberate exception: Western Sahara is
+#     played whole (see ESH below), because NE's de facto view leaves only an empty strip of it.
+#   - Names are neutral, short English names; the official short name is used where a country has
+#     asked for one (Czechia, Eswatini, North Macedonia, Timor-Leste, Côte d'Ivoire, Türkiye).
+#   - Ids are ISO 3166-1 alpha-3 codes where one exists (plus XKX for Kosovo, the code the World
+#     Bank and EU use), and descriptive ids for regions.
+#
+# NE features are referred to by their ADM0_A3 code. EVERY NE feature must appear exactly once in
+# this file: as a country/territory, merged into one, bundled into a region, or dropped. The build
+# fails otherwise, so nothing slips through when Natural Earth changes. Polygons can additionally
+# be split out of a feature by bounding box (French Guiana, Guadeloupe, ...).
+#
+# Entry formats (countries and territories):
+#   ID: Name                         # NE feature with ADM0_A3 == ID
+#   ID:
+#     name: Name
+#     ne: ABC                        # NE code, when it differs from the id
+#     stats: XYZ                     # statistics code (World Bank / estimates.yaml); default: id
+#     merge:                         # NE features folded into this territory (listed as members)
+#       NE_CODE: Member name         # member id defaults to the feature's ISO code
+#       NE_CODE: { name: ..., id: ..., stats: ... }   # stats: another code, or null for "no data"
+#     parts:                         # polygons split out of another NE feature (members)
+#       PART_ID: { name: ..., from: NE_CODE, bbox: [west, south, east, north] }
+#       PART_ID: { name: ..., from: NE_CODE, south_of: LAT, member: false }  # cut along a parallel;
+#                                    # member: false = geometry only, not listed and no statistics
+#     continent: europe              # overrides NE's CONTINENT
+#     subregion: Western Europe      # overrides NE's SUBREGION
+#     note: ...                      # shown in REPORT.md
+# A territory can also be carved out of another feature instead of having its own:
+#   ID: { name: ..., split: { from: NE_CODE, bbox: [...] }, continent: ..., subregion: ... }
+# A polygon moves when its whole outer ring lies inside the bbox; `south_of` cuts polygons that
+# cross the parallel and moves their southern part.
+
+countries:
+  # --- Africa -------------------------------------------------------------------------------
+  AGO: Angola
+  BDI: Burundi
+  BEN: Benin
+  BFA: Burkina Faso
+  BWA: Botswana
+  CAF: Central African Republic   # NE: "Central African Rep."
+  CIV: Côte d'Ivoire
+  CMR: Cameroon
+  COD: DR Congo                   # NE: "Dem. Rep. Congo"
+  COG: Republic of the Congo      # NE: "Congo"; spelled out so it is never confused with DR Congo
+  CPV: Cabo Verde
+  DJI: Djibouti
+  DZA: Algeria
+  EGY: Egypt
+  ERI: Eritrea
+  ETH: Ethiopia
+  GAB: Gabon
+  GHA: Ghana
+  GIN: Guinea
+  GMB: Gambia
+  GNB: Guinea-Bissau
+  GNQ: Equatorial Guinea          # NE: "Eq. Guinea"
+  KEN: Kenya
+  LBR: Liberia
+  LBY: Libya
+  LSO: Lesotho
+  MAR: Morocco                    # without Western Sahara (see ESH under territories)
+  MDG: Madagascar
+  MLI: Mali
+  MOZ: Mozambique
+  MRT: Mauritania
+  MWI: Malawi
+  NAM: Namibia
+  NER: Niger
+  NGA: Nigeria
+  RWA: Rwanda
+  SDN: Sudan
+  SSD: { ne: SDS, name: South Sudan }   # NE: "S. Sudan"
+  SEN: Senegal
+  SLE: Sierra Leone
+  SOM:
+    name: Somalia
+    merge:
+      # Somaliland is de facto independent but recognized by almost no one; NE draws it separately.
+      # The World Bank's Somalia figures already include it.
+      SOL: { name: Somaliland, id: SOL, stats: SOM }
+  STP: São Tomé and Príncipe
+  SWZ: Eswatini                   # NE: "eSwatini"
+  TCD: Chad
+  TGO: Togo
+  TUN: Tunisia
+  TZA: Tanzania
+  UGA: Uganda
+  ZAF: South Africa               # includes the Prince Edward Islands, as NE does
+  ZMB: Zambia
+  ZWE: Zimbabwe
+
+  # --- Asia ---------------------------------------------------------------------------------
+  AFG: Afghanistan
+  ARE: United Arab Emirates
+  ARM: Armenia
+  AZE: Azerbaijan                 # includes the Nakhchivan exclave
+  BGD: Bangladesh
+  BHR: Bahrain
+  BRN: Brunei
+  BTN: Bhutan
+  CHN:
+    name: China
+    merge:
+      # Special administrative regions: part of China for the game; the World Bank reports them
+      # separately, so their figures are added to China's.
+      HKG: Hong Kong
+      MAC: Macao
+  CYP:
+    name: Cyprus
+    merge:
+      # Northern Cyprus is only recognized by Türkiye. The 1:50m data has no separate features for
+      # the UN buffer zone or the UK bases at Akrotiri and Dhekelia.
+      CYN: { name: Northern Cyprus, id: CYN, stats: CYP }
+    note: World Bank population and area cover the whole island; GDP covers only the Republic-controlled south.
+  GEO: Georgia                    # as NE draws it, including Abkhazia and South Ossetia
+  IDN: Indonesia
+  IND:
+    name: India
+    merge:
+      # NE draws the Siachen Glacier as an "indeterminate" area between India, Pakistan and China.
+      # India has held it since 1984, so it goes to India under the de facto rule. Dropping it would
+      # leave a 2,100 km² hole in the Karakoram. It has no population or statistics of its own.
+      KAS: { name: Siachen Glacier, id: KAS, stats: null }
+  IRN: Iran
+  IRQ: Iraq
+  ISR: Israel
+  JOR: Jordan
+  JPN: Japan
+  KAZ: Kazakhstan
+  KGZ: Kyrgyzstan
+  KHM: Cambodia
+  KOR: South Korea
+  KWT: Kuwait
+  LAO: Laos
+  LBN: Lebanon
+  LKA: Sri Lanka
+  MDV:
+    name: Maldives
+    continent: asia               # NE: "Seven seas (open ocean)"
+  MMR: Myanmar
+  MNG: Mongolia
+  MYS: Malaysia
+  NPL: Nepal
+  OMN: Oman
+  PAK: Pakistan
+  PHL: Philippines
+  PRK: North Korea
+  QAT: Qatar
+  SAU: Saudi Arabia
+  SGP: Singapore
+  SYR: Syria
+  THA: Thailand
+  TJK: Tajikistan
+  TKM: Turkmenistan
+  TLS: Timor-Leste
+  TUR: Türkiye                    # NE: "Turkey"; the UN short name since 2022
+  UZB: Uzbekistan
+  VNM: Vietnam
+  YEM: Yemen
+
+  # --- Europe -------------------------------------------------------------------------------
+  ALB: Albania
+  AND: Andorra                    # a micro territory, but a real state: stays separate
+  AUT: Austria
+  BEL: Belgium
+  BGR: Bulgaria
+  BIH: Bosnia and Herzegovina     # NE: "Bosnia and Herz."
+  BLR: Belarus
+  CHE: Switzerland
+  CZE: Czechia
+  DEU: Germany
+  DNK:
+    name: Denmark
+    merge:
+      # A self-governing part of the Danish realm, too small to play alone (Greenland, by contrast,
+      # is a territory of its own below).
+      FRO: Faroe Islands
+  ESP: Spain                      # includes the Canary and Balearic Islands (NE 1:50m has no Ceuta/Melilla)
+  EST: Estonia
+  FIN:
+    name: Finland
+    merge:
+      # Autonomous but part of Finland; the World Bank's Finland figures include it.
+      ALD: { name: Åland, id: ALA, stats: FIN }
+  FRA:
+    name: France
+    merge:
+      MCO: Monaco                 # a sovereign city-state of 2 km², inside France for the game
+    note: >-
+      Metropolitan France and Corsica. The overseas departments are split out below: French Guiana
+      plays on its own; Guadeloupe, Martinique, Réunion and Mayotte join island regions.
+  GBR:
+    name: United Kingdom
+    merge:
+      # Crown dependencies. The World Bank reports Jersey and Guernsey together as "Channel Islands".
+      JEY: { name: Jersey, stats: CHI }
+      GGY: { name: Guernsey, stats: CHI }
+      IMN: Isle of Man
+  GRC: Greece
+  HRV: Croatia
+  HUN: Hungary
+  IRL: Ireland
+  ISL: Iceland
+  ITA:
+    name: Italy
+    merge:
+      # Enclaves inside Italy: sovereign, but far too small to play.
+      VAT: { name: Vatican City, stats: null }
+      SMR: San Marino
+  LIE: Liechtenstein              # micro, but a real state: stays separate
+  LTU: Lithuania
+  LUX: Luxembourg                 # micro, but a real state: stays separate
+  LVA: Latvia
+  MDA: Moldova                    # as NE draws it, including Transnistria
+  MKD: North Macedonia
+  MLT: Malta                      # micro, but a real state: stays separate
+  MNE: Montenegro
+  NLD:
+    name: Netherlands
+    note: European Netherlands; Bonaire, Saba and Sint Eustatius are split out into Caribbean regions.
+  NOR: Norway                     # includes Svalbard and Jan Mayen, as NE does
+  POL: Poland
+  PRT: Portugal                   # includes the Azores and Madeira
+  ROU: Romania
+  RUS: Russia                     # includes Crimea and Kaliningrad, as NE draws them
+  SRB: Serbia                     # without Kosovo
+  SVK: Slovakia
+  SVN: Slovenia
+  SWE: Sweden
+  UKR: Ukraine                    # without Crimea (see RUS); to follow the de jure border instead, add
+                                  # parts: { CRIMEA: { name: Crimea, from: RUS, bbox: [32.4, 44.3, 36.7, 46.3] } }
+
+  # --- North and Central America, Caribbean ----------------------------------------------------
+  BHS: Bahamas
+  BLZ: Belize
+  CAN: Canada
+  CRI: Costa Rica
+  CUB: Cuba
+  DOM: Dominican Republic         # NE: "Dominican Rep."
+  GTM: Guatemala
+  HND: Honduras
+  HTI: Haiti
+  JAM: Jamaica
+  MEX: Mexico
+  NIC: Nicaragua
+  PAN: Panama
+  SLV: El Salvador
+  TTO: Trinidad and Tobago
+  USA: United States              # NE: "United States of America"; includes Alaska and Hawaii
+
+  # --- South America ------------------------------------------------------------------------
+  ARG: Argentina
+  BOL: Bolivia
+  BRA: Brazil
+  CHL: Chile                      # includes Easter Island
+  COL: Colombia                   # includes San Andrés and Providencia
+  ECU: Ecuador                    # includes the Galápagos
+  GUY: Guyana
+  PER: Peru
+  PRY: Paraguay
+  SUR: Suriname
+  URY: Uruguay
+  VEN: Venezuela
+
+  # --- Oceania ------------------------------------------------------------------------------
+  AUS: Australia                  # includes Tasmania and Macquarie Island
+  FJI: Fiji                       # large enough to stand alone
+  NZL:
+    name: New Zealand
+    note: Tokelau, which NE includes in New Zealand's feature, is split out into Polynesia.
+  PNG: Papua New Guinea
+  SLB: Solomon Islands            # NE: "Solomon Is."; large enough to stand alone
+  VUT: Vanuatu                    # large enough to stand alone
+
+# Dependencies and disputed territories played on their own (kind "territory"). They are large,
+# populous or contested enough to matter, and folding them into their sovereign would distort the map.
+territories:
+  TWN: Taiwan
+  XKX: { ne: KOS, name: Kosovo }                   # NE ADM0_A3 "KOS", ISO "-99"
+  ESH:
+    name: Western Sahara          # NE: "W. Sahara"
+    ne: SAH
+    parts:
+      # NE's default view folds the Moroccan-administered three quarters of Western Sahara (west of
+      # the berm) into Morocco and draws only the Polisario-held strip east of it as "W. Sahara"
+      # (91,000 km², almost uninhabited). Here the territory is played whole, as the UN lists it,
+      # which also matches the statistics: the World Bank's Morocco excludes Western Sahara, and the
+      # UN and CIA figures in estimates.yaml cover all of it. The cut follows the parallel NE itself
+      # uses for the Morocco–Western Sahara boundary. Delete this part to follow NE exactly.
+      ESH-WEST: { name: Moroccan-administered Western Sahara, from: MAR, south_of: 27.656445, member: false }
+  PSE: { ne: PSX, name: Palestine }                # West Bank and Gaza, as NE draws them
+  GRL: Greenland                                   # Danish realm; far too big to fold into Denmark
+  PRI: Puerto Rico                                 # US territory with 3.2 million people
+  FLK: Falkland Islands                            # NE: "Falkland Is."; UK-administered, claimed by Argentina (UN: "Falkland Islands (Malvinas)")
+  NCL: New Caledonia                               # French territory, larger than many states
+  GUF:
+    name: French Guiana
+    split: { from: FRA, bbox: [-54.7, 2.0, -51.5, 5.9] }
+    continent: south-america
+    subregion: South America
+
+# Bundles of island microstates and small dependencies played as one territory (kind "region").
+# Regions always get a dot at their hand-placed anchor ([lon, lat]).
+regions:
+  LEEWARD:
+    name: Leeward Islands
+    anchor: [-62.4, 17.4]         # between Nevis and Montserrat, mid-chain
+    continent: north-america
+    subregion: Caribbean
+    members:
+      ATG: Antigua and Barbuda
+      KNA: Saint Kitts and Nevis
+      AIA: Anguilla
+      MSR: Montserrat
+      VGB: British Virgin Islands
+      VIR: US Virgin Islands
+      MAF: Saint Martin
+      SXM: Sint Maarten
+      BLM: Saint Barthélemy
+    parts:
+      GLP: { name: Guadeloupe, from: FRA, bbox: [-61.9, 15.8, -61.0, 16.6] }
+      BQ-SA: { name: Saba, from: NLD, bbox: [-63.3, 17.6, -63.2, 17.7] }
+      BQ-SE: { name: Sint Eustatius, from: NLD, bbox: [-63.1, 17.4, -62.9, 17.6] }
+  WINDWARD:
+    name: Windward Islands
+    anchor: [-60.97, 13.9]        # Saint Lucia, mid-chain
+    continent: north-america
+    subregion: Caribbean
+    members:
+      DMA: Dominica
+      LCA: Saint Lucia
+      VCT: Saint Vincent and the Grenadines
+      GRD: Grenada
+      BRB: Barbados
+    parts:
+      MTQ: { name: Martinique, from: FRA, bbox: [-61.3, 14.3, -60.7, 15.0] }
+  ABC:
+    name: ABC Islands
+    anchor: [-68.95, 12.17]       # Curaçao, the middle island
+    continent: north-america
+    subregion: Caribbean
+    members:
+      ABW: Aruba
+      CUW: Curaçao
+    parts:
+      BQ-BO: { name: Bonaire, from: NLD, bbox: [-68.5, 11.9, -68.1, 12.4] }
+  MICRONESIA:
+    name: Micronesia
+    anchor: [151.8, 7.4]          # Chuuk, near the middle of the island chains
+    continent: oceania
+    subregion: Micronesia
+    members:
+      PLW: Palau
+      FSM: Federated States of Micronesia
+      MHL: Marshall Islands
+      NRU: Nauru
+      KIR: Kiribati               # all of it, including the Phoenix and Line Islands far to the east
+      GUM: Guam
+      MNP: Northern Mariana Islands
+  POLYNESIA:
+    name: Polynesia
+    anchor: [-172.4, -13.6]       # Samoa, the most populous member
+    continent: oceania
+    subregion: Polynesia
+    members:
+      TUV: Tuvalu
+      WSM: Samoa
+      TON: Tonga
+      ASM: American Samoa
+      COK: Cook Islands
+      NIU: Niue
+      PYF: French Polynesia
+      WLF: Wallis and Futuna
+    parts:
+      # NE includes Tokelau (a New Zealand territory north of Samoa) in New Zealand's feature.
+      TKL: { name: Tokelau, from: NZL, bbox: [-173.0, -10.0, -171.0, -8.0] }
+  INDIAN-OCEAN:
+    name: Indian Ocean Islands
+    anchor: [57.57, -20.28]       # Mauritius
+    continent: africa
+    subregion: Eastern Africa
+    members:
+      SYC: Seychelles
+      MUS: Mauritius
+      COM: Comoros
+    parts:
+      REU: { name: Réunion, from: FRA, bbox: [55.1, -21.5, 56.0, -20.8] }
+      MYT: { name: Mayotte, from: FRA, bbox: [44.9, -13.1, 45.4, -12.5] }
+
+# Not playable. Mostly uninhabited or tiny, remote specks that would need arbitrary sea lanes.
+# (The 1:50m data has no separate features for Akrotiri and Dhekelia, the Cyprus buffer zone, the US
+# Minor Outlying Islands, Baikonur or Bir Tawil, so they need no entry.)
+drop:
+  ATA: Antarctica. No permanent population; governed by the Antarctic Treaty.
+  ATF: French Southern and Antarctic Lands. Uninhabited apart from research stations.
+  HMD: Heard Island and McDonald Islands. Uninhabited sub-Antarctic islands.
+  SGS: South Georgia and the South Sandwich Islands. No permanent population.
+  IOT: British Indian Ocean Territory. A military base with no permanent population.
+  IOA: Australian Indian Ocean Territories (Christmas and Cocos Islands). About 2,000 people on remote specks.
+  ATC: Ashmore and Cartier Islands. Uninhabited reefs.
+  PCN: Pitcairn Islands. About 40 people, thousands of kilometres from anything.
+  SHN: Saint Helena, Ascension and Tristan da Cunha. About 5,000 people on mid-Atlantic specks.
+  NFK: Norfolk Island. About 2,000 people on a remote speck.
+  SPM: Saint Pierre and Miquelon. About 6,000 people; would only add a France–Canada lane.
+  BMU: Bermuda. 1,000 km from the nearest coast; would need an arbitrary lane.
+  CYM: Cayman Islands. Small; would clutter the Cuba–Jamaica sea.
+  TCA: Turks and Caicos Islands. Small; would clutter the Bahamas–Hispaniola sea.
+
+# Micro territories get a tappable dot on the map. Regions always do; other territories when their
+# area (the statistic, km²) is below the threshold. Use include/exclude for awkward shapes.
+micro:
+  area_km2: 12000
+  include: []
+  exclude: []
+
+# Land borders come from shared arcs in the topology. Add or remove pairs here only to fix artefacts
+# of the source data, each with a reason: { a: ID, b: ID, reason: ... }.
+land_borders:
+  add: []
+  remove: []

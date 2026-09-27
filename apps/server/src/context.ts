@@ -1,0 +1,28 @@
+import type { FastifyBaseLogger } from 'fastify';
+import type { Mailer } from './auth/mailer';
+import type { DatasetProvider } from './datasets';
+import type { Db } from './db/client';
+import type { Env } from './env';
+import type { KeyedMutex } from './lib/mutex';
+import type { Timers } from './lib/timers';
+import type { Notifier } from './notifications/notifier';
+import type { Hub } from './realtime/hub';
+
+/** Services shared by every route module. */
+export interface AppContext {
+  db: Db;
+  env: Env;
+  datasets: DatasetProvider;
+  hub: Hub;
+  mailer: Mailer;
+  notifier: Notifier;
+  log: FastifyBaseLogger;
+  /** The current time. Injectable so tests can step through deadlines. */
+  now(): Date;
+  /** Per-campaign serialization of state changes. */
+  locks: KeyedMutex;
+  /** Per-game serialization of moves. Taken before a campaign lock, never inside one. */
+  gameLocks: KeyedMutex;
+  /** Live games' flag timers. */
+  timers: Timers;
+}

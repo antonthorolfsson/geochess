@@ -1,0 +1,287 @@
+@import 'tailwindcss';
+
+/* Operations map room: gunmetal tables, olive-drab land, grease pencil and signal amber. */
+@theme inline {
+  --color-gunmetal: #1f2428;
+  --color-panel: #2b3238;
+  --color-raised: #343c43;
+  --color-olive: #4b5320;
+  --color-sea: #16232b;
+  --color-grease: #c8372d;
+  --color-amber: #e3a92b;
+  --color-paper: #e4e2d8;
+  --color-muted: #a6aaa2;
+  --color-faint: #7b817c;
+  --color-line: rgb(228 226 216 / 0.12);
+  --color-line-strong: rgb(228 226 216 / 0.24);
+
+  --font-sans: var(--font-sofia), ui-sans-serif, system-ui, sans-serif;
+  --font-stencil: var(--font-stencil-face), var(--font-sofia), sans-serif;
+}
+
+@layer base {
+  html {
+    background: var(--color-gunmetal);
+    color: var(--color-paper);
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 1.4;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-amber);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgb(227 169 43 / 0.35);
+  }
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0 1.1rem;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition:
+      background-color 120ms,
+      border-color 120ms,
+      color 120ms,
+      opacity 120ms;
+    cursor: pointer;
+    user-select: none;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-paper);
+    color: var(--color-gunmetal);
+  }
+  .btn-primary:not(:disabled):hover {
+    background: #f3f1e8;
+  }
+  .btn-amber {
+    background: var(--color-amber);
+    color: var(--color-gunmetal);
+  }
+  .btn-amber:not(:disabled):hover {
+    background: #efb940;
+  }
+  .btn-ghost {
+    border-color: var(--color-line-strong);
+    color: var(--color-paper);
+    background: transparent;
+  }
+  .btn-ghost:not(:disabled):hover {
+    background: var(--color-raised);
+  }
+  /* Grease-pencil red: declaring war and other hostile actions. */
+  .btn-war {
+    background: var(--color-grease);
+    color: #fff5f2;
+  }
+  .btn-war:not(:disabled):hover {
+    background: #d8453a;
+  }
+  .btn-danger {
+    border-color: rgb(200 55 45 / 0.6);
+    color: #ef7b72;
+    background: transparent;
+  }
+  .btn-danger:not(:disabled):hover {
+    background: rgb(200 55 45 / 0.14);
+  }
+  .btn-sm {
+    min-height: 36px;
+    padding: 0 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  /* Small-caps section label, like a heading stamped on a briefing document. */
+  .label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .input {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 0.8rem;
+    border-radius: 3px;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-gunmetal);
+    color: var(--color-paper);
+    font-size: 1rem;
+  }
+  .input::placeholder {
+    color: var(--color-faint);
+  }
+  .input:focus {
+    border-color: var(--color-amber);
+    outline: none;
+  }
+
+  .panel {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: 4px;
+  }
+}
+
+/* World map ------------------------------------------------------------------------------ */
+
+.map-svg {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-svg:focus {
+  outline: none;
+}
+.map-svg:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: -2px;
+}
+.map-svg .nss {
+  vector-effect: non-scaling-stroke;
+}
+/* Keeps markers the same size on screen at every zoom level (--k is the zoom factor). */
+.map-svg .counter-scale {
+  scale: calc(1 / var(--k, 1));
+}
+.map-svg .territory {
+  cursor: pointer;
+}
+.map-svg .territory:focus-visible {
+  outline: none;
+}
+
+@keyframes pulse-outline {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.35;
+  }
+}
+.map-svg .legal-outline {
+  animation: pulse-outline 1.8s ease-in-out infinite;
+}
+
+/* War arrows: grease pencil on the map table. */
+.map-svg .war-arrow {
+  cursor: pointer;
+}
+.map-svg .war-arrow.threat path.stroke {
+  stroke-dasharray: 7 5;
+}
+@keyframes arrow-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Chess board ---------------------------------------------------------------------------- */
+
+/* Paper and olive squares, from the map room's palette; contrast with the pieces comes first. */
+.board-theme cg-board {
+  background: repeating-conic-gradient(#8a9467 0 25%, #e2ddcc 0 50%) 0 0 / 25% 25%;
+  border-radius: 2px;
+}
+.board-theme cg-board square.last-move {
+  background-color: rgb(227 169 43 / 0.45);
+}
+.board-theme cg-board square.selected {
+  background-color: rgb(227 169 43 / 0.6);
+}
+.board-theme cg-board square.move-dest {
+  background: radial-gradient(rgb(22 30 24 / 0.45) 21%, transparent 22%);
+}
+.board-theme cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, rgb(22 30 24 / 0.4) 79%);
+}
+.board-theme cg-board square.move-dest:hover {
+  background: rgb(227 169 43 / 0.35);
+}
+.board-theme cg-board square.premove-dest {
+  background: radial-gradient(rgb(40 60 110 / 0.45) 21%, transparent 22%);
+}
+.board-theme cg-board square.oc.premove-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, rgb(40 60 110 / 0.35) 79%);
+}
+.board-theme cg-board square.current-premove {
+  background-color: rgb(40 60 110 / 0.45);
+}
+.board-theme cg-board square.check {
+  background: radial-gradient(ellipse at center, rgb(200 55 45) 0%, rgb(200 55 45 / 0.7) 30%, transparent 75%);
+}
+.board-theme coords {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 11px;
+}
+.board-theme .orientation-white .ranks :nth-child(odd),
+.board-theme .orientation-white .files :nth-child(even),
+.board-theme .orientation-black .ranks :nth-child(even),
+.board-theme .orientation-black .files :nth-child(odd) {
+  color: #5c6440;
+}
+.board-theme .orientation-white .ranks :nth-child(even),
+.board-theme .orientation-white .files :nth-child(odd),
+.board-theme .orientation-black .ranks :nth-child(odd),
+.board-theme .orientation-black .files :nth-child(even) {
+  color: #eeeadd;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.sheet-in {
+  animation: sheet-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,37 @@
+# Terrain tags give the defender extra clock time. Keep both lists short: a bonus that most of the
+# map has is no bonus at all.
+
+island:
+  # Automatic: every territory with no land neighbor (Japan, Madagascar, Cuba, all the regions ...).
+  # Adjust with the lists below.
+  include:
+    # The British Isles: the UK and Ireland each have only the one land border, on the island of
+    # Ireland. Both are archetypal island states defended by the sea.
+    - GBR
+    - IRL
+  exclude: []
+  # Deliberately NOT included although they share an island with a neighbor: Haiti and the
+  # Dominican Republic (Hispaniola), Timor-Leste, Papua New Guinea and Brunei. Their shared
+  # borders are long and are their main line of contact, so an island bonus would mostly apply to
+  # wars fought across a land border.
+
+# Criterion: the territory's heartland lies in or behind high mountains, so an invader has to fight
+# through them. A rough guide is a mean elevation above ~1,500 m or most of the land in a major
+# range, but it is not sufficient on its own: China, Chile, Mongolia, Peru and Iran have high means
+# from remote plateaus or one mountain flank while their core regions are lowland, coast or steppe.
+mountains:
+  - CHE   # Switzerland: Alps cover about 60%
+  - AUT   # Austria: Alps cover about 60%
+  - LIE   # Liechtenstein: Alpine
+  - AND   # Andorra: Pyrenees, mean elevation ~2,000 m
+  - NPL   # Nepal: Himalaya, mean ~3,300 m
+  - BTN   # Bhutan: Himalaya, mean ~3,300 m
+  - AFG   # Afghanistan: Hindu Kush, mean ~1,900 m
+  - TJK   # Tajikistan: Pamir, mean ~3,200 m
+  - KGZ   # Kyrgyzstan: Tian Shan, mean ~3,000 m
+  - ARM   # Armenia: Armenian Highlands, mean ~1,800 m
+  - GEO   # Georgia: Greater and Lesser Caucasus
+  - LSO   # Lesotho: entirely above 1,400 m
+  - BOL   # Bolivia: Andes and Altiplano, where most people live
+  - MNE   # Montenegro: Dinaric Alps (the name means "black mountain")
+  - ETH   # Ethiopia: Ethiopian Highlands, a natural fortress that repelled colonial invasion

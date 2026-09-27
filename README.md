@@ -1,0 +1,119 @@
+# Empire Chess
+
+_Working title._ Friends claim countries on a world map to build empires. Wars between empires are
+declared under structured rules and settled by a game of chess; the winner takes the contested
+territory. Private lobbies, campaigns that run for days or weeks, playable on phone and desktop.
+
+The full design and roadmap live in [empire-chess-implementation-plan.md](empire-chess-implementation-plan.md).
+
+## Status
+
+**Phase 1 (Foundation)** is in place:
+
+- Sign in with Lichess (OAuth with PKCE, no registration needed), by emailed link, or, in
+  development, by name.
+- Invite-only campaigns: create one, share the invite link, pick your empire color, set the rules.
+- The map: Natural Earth shapes rendered with d3-geo, pinch and pan zoom, ownership shown as
+  translucent colors with hatching, tappable dots for microstates, sea lanes, country search.
+- The country dataset: game values 1–10 from blended real-world data, land borders and sea lanes,
+  terrain tags and real statistics, built by a versioned pipeline.
+- The snake draft of the full map, with a contiguous or free draft mode and live updates over
+  WebSockets. Each player can keep a private draft list that auto-draft works through, skipping
+  countries already taken; when the list runs out, auto-draft either keeps picking the most
+  valuable country or waits for the player, as they choose. The host can pick for a stalled
+  player or end the draft early, which drafts the remaining countries automatically.
+
+**Phase 2 (War loop)** is in place:
+
+- War tokens (one a round, saved up to three) and host-advanced rounds.
+- Declaring war on a bordering enemy country, with attackable countries highlighted on the map and
+  a stake builder: the launching country plus connected countries, worth at least 80% of the
+  target.
+- The defender's answers: accept, raise (demand a stake worth 125%), redirect to another country
+  of the same value, or offer tribute. Unanswered declarations go ahead after 24 hours (5 minutes
+  live).
+- Chess on Lichess's chessground board with moves checked on the server by chessops, in live
+  (blitz) or correspondence campaigns: server clocks with lag compensation, clock modifiers for
+  home turf, terrain and supply lines, premoves, typed moves, draw offers, and an optional
+  Armageddon tiebreak for draws.
+- Territory changes hands when a war ends; staked countries stay locked while their war is on,
+  newly won ones can't be staked straight away, and rivals keep a truce afterwards.
+- War arrows drawn on the map in grease pencil, a war room with everything waiting for you, and
+  notifications by web push (installed app) or email.
+
+## Quick start
+
+Requires Node.js 22.12+ (24 recommended) and pnpm 10.
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Open http://localhost:3000. The game server runs on port 4000 and the web app proxies `/api` to it.
+
+No database setup is needed: the server stores data in an embedded Postgres (PGlite) under
+`apps/server/.data/`. Development sign-in is on by default, so you can create players by name.
+To play several seats from one computer, use a separate browser profile or private window per
+player, since each keeps its own session cookie.
+
+To try it on a phone, open `http://<your computer's LAN address>:3000` on the same network.
+
+## Repository layout
+
+| Path             | Package          | What it is                                                                                                                                                                          |
+| ---------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, chess and clocks (chessops), campaign settings, empire colors, API types. |
+| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, and the versioned datasets it builds.                                                                                      |
+| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                         |
+| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars and the chess board (chessground).                                                                                      |
+
+## Commands
+
+| Command            | What it does                                                             |
+| ------------------ | ------------------------------------------------------------------------ |
+| `pnpm dev`         | Runs the game server and the web app with live reload.                   |
+| `pnpm test`        | Unit tests for the rules and dataset, integration tests for the server.  |
+| `pnpm typecheck`   | Type-checks every package.                                               |
+| `pnpm build`       | Production builds of the server and web app.                             |
+| `pnpm data:build`  | Rebuilds the country dataset from Natural Earth and World Bank data.     |
+| `pnpm db:generate` | Generates a SQL migration after changing `apps/server/src/db/schema.ts`. |
+| `pnpm format`      | Formats the code with Prettier.                                          |
+
+## Configuration
+
+The server reads `apps/server/.env` (see [apps/server/.env.example](apps/server/.env.example)).
+Everything is optional in development. For production, set at least:
+
+- `DATABASE_URL`: a Postgres connection string. `docker compose up -d` starts one locally.
+- `PUBLIC_URL`: the public origin of the web app, used in emailed links and OAuth redirects.
+- `SMTP_URL` and `MAIL_FROM`: for sign-in and war emails. Without SMTP, emails are printed to the
+  server log.
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`: web push keys (generate them with
+  `npx web-push generate-vapid-keys`). Without them, notifications go by email only.
+- `NODE_ENV=production`, which also turns off development sign-in.
+
+Push notifications need the service worker, which is only registered in production builds. On
+iPhones and iPads, push works once the app has been added to the home screen.
+
+In production, serve the web app and the game server from one origin: route `/api/*` and `/ws`
+to the game server and everything else to Next.js. Set `API_ORIGIN` for the web app if the game
+server isn't on `http://localhost:4000`.
+
+## Data and attribution
+
+Country shapes are from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
+Country statistics are from the World Bank's
+[World Development Indicators](https://datatopics.worldbank.org/world-development-indicators/),
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Gaps are filled with
+clearly labeled estimates. See [packages/data/README.md](packages/data/README.md).
+
+Every map decision (disputed territories, microstate regions, sea lanes, game values) lives in
+hand-editable YAML under `packages/data/config/`, and each build writes a review report to
+[packages/data/datasets/2026.1/REPORT.md](packages/data/datasets/2026.1/REPORT.md). Read it with
+your group before the first campaign.
+
+## License
+
+AGPL-3.0-or-later (see [LICENSE](LICENSE)). Lichess's chessground (the board) and chessops (the
+chess rules) are GPL-3.0-or-later, which the AGPL is compatible with.

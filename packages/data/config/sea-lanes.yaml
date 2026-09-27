@@ -1,0 +1,99 @@
+# Sea lanes: adjacency across water, for territories that do not share a land border.
+#
+# Automatic lanes: two territories get a lane when their coastlines come within `threshold_km`,
+# measured between coastline vertices (points on arcs used by exactly one territory, so land
+# borders never count). A candidate is rejected when the straight (great-circle) segment crosses a
+# third territory's land; the next-closest pair of points is tried instead. REPORT.md lists every
+# lane with its distance and endpoints, and the pairs that were in range but blocked.
+#
+# Manual lanes (`add`) use the closest coastline points with no distance limit or crossing check.
+# `near: { ID: [lon, lat] }` pins the drawn end in that territory to the coastline nearest the
+# point; use it when the closest pair would draw the lane somewhere silly (a sub-Antarctic speck)
+# or to redraw an automatic lane. `remove` deletes automatic lanes. Every entry needs a reason.
+
+# 200 km catches every famous strait (Gibraltar 17 km, Bab-el-Mandeb, Hormuz, Øresund, Bering,
+# Korea Strait, Luzon Strait, Palk Strait, Windward Passage ...). Raising it to 250 km would only
+# add a handful of useful lanes (added by hand below) at the cost of many coast-hugging ones.
+threshold_km: 200
+
+add:
+  # --- North Atlantic ---------------------------------------------------------------------------
+  - { a: GRL, b: ISL, reason: "Denmark Strait (290 km), the Greenland–Iceland leg of the GIUK gap" }
+  - { a: ISL, b: GBR, reason: "Iceland–Faroes–UK leg of the GIUK gap; otherwise Iceland is a dead end" }
+  - { a: GBR, b: NOR, reason: "North Sea crossing, Shetland–Norway (300 km)" }
+
+  # --- Africa and the Indian Ocean -------------------------------------------------------------
+  - { a: CPV, b: SEN, reason: "Cabo Verde's nearest mainland, Dakar (570 km)" }
+  - { a: STP, b: GNQ, reason: "Príncipe–Bioko (210 km), Gulf of Guinea" }
+  - { a: STP, b: GAB, reason: "São Tomé–Cape Lopez (240 km), Gulf of Guinea" }
+  - { a: MDG, b: MOZ, reason: "Mozambique Channel (420 km)" }
+  - { a: INDIAN-OCEAN, b: MDG, reason: "Mayotte–Madagascar (300 km)" }
+  - { a: INDIAN-OCEAN, b: MOZ, reason: "Comoros–Mozambique (300 km)" }
+  - { a: MDV, b: IND, reason: "Maldives–Minicoy/Lakshadweep (450 km), the Maldives' nearest neighbor" }
+  - { a: AZE, b: TKM, reason: "Caspian crossing Baku–Türkmenbaşy (201 km, just over the threshold)" }
+  - a: IRN
+    b: SAU
+    reason: "Redraw across the Persian Gulf; the automatic lane ran along Kuwait's coast"
+    near: { IRN: [50.8, 28.9], SAU: [49.7, 27.0] }
+
+  # --- Mediterranean ---------------------------------------------------------------------------
+  - a: HRV
+    b: ITA
+    reason: "Redraw across the Adriatic (Split–Ancona); the automatic lane joined Istria to Trieste past Slovenia's coast"
+    near: { HRV: [16.4, 43.5], ITA: [13.5, 43.6] }
+
+  # --- Americas --------------------------------------------------------------------------------
+  - { a: CUB, b: MEX, reason: "Yucatán Channel (201 km, just over the threshold)" }
+  - { a: ARG, b: FLK, reason: "Falklands–Argentina (350 km), the disputed claim" }
+
+  # --- Asia and Oceania ------------------------------------------------------------------------
+  - a: CHN
+    b: TWN
+    reason: "Redraw across the Taiwan Strait; the automatic lane joins Kinmen to Xiamen (9 km) and is invisible at world scale"
+    near: { CHN: [119.8, 25.4], TWN: [120.5, 24.2] }
+  - a: CHN
+    b: KOR
+    reason: "Yellow Sea, Shandong–Korea (about 300 km); the closest points would hug North Korea's coast"
+    near: { CHN: [122.7, 37.4], KOR: [126.1, 36.8] }
+  - a: AUS
+    b: IDN
+    reason: "Redraw across the Arafura Sea (Darwin–Tanimbar); the automatic lane ran along Papua New Guinea's coast"
+    near: { AUS: [130.8, -11.4], IDN: [131.3, -7.6] }
+  - { a: AUS, b: TLS, reason: "Timor Sea (460 km)" }
+  - a: AUS
+    b: NZL
+    reason: "Tasman Sea, drawn Sydney–Auckland; the closest points are sub-Antarctic specks (Macquarie and Auckland Islands)"
+    near: { AUS: [151.3, -33.8], NZL: [174.5, -37.0] }
+  - { a: SLB, b: VUT, reason: "Santa Cruz–Torres Islands (235 km), Melanesian chain" }
+  - { a: NCL, b: VUT, reason: "Loyalty Islands–Aneityum (215 km), Melanesian chain" }
+  - a: NCL
+    b: AUS
+    reason: "Coral Sea; drawn from Grande Terre rather than the Chesterfield reefs"
+    near: { NCL: [166.4, -22.2] }
+  - a: FJI
+    b: VUT
+    reason: "Fiji–Vanuatu (about 800 km), Melanesian chain; drawn from Viti Levu rather than a remote reef"
+    near: { FJI: [177.4, -17.8] }
+  - { a: FJI, b: POLYNESIA, reason: "Fiji–Wallis and Futuna (280 km)" }
+  - { a: MICRONESIA, b: POLYNESIA, reason: "Kiribati–Tokelau (450 km)" }
+  - { a: MICRONESIA, b: IDN, reason: "Palau's Southwest Islands–Morotai (280 km)" }
+  - a: MICRONESIA
+    b: PHL
+    reason: "Philippine Sea, Palau–Mindanao"
+    near: { MICRONESIA: [134.6, 7.5] }
+  - { a: MICRONESIA, b: JPN, reason: "Mariana Islands–Bonin Islands (940 km), the island route to Japan" }
+  - { a: NZL, b: POLYNESIA, reason: "Realm of New Zealand: the Cook Islands, Niue and Tokelau (about 1,900 km)" }
+
+remove:
+  # Coast-hugging hops: the segment passes just offshore of a third country that borders both
+  # ends, so the "lane" is really a trip along someone else's coast.
+  - { a: AGO, b: GAB, reason: "Cabinda–Gabon runs along the Republic of the Congo's coast" }
+  - { a: ALB, b: HRV, reason: "runs along Montenegro's coast" }
+  - { a: BEN, b: GHA, reason: "runs along Togo's coast" }
+  - { a: GHA, b: NGA, reason: "runs along Togo's and Benin's coasts" }
+  - { a: NGA, b: TGO, reason: "runs along Benin's coast" }
+  - { a: FRA, b: NLD, reason: "runs along Belgium's coast" }
+  - { a: DNK, b: NLD, reason: "runs along Germany's North Sea coast and islands" }
+  - { a: LBN, b: PSE, reason: "runs along Israel's coast" }
+  - { a: NIC, b: PAN, reason: "runs along Costa Rica's Caribbean coast" }
+  - { a: IRN, b: KWT, reason: "runs past Iraq's coast at the head of the Gulf" }

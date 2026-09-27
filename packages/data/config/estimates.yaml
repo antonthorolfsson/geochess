@@ -1,0 +1,198 @@
+# Figures the World Bank does not publish, or publishes in a misleading form. Every entry is marked
+# `estimated: true` in the dataset and listed with its source in REPORT.md.
+#
+# Keys are statistics codes: a territory id, a member id, or the code set with `stats:` in
+# canon.yaml. Stats: population, areaKm2, gdpNominalUsd, gdpPppUsd, militarySpendingUsd, armedForces.
+#
+#   stat: { value: 123, year: 2025, source: "..." }          # a sourced figure; `value: null` records
+#                                                            # that nothing reliable was found
+#   stat: { eur: 1.5e9, usd_per_eur: 1.08, year: 2024, source: "..." }   # converted from euros
+#   stat: { ppp_ratio_of: FRA, source: "..." }               # nominal GDP × that economy's PPP/nominal ratio
+#
+# An estimate only fills a gap. To override a World Bank figure, add `replace: <reason>`.
+# Rule: never enter a precise-looking number you are not confident about. Leave it out instead;
+# the value formula copes with missing metrics.
+
+estimates:
+  # --- Territories the World Bank does not cover --------------------------------------------
+  TWN:
+    population: { value: 23299000, year: 2025, source: "IMF World Economic Outlook (April 2026)" }
+    areaKm2: { value: 35980, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: 920050000000, year: 2025, source: "IMF World Economic Outlook (April 2026)" }
+    gdpPppUsd: { value: 2102357000000, year: 2025, source: "IMF World Economic Outlook (April 2026)" }
+    militarySpendingUsd: { value: 18200000000, year: 2025, source: "SIPRI Military Expenditure Database (April 2026 release)" }
+    armedForces: { value: 170000, year: 2025, source: "CIA World Factbook (approximately 170,000 active duty)" }
+  ESH:
+    population: { value: 600000, year: 2025, source: "UN World Population Prospects 2024, via UNFPA State of World Population 2025 (0.6 million)" }
+    areaKm2: { value: 266000, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: null, source: "No separate estimate; Morocco's national accounts cover the part it administers" }
+  FLK:
+    population: { value: 3662, year: 2021, source: "Falkland Islands Government, 2021 census" }
+    areaKm2: { value: 12173, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: 206400000, year: 2015, source: "CIA World Factbook (2015 estimate)" }
+  XKX:
+    areaKm2: { value: 10887, source: "CIA World Factbook" }
+
+  # --- World Bank figures that mislead ----------------------------------------------------------
+  # The World Bank's surface areas (from FAO) include coastal or territorial waters for a few
+  # countries, which inflates them against everyone else. Those are replaced with the CIA World
+  # Factbook's total area (land plus inland water).
+  CAN:
+    areaKm2:
+      value: 9984670
+      source: "CIA World Factbook"
+      replace: "the World Bank reports 15.6 million km², far above Canada's land and inland water"
+  NOR:
+    areaKm2:
+      value: 386224
+      source: "CIA World Factbook: mainland 323,802 km² + Svalbard 62,045 km² + Jan Mayen 377 km²"
+      replace: "the World Bank reports 624,500 km², far above Norway's land and inland water"
+  SWE:
+    areaKm2:
+      value: 450295
+      source: "CIA World Factbook"
+      replace: "the World Bank's 528,660 km² includes coastal waters"
+  DOM:
+    areaKm2:
+      value: 48670
+      source: "CIA World Factbook"
+      replace: "the World Bank reports 146,840 km², three times the island's Dominican part"
+  HRV:
+    areaKm2:
+      value: 56594
+      source: "CIA World Factbook"
+      replace: "the World Bank's 88,070 km² includes the territorial sea"
+  ARE:
+    areaKm2:
+      value: 83600
+      source: "CIA World Factbook"
+      replace: "the World Bank's 98,648 km² includes coastal waters"
+  GRL:
+    areaKm2:
+      value: 2166086
+      source: "CIA World Factbook (including the ice sheet)"
+      replace: "the World Bank reports only the ice-free area (410,450 km²)"
+  FRO:
+    areaKm2:
+      value: 1393
+      source: "CIA World Factbook"
+      replace: "the World Bank series jumps from 1,396 km² (2019) to 12,960 km² (2020 on), far above the land area"
+  FRA:
+    areaKm2:
+      value: 549060
+      source: "Eurostat reg_area3 (2025): France 638,475 km² minus the five overseas regions (89,415 km²)"
+      replace: "the World Bank series changed in 2020 to 606,410 km², which is neither metropolitan France (549,087 km² until 2019) nor France with its overseas departments"
+  SRB:
+    areaKm2:
+      value: 77474
+      source: "CIA World Factbook (Serbia without Kosovo)"
+      replace: "the map shows Serbia without Kosovo; the World Bank's 84,990 km² matches neither Serbia with Kosovo nor without it"
+  SSD:
+    gdpNominalUsd:
+      value: 5733000000
+      year: 2025
+      source: "IMF World Economic Outlook (April 2026)"
+      replace: "the World Bank's latest figure is from 2015 ($12.0B), before the currency collapse"
+    gdpPppUsd:
+      value: 17883000000
+      year: 2025
+      source: "IMF World Economic Outlook (April 2026)"
+      replace: "the World Bank's latest figure is from 2015"
+  YEM:
+    gdpNominalUsd:
+      value: 7897000000
+      year: 2025
+      source: "IMF World Economic Outlook (April 2026)"
+      replace: "the World Bank's latest figure is from 2018 ($21.6B), during the war's early years"
+    gdpPppUsd:
+      value: 29912000000
+      year: 2025
+      source: "IMF World Economic Outlook (April 2026)"
+      replace: "the World Bank's latest figure is from 2013 ($92.8B), before the war"
+  VEN:
+    gdpPppUsd:
+      value: 237679000000
+      year: 2025
+      source: "IMF World Economic Outlook (April 2026)"
+      replace: "the World Bank's latest figure is from 2011 ($621B), before the economic collapse"
+
+  # --- French overseas departments, split out of France ------------------------------------------
+  # Population: Eurostat demo_r_d2jan, 1 January 2025. Area: Eurostat reg_area3. GDP: Eurostat
+  # nama_10r_2gdp (2024, € million) at the ECB 2024 average of 1.08238 US$ per €. PPP GDP is not
+  # published for them, so it is derived with France's PPP/nominal ratio; France's own figures are
+  # reduced by the same amounts (see adjustments), so nothing is counted twice.
+  GUF:
+    population: { value: 297455, year: 2025, source: "Eurostat (1 January 2025)" }
+    areaKm2: { value: 83751, source: "Eurostat" }
+    gdpNominalUsd: { eur: 5243.6e6, usd_per_eur: 1.08238, year: 2024, source: "Eurostat regional GDP (2024), converted at the ECB 2024 average" }
+    gdpPppUsd: { ppp_ratio_of: FRA, source: "Derived: nominal GDP × France's PPP/nominal ratio (World Bank)" }
+  GLP:
+    population: { value: 413791, year: 2025, source: "Eurostat (1 January 2025)" }
+    areaKm2: { value: 1685, source: "Eurostat" }
+    gdpNominalUsd: { eur: 11878.3e6, usd_per_eur: 1.08238, year: 2024, source: "Eurostat regional GDP (2024), converted at the ECB 2024 average" }
+    gdpPppUsd: { ppp_ratio_of: FRA, source: "Derived: nominal GDP × France's PPP/nominal ratio (World Bank)" }
+  MTQ:
+    population: { value: 359419, year: 2025, source: "Eurostat (1 January 2025)" }
+    areaKm2: { value: 1108, source: "Eurostat" }
+    gdpNominalUsd: { eur: 10480.1e6, usd_per_eur: 1.08238, year: 2024, source: "Eurostat regional GDP (2024), converted at the ECB 2024 average" }
+    gdpPppUsd: { ppp_ratio_of: FRA, source: "Derived: nominal GDP × France's PPP/nominal ratio (World Bank)" }
+  REU:
+    population: { value: 904180, year: 2025, source: "Eurostat (1 January 2025)" }
+    areaKm2: { value: 2504, source: "Eurostat" }
+    gdpNominalUsd: { eur: 24457.2e6, usd_per_eur: 1.08238, year: 2024, source: "Eurostat regional GDP (2024), converted at the ECB 2024 average" }
+    gdpPppUsd: { ppp_ratio_of: FRA, source: "Derived: nominal GDP × France's PPP/nominal ratio (World Bank)" }
+  MYT:
+    population: { value: 329208, year: 2025, source: "Eurostat (1 January 2025)" }
+    areaKm2: { value: 367, source: "Eurostat" }
+    gdpNominalUsd: { eur: 3786.0e6, usd_per_eur: 1.08238, year: 2024, source: "Eurostat regional GDP (2024), converted at the ECB 2024 average" }
+    gdpPppUsd: { ppp_ratio_of: FRA, source: "Derived: nominal GDP × France's PPP/nominal ratio (World Bank)" }
+
+  # --- Caribbean Netherlands, split out of the Netherlands ----------------------------------------
+  # Population: CBS, 1 January 2026. GDP: CBS StatLine table 84789ENG (2023, current US$).
+  BQ-BO:
+    population: { value: 27611, year: 2026, source: "Statistics Netherlands (CBS), 1 January 2026" }
+    areaKm2: { value: 288, source: "Commonly cited land area (CBS, Wikipedia)" }
+    gdpNominalUsd: { value: 722000000, year: 2023, source: "Statistics Netherlands (CBS)" }
+  BQ-SA:
+    population: { value: 2270, year: 2026, source: "Statistics Netherlands (CBS), 1 January 2026" }
+    areaKm2: { value: 13, source: "Commonly cited land area (Wikipedia)" }
+    gdpNominalUsd: { value: 52000000, year: 2023, source: "Statistics Netherlands (CBS)" }
+  BQ-SE:
+    population: { value: 3348, year: 2026, source: "Statistics Netherlands (CBS), 1 January 2026" }
+    areaKm2: { value: 21, source: "Commonly cited land area (CBS, Wikipedia)" }
+    gdpNominalUsd: { value: 96000000, year: 2023, source: "Statistics Netherlands (CBS)" }
+
+  # --- Other small members of regions ------------------------------------------------------------
+  AIA:
+    population: { value: 19416, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+    areaKm2: { value: 91, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: 452730000, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+  MSR:
+    population: { value: 5468, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+    areaKm2: { value: 102, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: 84537000, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+  BLM:
+    population: { value: 10562, year: 2022, source: "INSEE, reference population 2022 (in force 1 January 2025)" }
+    areaKm2: { value: 25, source: "CIA World Factbook" }
+  VGB:
+    gdpNominalUsd: { value: 1598000000, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+  COK:
+    population: { value: 15040, year: 2021, source: "Cook Islands Statistics Office, 2021 census" }
+    areaKm2: { value: 236, source: "CIA World Factbook" }
+    gdpNominalUsd: { value: 409077000, year: 2024, source: "CIA World Factbook (2024 estimate)" }
+  NIU:
+    population: { value: 1681, year: 2022, source: "Niue Statistics Office, 2022 census" }
+    areaKm2: { value: 260, source: "CIA World Factbook" }
+  WLF:
+    population: { value: 11151, year: 2023, source: "INSEE, 2023 census" }
+    areaKm2: { value: 142, source: "CIA World Factbook" }
+  TKL:
+    population: { value: 1647, year: 2019, source: "Tokelau National Statistics Office, 2019 population count" }
+    areaKm2: { value: 12, source: "CIA World Factbook" }
+
+# Subtractions that stop split-out parts from being counted twice.
+adjustments:
+  FRA:
+    subtract: [GUF, GLP, MTQ, REU, MYT]
+    stats: [population, gdpNominalUsd, gdpPppUsd]
+    reason: the World Bank's France figures include the overseas departments, which play separately here

@@ -1,0 +1,1 @@
+ALTER TABLE "members" ADD COLUMN "draft_list" jsonb DEFAULT '[]'::jsonb NOT NULL;

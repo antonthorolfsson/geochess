@@ -1,0 +1,51 @@
+/**
+ * Adjacencies every dataset must have. They catch Natural Earth slivers, canon mistakes and
+ * sea-lane regressions; the build fails and the dataset test fails if any is missing.
+ */
+export const EXPECTED_LAND_BORDERS: readonly [string, string][] = [
+  ['FRA', 'ESP'],
+  ['USA', 'CAN'],
+  ['USA', 'MEX'],
+  ['RUS', 'CHN'],
+  ['IND', 'CHN'],
+  ['BRA', 'ARG'],
+  ['EGY', 'ISR'],
+  ['ZAF', 'LSO'],
+  ['ITA', 'CHE'],
+  ['DEU', 'POL'],
+  ['IRL', 'GBR'],
+  ['THA', 'MYS'],
+  ['PNG', 'IDN'],
+  ['IND', 'PAK'],
+  ['FRA', 'DEU'],
+  ['RUS', 'UKR'],
+  ['GUF', 'BRA'],
+  ['HTI', 'DOM'],
+  ['MAR', 'ESH'],
+  ['SRB', 'XKX'],
+  ['ISR', 'PSE'],
+  ['KOR', 'PRK'],
+];
+
+export const EXPECTED_SEA_LANES: readonly [string, string][] = [
+  ['GBR', 'FRA'],
+  ['ESP', 'MAR'],
+  ['USA', 'RUS'],
+  ['JPN', 'KOR'],
+  ['AUS', 'PNG'],
+  ['LKA', 'IND'],
+  ['DNK', 'SWE'],
+  ['ISL', 'GRL'],
+  ['NZL', 'AUS'],
+  ['TWN', 'CHN'],
+  ['ITA', 'TUN'],
+  ['YEM', 'DJI'],
+  ['SAU', 'EGY'],
+  ['IRN', 'OMN'],
+  ['SGP', 'IDN'],
+  ['CUB', 'USA'],
+  ['TTO', 'VEN'],
+  ['FIN', 'EST'],
+  ['MDG', 'MOZ'],
+  ['CAN', 'GRL'],
+];

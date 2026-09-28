@@ -48,12 +48,18 @@ inside transactions. Supabase's direct connection is IPv6 only, which Render can
 
 ## DNS at GoDaddy
 
-| Type    | Name                        | Points to                                           |
-| ------- | --------------------------- | --------------------------------------------------- |
-| A       | `@`                         | Vercel's IP, as shown in the Vercel domain settings |
-| CNAME   | `www`                       | Vercel's CNAME target, as shown there               |
-| CNAME   | `api`                       | The Render service's `onrender.com` host            |
-| MX, TXT | `send`, `resend._domainkey` | Resend's records for sending mail (SPF and DKIM)    |
+| Type  | Name                | Points to                                                      |
+| ----- | ------------------- | -------------------------------------------------------------- |
+| A     | `@`                 | Vercel's IP, as shown in the Vercel domain settings            |
+| CNAME | `www`               | Vercel's CNAME target, as shown there                          |
+| CNAME | `api`               | The Render service's `onrender.com` host                       |
+| CNAME | `send`, `rsend`     | `send.forge.rmta.net` and `rsend.forge.rmta.net`: Resend's SPF |
+| TXT   | `resend._domainkey` | Resend's DKIM key, as shown in the Resend domain settings      |
+
+Resend's GoDaddy guide still lists an MX and an SPF TXT on `send`. Those were its Amazon SES
+records, which the two CNAMEs replace, and a CNAME can't share its name with other records. Leave
+GoDaddy's default `_dmarc` record (`p=reject`) alone: Resend's DKIM signature passes it, and a
+second DMARC record would break it.
 
 ## Things to know
 

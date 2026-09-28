@@ -132,6 +132,29 @@ own, `GET /api/campaigns/:id/wars/:warId`).
 
 Tests: rules 117, data 53, web 30, server 69.
 
+**Rules pages** (2026-09-28, at the user's request): how to play, with each round step by step.
+
+- **One guide, three places.** `RulesGuide` (`components/rules/rules-guide.tsx`) renders the whole
+  game: the idea, a campaign from lobby to war, each round as seven numbered steps saying who acts,
+  declaring war (with a stake table), the four answers and the attacker's replies, the battle and
+  clock modifiers, outcomes, truces and locks, diplomacy, a deadlines table ("if time runs out") and
+  the settings. It's on the signed-out landing page, at `/rules` (public, linked from the app
+  header) and at `/c/[id]/rules`, which opens over the map room like an empire page from a "?"
+  button at the right of the campaign header (labelled "Rules" from `sm` up). The campaign page
+  keeps the query, so a war being answered is still open on the way back.
+- **Numbers come from the rules.** Every figure is read from the campaign's `CampaignRules` or the
+  rules package's constants (`stakeFloor`, `RESPONSE_WINDOW_TEXT`, `REPUTATION_*`, clock modifier
+  percentages), so a campaign's page quotes its own pace, clocks, draws, tokens, truces and locks,
+  and wording adapts (no truces, no locks, Armageddon, live). The landing page and `/rules` use
+  `DEFAULT_RULES` and describe both paces. Phrasing helpers are in `lib/rules-text.ts`, with tests.
+  **When a rule changes, update the guide's prose too**; only the numbers follow on their own.
+- The contents chips are `<Link href="#…">`, not plain anchors: a native fragment navigation pushes a
+  history entry Next's router ignores, which broke the back button. Pages that render after their
+  data loads scroll to the address's `#section` themselves (`useScrollToHash`).
+- "How it ends" says campaigns have no fixed end, since nothing sets a campaign to `finished` yet.
+
+Tests: web 34.
+
 ## Phase 2 decisions (settled with the user on 2026-09-27)
 
 Numbers quoted come from simulating 30 full contiguous drafts per player count on `2026.1`.
@@ -508,14 +531,14 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                         |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                 |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                        |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation)                                                                                                                                                                                             |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `notifications.tsx`                   |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                    |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                   |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation)                                                                                                                                                                                                                                        |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
 
 API: `/api/me`, `/api/auth/{dev,email,email/verify,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

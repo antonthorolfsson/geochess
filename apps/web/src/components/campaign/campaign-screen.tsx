@@ -150,8 +150,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const { campaign } = model;
   const me = model.me.userId;
   const router = useRouter();
-  // A page open over the map room, such as an empire's statistics.
-  const overPage = useSelectedLayoutSegment() !== null;
+  // A page open over the map room: an empire's statistics, or the rules.
+  const pageSegment = useSelectedLayoutSegment();
+  const overPage = pageSegment !== null;
   const { userId: empireOf } = useParams<{ userId?: string }>();
   const { connected } = useRealtime();
   const isDesktop = useIsDesktop();
@@ -308,7 +309,11 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         : unread.direct > 0
           ? '(New message) '
           : '';
-  const page = empireOf ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · ` : '';
+  const page = empireOf
+    ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · `
+    : pageSegment === 'rules'
+      ? 'Rules · '
+      : '';
   useDocumentTitle(`${flag}${page}${campaign.name} · Empire Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
@@ -445,6 +450,11 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
             : { href: '/', label: 'All campaigns' }
         }
+        rules={{
+          // Like links to empire pages, this keeps the query, so a panel open underneath stays as it was.
+          href: `/c/${campaign.id}/rules${panels.query ? `?${panels.query}` : ''}`,
+          open: pageSegment === 'rules',
+        }}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -637,6 +647,7 @@ function CampaignHeader({
   myMoves,
   answers,
   back,
+  rules,
 }: {
   model: CampaignModel;
   connected: boolean;
@@ -644,6 +655,8 @@ function CampaignHeader({
   answers: number;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
   back: { href: string; label: string };
+  /** The rules page, always a tap away; `open` while it's showing. */
+  rules: { href: string; open: boolean };
 }) {
   const { campaign } = model;
   const statusLine = {
@@ -678,10 +691,24 @@ function CampaignHeader({
         </span>
       )}
       {(model.myTurn || myMoves > 0 || answers > 0) && (
-        <span className="mr-1 rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
+        <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
           {model.myTurn ? 'Your pick' : myMoves > 0 ? 'Your move' : 'Answer needed'}
         </span>
       )}
+      <Link
+        href={rules.href}
+        aria-label="Rules"
+        aria-current={rules.open ? 'page' : undefined}
+        className="group flex h-11 min-w-11 shrink-0 items-center justify-center gap-2 text-sm font-bold tracking-wider text-muted uppercase hover:text-paper aria-[current=page]:text-paper sm:px-1"
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-6 items-center justify-center rounded-full border-[1.5px] border-current text-[0.8rem] leading-none group-aria-[current=page]:border-paper group-aria-[current=page]:bg-paper group-aria-[current=page]:text-gunmetal"
+        >
+          ?
+        </span>
+        <span className="hidden sm:inline">Rules</span>
+      </Link>
     </header>
   );
 }

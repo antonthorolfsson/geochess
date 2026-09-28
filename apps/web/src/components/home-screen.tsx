@@ -8,6 +8,7 @@ import { api, errorMessage } from '@/lib/api';
 import { keys, useCampaigns, useMe } from '@/lib/queries';
 import { AppHeader, Emblem } from './app-header';
 import { EmpireSwatch } from './hatch';
+import { RulesGuide } from './rules/rules-guide';
 import { Notice, Spinner } from './ui';
 
 export function HomeScreen() {
@@ -25,16 +26,37 @@ export function HomeScreen() {
 
 function Landing() {
   return (
-    <div className="py-10 text-center sm:py-16">
-      <Emblem className="mx-auto mb-6 size-20" />
-      <h1 className="font-stencil text-4xl tracking-[0.08em] sm:text-5xl">EMPIRE CHESS</h1>
-      <p className="mx-auto mt-4 max-w-md text-lg text-muted">
-        Claim countries with your friends. Declare wars. Settle every border over the board.
-      </p>
-      <Link href="/login" className="btn btn-primary mt-8">
-        Sign in
-      </Link>
-    </div>
+    <>
+      <div className="py-10 text-center sm:py-16">
+        <Emblem className="mx-auto mb-6 size-20" />
+        <h1 className="font-stencil text-4xl tracking-[0.08em] sm:text-5xl">EMPIRE CHESS</h1>
+        <p className="mx-auto mt-4 max-w-md text-lg text-muted">
+          Claim countries with your friends. Declare wars. Settle every border over the board.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link href="/login" className="btn btn-primary">
+            Sign in
+          </Link>
+          <Link href="#how-to-play" className="btn btn-ghost">
+            How to play
+          </Link>
+        </div>
+      </div>
+      <section id="how-to-play" aria-labelledby="how-to-play-heading" className="scroll-mt-4 space-y-6 pb-4">
+        <h2 id="how-to-play-heading" className="font-stencil text-3xl tracking-wide">
+          How to play
+        </h2>
+        <RulesGuide variant="standard" level={3} />
+        <div className="panel flex flex-wrap items-center gap-4 p-4">
+          <p className="min-w-0 flex-1 basis-60">
+            Ready? Sign in, start a campaign and send the invite link to your group.
+          </p>
+          <Link href="/login" className="btn btn-primary">
+            Sign in
+          </Link>
+        </div>
+      </section>
+    </>
   );
 }
 

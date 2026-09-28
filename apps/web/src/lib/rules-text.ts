@@ -1,0 +1,67 @@
+import { RESPONSE_WINDOW_TEXT, raiseFloor, stakeFloor, type CampaignRules, type LiveClock } from '@empire/rules';
+
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+/** Small counts in words, as prose writes them. */
+export const inWords = (n: number) => WORDS[n] ?? String(n);
+
+/** "1 round", "3 rounds". */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "1 war token", "3 war tokens". */
+export const warTokens = (n: number) => plural(n, 'war token');
+
+/**
+ * How long something counted in round starts lasts, from the round it begins in. A 1-round truce
+ * set in round 3 ends when round 4 starts: "for the rest of the round". Two rounds: "for the rest
+ * of the round and the next one".
+ */
+export function forRounds(rounds: number): string {
+  const more = rounds - 1;
+  if (more <= 0) return 'for the rest of the round';
+  return `for the rest of the round and the next ${more === 1 ? 'one' : inWords(more)}`;
+}
+
+/** "12 hours", "1 day", "3 days". */
+export const hoursText = (hours: number) => (hours % 24 === 0 ? plural(hours / 24, 'day') : plural(hours, 'hour'));
+
+/** "1 day per move", "12 hours per move". */
+export const perMoveText = (hours: number) => `${hoursText(hours)} per move`;
+
+/** "5 minutes each, plus 3 seconds a move". */
+export function liveClockText(clock: LiveClock): string {
+  const [minutes, seconds] = clock.split('+').map(Number) as [number, number];
+  return `${plural(minutes, 'minute')} each, plus ${plural(seconds, 'second')} a move`;
+}
+
+/** The campaign's time control in a word or two: "5+3" or "1 day per move". */
+export const timeControlText = (rules: CampaignRules) =>
+  rules.war.pace === 'live' ? rules.war.liveClock : perMoveText(rules.war.hoursPerMove);
+
+/** What a stake must be worth against a target of each value, as declared and after a raise. */
+export function stakeTable(rules: CampaignRules): { value: number; stake: number; raised: number }[] {
+  return Array.from({ length: 10 }, (_, i) => ({
+    value: i + 1,
+    stake: stakeFloor(rules, i + 1),
+    raised: raiseFloor(rules, i + 1),
+  }));
+}
+
+/** The host's settings, in the words the rules use. */
+export function settingsList(rules: CampaignRules): { label: string; value: string }[] {
+  const { war } = rules;
+  return [
+    { label: 'Players', value: `Up to ${rules.maxPlayers}` },
+    { label: 'Draft', value: rules.draft.mode === 'contiguous' ? 'Contiguous' : 'Free' },
+    { label: 'Pace', value: war.pace === 'live' ? 'Live' : 'Correspondence' },
+    { label: 'Time control', value: timeControlText(rules) },
+    { label: 'Time to answer', value: RESPONSE_WINDOW_TEXT[war.pace] },
+    { label: 'Draws', value: war.draws === 'armageddon' ? 'Armageddon' : 'Defender holds' },
+    { label: 'Clock modifiers', value: war.clockModifiers ? 'On' : 'Off' },
+    { label: 'War tokens', value: `${war.tokensPerRound} a round, up to ${war.tokenCap}` },
+    { label: 'Least stake', value: `${war.stakeFloorPct}% of the target` },
+    { label: 'Raised stake', value: `${war.raisePct}% of the target` },
+    { label: 'Truce after a war', value: war.truceRounds === 0 ? 'None' : plural(war.truceRounds, 'round') },
+    { label: 'Lock on won countries', value: war.lockRounds === 0 ? 'None' : plural(war.lockRounds, 'round') },
+  ];
+}

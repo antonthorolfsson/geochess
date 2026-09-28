@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useMe } from '@/lib/queries';
 
@@ -28,6 +28,7 @@ export function Emblem({ className = 'size-7' }: { className?: string }) {
 export function AppHeader() {
   const me = useMe();
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const user = me.data?.user;
 
@@ -45,6 +46,13 @@ export function AppHeader() {
           <span className="font-stencil text-lg tracking-[0.08em]">EMPIRE CHESS</span>
         </Link>
         <div className="flex-1" />
+        <Link
+          href="/rules"
+          aria-current={pathname === '/rules' ? 'page' : undefined}
+          className="flex min-h-11 items-center px-1 text-sm font-bold tracking-wider text-muted uppercase hover:text-paper aria-[current=page]:text-paper"
+        >
+          Rules
+        </Link>
         {user && (
           <>
             <span className="hidden truncate text-sm text-muted sm:inline">{user.name}</span>

@@ -53,7 +53,7 @@ export function NotificationsToggle() {
   if (state === 'install') {
     return (
       <p className="text-sm text-muted">
-        To get notifications on an iPhone or iPad, add Empire Chess to your home screen from the Share menu.
+        To get notifications on an iPhone or iPad, add Geo Chess to your home screen from the Share menu.
       </p>
     );
   }

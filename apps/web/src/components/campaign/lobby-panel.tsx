@@ -217,7 +217,7 @@ function InviteLink({ code, campaignName }: { code: string; campaignName: string
           className="btn btn-ghost"
           onClick={() =>
             navigator
-              .share({ title: campaignName, text: `Join my Empire Chess campaign, ${campaignName}.`, url })
+              .share({ title: campaignName, text: `Join my Geo Chess campaign, ${campaignName}.`, url })
               .catch(() => {})
           }
         >

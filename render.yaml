@@ -35,7 +35,7 @@ services:
       - key: DEV_LOGIN
         value: '0'
       - key: MAIL_FROM
-        value: Empire Chess <no-reply@geochess.xyz>
+        value: Geo Chess <no-reply@geochess.xyz>
       - key: VAPID_SUBJECT
         value: https://geochess.xyz
       # Secrets, entered in the Render dashboard when the Blueprint is first created.

@@ -86,7 +86,7 @@ export function createNotifier(deps: { db: Db; env: Env; mailer: Mailer; log: Fa
     lastEmail.set(key, now);
     await mailer.send({
       to: user.email,
-      subject: `${notice.title} · Empire Chess`,
+      subject: `${notice.title} · Geo Chess`,
       text: `${notice.body}\n\n${origin}${notice.url}\n`,
     });
   }

@@ -1,6 +1,6 @@
 # Production deployment
 
-Empire Chess runs at **https://geochess.xyz**. Pushing to `main` deploys it.
+Geo Chess runs at **https://geochess.xyz**. Pushing to `main` deploys it.
 
 | Part        | Where                                     | Plan                                            |
 | ----------- | ----------------------------------------- | ----------------------------------------------- |

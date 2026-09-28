@@ -155,6 +155,16 @@ Tests: rules 117, data 53, web 30, server 69.
 
 Tests: web 34.
 
+**Name and logo** (2026-09-28, at the user's request): the game is now **Geo Chess** (was Empire
+Chess) everywhere players see a name: header, landing page, titles, manifest, emails, the share
+text and the Lichess client id. The logo is `media/geochess_logo.png`, a gold globe-and-rook
+emblem over a dark "GeoChess" wordmark on transparency. The app uses the emblem only (the wordmark
+is too dark for the dark UI); the name stays in stencil type. `pnpm --filter @empire/web icons`
+(`apps/web/scripts/make-icons.mjs`) crops the emblem and renders everything in
+`apps/web/public/icons/`: `emblem.png` (the `Emblem` component and notification badges),
+`favicon.png` (on a dark disc so it reads on light tab strips) and the opaque home-screen icons.
+Internal names (`@empire/*` packages, the plan's file name) are unchanged.
+
 **Victory missions** (2026-09-28, from
 [GeoChess_victory_conditions_coding_prompt.md](GeoChess_victory_conditions_coding_prompt.md);
 not committed yet):

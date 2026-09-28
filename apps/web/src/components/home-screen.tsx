@@ -29,7 +29,7 @@ function Landing() {
     <>
       <div className="py-10 text-center sm:py-16">
         <Emblem className="mx-auto mb-6 size-20" />
-        <h1 className="font-stencil text-4xl tracking-[0.08em] sm:text-5xl">EMPIRE CHESS</h1>
+        <h1 className="font-stencil text-4xl tracking-[0.08em] sm:text-5xl">GEO CHESS</h1>
         <p className="mx-auto mt-4 max-w-md text-lg text-muted">
           Claim countries with your friends. Declare wars. Settle every border over the board.
         </p>

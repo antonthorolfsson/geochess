@@ -14,12 +14,12 @@ const stencil = Saira_Stencil({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'Empire Chess', template: '%s · Empire Chess' },
+  title: { default: 'Geo Chess', template: '%s · Geo Chess' },
   description: 'Claim countries, declare wars, and settle them over the board.',
-  applicationName: 'Empire Chess',
-  appleWebApp: { capable: true, title: 'Empire Chess', statusBarStyle: 'black-translucent' },
+  applicationName: 'Geo Chess',
+  appleWebApp: { capable: true, title: 'Geo Chess', statusBarStyle: 'black-translucent' },
   icons: {
-    icon: [{ url: '/icons/icon.svg', type: 'image/svg+xml' }],
+    icon: [{ url: '/icons/favicon.png', type: 'image/png', sizes: '64x64' }],
     apple: '/icons/apple-touch-icon.png',
   },
 };

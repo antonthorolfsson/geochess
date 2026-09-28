@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Empire Chess',
-    short_name: 'Empire Chess',
+    name: 'Geo Chess',
+    short_name: 'Geo Chess',
     description: 'Claim countries, declare wars, and settle them over the board.',
     start_url: '/',
     display: 'standalone',

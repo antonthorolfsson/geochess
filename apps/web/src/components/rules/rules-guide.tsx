@@ -943,7 +943,7 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
       </div>
       <p className="text-muted">
         Turn on Notifications on this device in the Wars tab to hear about wars declared on you, counter-offers and your
-        moves. On an iPhone, add Empire Chess to your home screen first.
+        moves. On an iPhone, add Geo Chess to your home screen first.
       </p>
     </Section>
   );

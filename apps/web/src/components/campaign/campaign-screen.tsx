@@ -391,7 +391,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     : pageSegment === 'rules'
       ? 'Rules · '
       : '';
-  useDocumentTitle(`${flag}${page}${campaign.name} · Empire Chess`);
+  useDocumentTitle(`${flag}${page}${campaign.name} · Geo Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
 

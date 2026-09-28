@@ -6,12 +6,13 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Empire Chess', {
+    self.registration.showNotification(data.title || 'Geo Chess', {
       body: data.body || '',
       tag: data.tag,
       renotify: Boolean(data.tag),
       icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      // Android draws the badge from its alpha channel alone, so it needs the transparent emblem.
+      badge: '/icons/emblem.png',
       data: { url: data.url || '/' },
     }),
   );

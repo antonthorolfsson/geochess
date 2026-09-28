@@ -1,4 +1,4 @@
-# Empire Chess
+# Geo Chess
 
 _Working title._ Friends claim countries on a world map to build empires. Wars between empires are
 declared under structured rules and settled by a game of chess; the winner takes the contested

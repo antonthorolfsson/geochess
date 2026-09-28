@@ -56,8 +56,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const link = `${publicOrigin(env, req)}/login/verify?${new URLSearchParams({ token, next: sanitizeNext(next) })}`;
     await mailer.send({
       to: email,
-      subject: 'Your Empire Chess sign-in link',
-      text: `Open this link to sign in to Empire Chess:\n\n${link}\n\nIt works once and expires in ${LOGIN_LINK_MINUTES} minutes. If you didn't ask for it, ignore this email.`,
+      subject: 'Your Geo Chess sign-in link',
+      text: `Open this link to sign in to Geo Chess:\n\n${link}\n\nIt works once and expires in ${LOGIN_LINK_MINUTES} minutes. If you didn't ask for it, ignore this email.`,
     });
     return { sent: mailer.delivers, devLink: mailer.delivers ? undefined : link };
   });

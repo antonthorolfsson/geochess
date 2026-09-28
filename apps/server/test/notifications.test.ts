@@ -39,7 +39,7 @@ describe('the notifier', () => {
     await notifier.send({ ...notice, tag: 'game:i' });
     await notifier.send({ ...notice, userId: 'lee', email: true });
     expect(mail).toHaveLength(2);
-    expect(mail[0]).toMatchObject({ to: 'kim@example.com', subject: 'Your move · Empire Chess' });
+    expect(mail[0]).toMatchObject({ to: 'kim@example.com', subject: 'Your move · Geo Chess' });
     expect(mail[0]!.text).toContain('http://localhost:3000/c/x?game=g');
   });
 

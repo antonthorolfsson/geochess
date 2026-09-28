@@ -1,6 +1,6 @@
 # @empire/data
 
-The map and country-data pipeline for Empire Chess. It turns Natural Earth shapes, World Bank
+The map and country-data pipeline for Geo Chess. It turns Natural Earth shapes, World Bank
 statistics and a handful of hand-edited decisions into a versioned dataset: every territory with
 its neighbors, sea lanes, terrain, game value and real-world figures, plus a TopoJSON map.
 

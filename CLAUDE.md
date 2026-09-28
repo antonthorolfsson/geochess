@@ -1,4 +1,4 @@
-# Empire Chess
+# Geo Chess
 
 Friends claim countries on a world map and settle wars with chess. The design and phased roadmap
 are in `empire-chess-implementation-plan.md`; read the relevant section before building a feature.

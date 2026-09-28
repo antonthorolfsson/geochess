@@ -8,15 +8,15 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (384 tests since victory missions).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (393 tests since password sign-in).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
 
 ## Where things stand
 
-**Phase 1 (Foundation)** is complete: sign-in (Lichess OAuth with PKCE, email links, development
-sign-in by name), lobbies with invite links and empire colors, the d3-geo map with hatching,
+**Phase 1 (Foundation)** is complete: sign-in (Lichess OAuth with PKCE, email links, email and
+password, development sign-in by name), lobbies with invite links and empire colors, the d3-geo map with hatching,
 microstates, sea lanes and search, the snake draft with private draft lists and auto-draft, the
 empire panel, dataset `2026.1` (188 territories), PWA shell, CI and Prettier.
 
@@ -154,6 +154,31 @@ Tests: rules 117, data 53, web 30, server 69.
 - "How it ends" said campaigns have no fixed end; it is now "Winning" (see below).
 
 Tests: web 34.
+
+**Email and password sign-in** (2026-09-28, at the user's request): players who have signed up
+can sign in with their email and a password instead of waiting for a link.
+
+- **Signing up is still the emailed link**, which proves the player owns the address. After a
+  player's first link, the page offers "Choose a password" (skippable). The home screen's Password
+  panel sets one, or changes it given the current one, and appears only for accounts with an email
+  (Lichess and development accounts have none).
+- **The sign-in page** has email and password, "Forgot your password?" and, for new players and
+  anyone without a password, "Email me a link". A forgotten password goes through a link with
+  `reset=1`, whose page asks for the new password before using the link up
+  (`POST /api/auth/email/verify` with `password`). "Sign in without changing it" is offered too.
+- **Sessions.** Changing a password signs out the player's other devices. Setting one from a link
+  (a reset) signs out every other device. Setting a first password signs nobody out.
+- **Hashing.** `auth/passwords.ts` uses Node's scrypt (N=2^15, r=8, p=1: 32 MiB, about 40 ms on a
+  laptop). Each stored hash carries its settings (`scrypt$N$r$p$salt$key`), so they can be raised
+  later. Hashes run one at a time so a burst of sign-ins can't starve the games. Passwords are
+  NFKC-normalized, and 8 to 128 characters (`passwordSchema`).
+- **Guessing.** Unknown emails and accounts without a password take the same time and get the same
+  "Wrong email or password." Attempts are limited to 10 an hour per account and 30 an hour per
+  address, in memory. A locked-out player can still email themselves a link.
+- `SessionUser.hasPassword` tells the client which form to show. Every query that reads `users`
+  names its columns, so the hash never leaves the server; keep it that way.
+
+Tests: server 108 (`auth.test.ts`, `passwords.test.ts`).
 
 **Name and logo** (2026-09-28, at the user's request): the game is now **Geo Chess** (was Empire
 Chess) everywhere players see a name: header, landing page, titles, manifest, emails, the share
@@ -650,11 +675,11 @@ Smaller follow-ups, none blocking:
 | `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                  |
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                        |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results)                                                                                                                                                                             |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`)                                                                                                                                   |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
 | `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
 
-API: `/api/me`, `/api/auth/{dev,email,email/verify,lichess,lichess/callback,logout}`,
+API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
 `/api/campaigns/:id/{invite/reset,me,leave,kick}`,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,

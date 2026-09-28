@@ -85,7 +85,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
   };
 }
 
-const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null });
+const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null, hasPassword: false });
 
 describe('the race', () => {
   it('ranks by points, then by name, never by order of arrival', () => {

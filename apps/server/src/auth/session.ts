@@ -1,5 +1,5 @@
 import type { SessionUser } from '@empire/rules';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Db } from '../db/client';
 import { sessions, users } from '../db/schema';
@@ -36,6 +36,13 @@ export async function endSession(db: Db, env: Env, req: FastifyRequest, reply: F
   reply.clearCookie(SESSION_COOKIE, cookieScope(env));
 }
 
+/** Signs a player out on every device, except the one whose session cookie holds `keep`. */
+export async function endOtherSessions(db: Db, userId: string, keep?: string): Promise<void> {
+  await db
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), keep ? ne(sessions.tokenHash, hashToken(keep)) : undefined));
+}
+
 /** Where the session cookie applies. Clearing it must name the same path and domain. */
 function cookieScope(env: Env): { path: string; domain?: string } {
   return { path: '/', domain: env.COOKIE_DOMAIN };
@@ -48,6 +55,7 @@ export async function loadSessionUser(db: Db, token: string): Promise<SessionUse
       name: users.name,
       email: users.email,
       lichessUsername: users.lichessUsername,
+      hasPassword: sql<boolean>`${users.passwordHash} is not null`,
       expiresAt: sessions.expiresAt,
     })
     .from(sessions)

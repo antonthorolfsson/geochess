@@ -24,6 +24,8 @@ export interface SessionUser {
   name: string;
   email: string | null;
   lichessUsername: string | null;
+  /** Whether the player can sign in with their email and a password. */
+  hasPassword: boolean;
 }
 
 export interface MeResponse {

@@ -64,9 +64,15 @@ export const api = {
   logout: () => request('POST', '/auth/logout'),
   devUsers: () => request<{ users: { id: string; name: string }[] }>('GET', '/auth/dev'),
   devSignIn: (name: string) => request('POST', '/auth/dev', { name }),
-  emailSignIn: (email: string, next: string) =>
-    request<{ sent: boolean; devLink?: string }>('POST', '/auth/email', { email, next }),
-  verifyEmail: (token: string) => request('POST', '/auth/email/verify', { token }),
+  /** Emails a sign-in link, or with `reset` a link to choose a new password. */
+  emailSignIn: (email: string, next: string, reset = false) =>
+    request<{ sent: boolean; devLink?: string }>('POST', '/auth/email', { email, next, reset }),
+  /** Uses up an emailed link; with `password`, also sets the account's password. */
+  verifyEmail: (token: string, password?: string) =>
+    request<{ ok: true; hasPassword: boolean }>('POST', '/auth/email/verify', { token, password }),
+  passwordSignIn: (email: string, password: string) => request('POST', '/auth/password', { email, password }),
+  setPassword: (password: string, currentPassword?: string) =>
+    request('PUT', '/me/password', { password, currentPassword }),
 
   campaigns: () => request<CampaignSummary[]>('GET', '/campaigns'),
   campaign: (id: string) => request<CampaignView>('GET', `/campaigns/${id}`),

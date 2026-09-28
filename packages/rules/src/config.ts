@@ -135,3 +135,12 @@ export const displayNameSchema = z
   .trim()
   .min(2, 'Names need at least 2 characters.')
   .max(32, 'Names can be at most 32 characters.');
+
+/**
+ * A password for signing in by email. Length is the only rule, as NIST's guidance has it: a long
+ * passphrase beats composition rules. The cap bounds the work of hashing one.
+ */
+export const passwordSchema = z
+  .string()
+  .min(8, 'Passwords need at least 8 characters.')
+  .max(128, 'Passwords can be at most 128 characters.');

@@ -32,6 +32,8 @@ export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').unique(),
+  /** An scrypt hash with its parameters (`auth/passwords.ts`); null until the player sets one. */
+  passwordHash: text('password_hash'),
   lichessId: text('lichess_id').unique(),
   lichessUsername: text('lichess_username'),
   createdAt: createdAt(),

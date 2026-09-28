@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { buildModel, totalValue } from './campaign';
 
 const idx = indexDataset(lineDataset());
-const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null });
+const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null, hasPassword: false });
 const member = (userId: string, color: number) => ({
   userId,
   name: userId,

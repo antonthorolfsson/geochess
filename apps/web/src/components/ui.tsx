@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 
 export function Spinner({ label = 'Loading' }: { label?: string }) {
   return (
@@ -26,6 +26,61 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'error' | 
       className={`rounded-[3px] border px-3 py-2 text-[0.95rem] ${styles}`}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * A labelled password field with a button that shows what was typed, for phone keyboards. The
+ * button sits outside the label so it stays out of the field's name.
+ */
+export function PasswordInput({
+  label,
+  hint,
+  value,
+  onChange,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'type' | 'value' | 'onChange'> & {
+  label: string;
+  /** A line under the field, read out with it. */
+  hint?: string;
+  value: string;
+  onChange(value: string): void;
+}) {
+  const id = useId();
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="label block">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          {...props}
+          id={id}
+          aria-describedby={hint ? `${id}-hint` : undefined}
+          className="input pr-18"
+          type={shown ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="absolute inset-y-0 right-0 min-w-14 px-3 text-sm font-bold tracking-wider text-muted uppercase hover:text-paper"
+          aria-label={shown ? 'Hide password' : 'Show password'}
+          onClick={() => setShown((s) => !s)}
+        >
+          {shown ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {hint && (
+        <p id={`${id}-hint`} className="text-sm text-faint">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

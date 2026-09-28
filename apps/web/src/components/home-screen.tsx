@@ -1,6 +1,6 @@
 'use client';
 
-import { displayNameSchema, type CampaignSummary, type SessionUser } from '@empire/rules';
+import { displayNameSchema, passwordSchema, type CampaignSummary, type SessionUser } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -8,8 +8,9 @@ import { api, errorMessage } from '@/lib/api';
 import { keys, useCampaigns, useMe } from '@/lib/queries';
 import { AppHeader, Emblem } from './app-header';
 import { EmpireSwatch } from './hatch';
+import { LinkSent } from './login-screen';
 import { RulesGuide } from './rules/rules-guide';
-import { Notice, Spinner } from './ui';
+import { Notice, PasswordInput, Spinner } from './ui';
 
 export function HomeScreen() {
   const me = useMe();
@@ -126,6 +127,7 @@ function Dashboard({ user }: { user: SessionUser }) {
       )}
 
       <ProfileSection user={user} />
+      {user.email && <PasswordSection hasPassword={user.hasPassword} email={user.email} />}
     </div>
   );
 }
@@ -176,6 +178,86 @@ function ProfileSection({ user }: { user: SessionUser }) {
         {user.lichessUsername ? `Linked to Lichess as ${user.lichessUsername}.` : 'Not linked to Lichess.'}
         {user.email ? ` Signs in with ${user.email}.` : ''}
       </p>
+    </section>
+  );
+}
+
+/** Sets a password, or changes it given the current one. A forgotten one is replaced by email. */
+function PasswordSection({ hasPassword, email }: { hasPassword: boolean; email: string }) {
+  const queryClient = useQueryClient();
+  const [current, setCurrent] = useState('');
+  const [password, setPassword] = useState('');
+  const [saved, setSaved] = useState<'set' | 'changed' | null>(null);
+  const save = useMutation({
+    mutationFn: () => api.setPassword(password, hasPassword ? current : undefined),
+    onSuccess: async () => {
+      setSaved(hasPassword ? 'changed' : 'set');
+      setCurrent('');
+      setPassword('');
+      await queryClient.invalidateQueries({ queryKey: keys.me });
+    },
+  });
+  const reset = useMutation({ mutationFn: () => api.emailSignIn(email, '/', true) });
+  const valid = passwordSchema.safeParse(password).success && (!hasPassword || current !== '');
+  const edit = (set: (value: string) => void) => (value: string) => {
+    set(value);
+    setSaved(null);
+  };
+
+  return (
+    <section className="panel space-y-3 p-4">
+      <h2 className="label">Password</h2>
+      <p className="text-sm text-muted">
+        {hasPassword
+          ? `You can sign in with ${email} and your password.`
+          : `Set a password to sign in with ${email} without waiting for a link.`}
+      </p>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save.mutate();
+        }}
+      >
+        {/* Tells password managers which account the password belongs to. */}
+        <input type="email" autoComplete="username" value={email} readOnly hidden />
+        {hasPassword && (
+          <PasswordInput
+            label="Current password"
+            autoComplete="current-password"
+            required
+            value={current}
+            onChange={edit(setCurrent)}
+          />
+        )}
+        <PasswordInput
+          label={hasPassword ? 'New password' : 'Password'}
+          hint={`At least 8 characters.${hasPassword ? ' Changing it signs you out on your other devices.' : ''}`}
+          autoComplete="new-password"
+          required
+          value={password}
+          onChange={edit(setPassword)}
+        />
+        <button type="submit" className="btn btn-ghost" disabled={!valid || save.isPending}>
+          {hasPassword ? 'Change password' : 'Set password'}
+        </button>
+      </form>
+      {save.error && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      {saved && <Notice>{saved === 'changed' ? 'Password changed.' : 'Password set.'}</Notice>}
+      {hasPassword &&
+        (reset.data ? (
+          <LinkSent email={email} reset devLink={reset.data.devLink} />
+        ) : (
+          <button
+            type="button"
+            className="min-h-11 text-sm text-muted underline underline-offset-2 hover:text-paper"
+            disabled={reset.isPending}
+            onClick={() => reset.mutate()}
+          >
+            Forgot it? Email me a link to choose a new one
+          </button>
+        ))}
+      {reset.error && <Notice tone="error">{errorMessage(reset.error)}</Notice>}
     </section>
   );
 }

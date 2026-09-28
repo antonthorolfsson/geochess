@@ -20,14 +20,33 @@ describe('campaign rules', () => {
         lockRounds: 2,
         truceRounds: 1,
       },
+      victory: { mode: 'objectives', version: 1, publicMissions: [], holdMinutes: null, selectionMinutes: null },
     });
-    expect(parseRules({ draft: {} })).toEqual(DEFAULT_RULES);
-    expect(parseRules(undefined)).toEqual(DEFAULT_RULES);
+    expect(parseRules({ draft: {}, victory: { mode: 'objectives' } })).toEqual(DEFAULT_RULES);
   });
 
   it('fills war settings into rules stored before they existed', () => {
     const stored = { maxPlayers: 4, draft: { mode: 'free' } };
     expect(parseRules(stored).war).toEqual(DEFAULT_RULES.war);
+  });
+
+  it('reads rules stored before victory missions as open-ended, never as Objectives', () => {
+    const stored = { maxPlayers: 4, draft: { mode: 'free' }, war: { pace: 'live' } };
+    expect(parseRules(stored).victory).toEqual({
+      mode: 'open',
+      version: 1,
+      publicMissions: [],
+      holdMinutes: null,
+      selectionMinutes: null,
+    });
+    expect(parseRules(undefined).victory.mode).toBe('open');
+  });
+
+  it('validates the public missions stored with the rules', () => {
+    const victory = { mode: 'objectives', publicMissions: [{ kind: 'expansion', gain: 15 }] };
+    expect(parseRules({ victory }).victory.publicMissions).toEqual([{ kind: 'expansion', gain: 15 }]);
+    expect(() => parseRules({ victory: { publicMissions: [{ kind: 'expansion' }] } })).toThrow();
+    expect(() => parseRules({ victory: { publicMissions: [{ kind: 'northern_passage' }] } })).toThrow();
   });
 
   it('rejects out-of-range player counts', () => {

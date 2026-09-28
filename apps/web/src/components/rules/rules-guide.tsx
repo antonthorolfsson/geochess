@@ -9,14 +9,21 @@ import {
   HOME_TURF_PCT,
   LIVE_CLOCKS,
   MIN_PLAYERS,
+  MISSIONS,
   MODIFIER_CAP_PCT,
+  PUBLIC_MISSION_KINDS,
   REPUTATION_BROKEN,
   REPUTATION_PER_ROUND,
   REPUTATION_START,
   RESPONSE_WINDOW_TEXT,
+  SECRET_MISSION_KINDS,
   SUPPLY_LINE_PCT,
   TERRAIN_PCT,
+  durationText,
+  holdMs,
+  missionRules,
   refillTokens,
+  selectionMs,
   stakeFloor,
   type CampaignRules,
 } from '@empire/rules';
@@ -75,7 +82,7 @@ export function RulesGuide(props: RulesGuideProps) {
     { id: 'after', label: 'After a war' },
     { id: 'diplomacy', label: 'Diplomacy' },
     { id: 'deadlines', label: 'Deadlines' },
-    { id: 'ending', label: 'How it ends' },
+    { id: 'ending', label: 'Winning' },
     ...(standard ? [{ id: 'settings', label: 'Settings' }] : []),
   ];
   return (
@@ -105,12 +112,7 @@ export function RulesGuide(props: RulesGuideProps) {
         <AfterWar rules={rules} standard={standard} />
         <Diplomacy rules={rules} standard={standard} />
         <Deadlines rules={rules} standard={standard} />
-        <Section id="ending" title="How it ends">
-          <p>
-            Campaigns have no fixed end: play for as long as your group likes. The standings rank empires by total
-            value, and every empire's page keeps its history, war record and chess profile.
-          </p>
-        </Section>
+        <Victory rules={rules} standard={standard} />
         {standard && settings}
       </div>
     </Level>
@@ -247,13 +249,30 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
         </>
       ),
     },
+    ...(rules.victory.mode === 'objectives'
+      ? [
+          {
+            stage: 'Secret missions',
+            text: (
+              <>
+                Each player privately chooses one of up to three secret missions dealt to fit their empire, within{' '}
+                {durationText(selectionMs(rules))}. Nobody else sees the options or the choice. See{' '}
+                <InlineLink href="#ending">Winning</InlineLink>.
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       stage: 'War',
       text: (
         <>
-          Round 1 starts the moment the draft ends, and everyone gets{' '}
-          {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves in rounds, and the
-          host starts each one.
+          Round 1 starts{' '}
+          {rules.victory.mode === 'objectives' ? 'once everyone has a secret mission' : 'the moment the draft ends'},
+          and everyone gets {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves
+          in rounds, and the host starts each one.
+          {rules.victory.mode === 'objectives' &&
+            ` The first to ${missionRules(rules.victory.version).points.toWin} victory points wins.`}
         </>
       ),
     },
@@ -740,6 +759,134 @@ function Diplomacy({ rules, standard }: { rules: CampaignRules; standard: boolea
   );
 }
 
+function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
+  if (rules.victory.mode === 'open') {
+    return (
+      <Section id="ending" title="Winning">
+        <p>
+          This campaign is open-ended: play for as long as your group likes. The standings rank empires by total value,
+          and every empire's page keeps its history, war record and chess profile.
+        </p>
+      </Section>
+    );
+  }
+  const cfg = missionRules(rules.victory.version);
+  const { points } = cfg;
+  const hold = durationText(holdMs(rules));
+  const holdOther = standard
+    ? ` (${durationText(cfg.holdMinutes[rules.war.pace === 'live' ? 'correspondence' : 'live'] * 60_000)} in ${
+        rules.war.pace === 'live' ? 'correspondence' : 'live'
+      } campaigns)`
+    : '';
+  const chosen = rules.victory.publicMissions.map((m) => MISSIONS[m.kind].name);
+  const secretKinds = SECRET_MISSION_KINDS.filter((k) => k !== 'measured_expansion');
+  return (
+    <Section id="ending" title="Winning">
+      <p className="text-lg">
+        The first to {points.toWin} victory points wins. Four public missions are worth {points.public} points each and
+        every player has one secret mission worth {points.secret}: two public missions and the secret make{' '}
+        {points.public * 2 + points.secret}, and all four public ones make {points.public * 4}, so a player can win
+        without their secret.
+        {!standard && ' (The host can instead make a campaign open-ended in the lobby: no missions and no fixed end.)'}
+      </p>
+      <Part title="Public missions">
+        <p>
+          Everyone can see them from the lobby on, with their exact targets, and everyone can score each one once:
+          someone else scoring a mission takes nothing from you. Countries you draft count toward them, but nothing
+          scores during the draft.
+        </p>
+        {standard ? (
+          <>
+            <p>
+              New campaigns play Expansion, Strategic Positions, The Great Connection and Campaign Veteran. The host can
+              pick any other four before the draft, and draw new targets for them:
+            </p>
+            <MissionList kinds={PUBLIC_MISSION_KINDS} />
+          </>
+        ) : (
+          <p>
+            This campaign plays {chosen.join(', ')}. Their targets are in the <UI>Missions</UI> tab, which can show each
+            one on the map.
+          </p>
+        )}
+      </Part>
+      <Part title="Secret missions">
+        <p>
+          When the draft ends, each player is dealt up to three secret options that fit their empire (each at least two
+          conquests from done), chooses one within {durationText(selectionMs(rules))}, and can't change it. Anyone still
+          choosing when time runs out gets the best fit. Other players see only that you're ready.
+        </p>
+        <p>
+          A secret mission is revealed to everyone, with its exact targets, when you come within one step of it: for
+          most missions, holding all but one target, or one conquest away. Completing it always reveals it. Once
+          revealed it stays public, even if you lose ground.
+        </p>
+        <MissionList kinds={secretKinds} />
+        <p className="text-muted">
+          If fewer than three fit, Measured Expansion fills in: gain {cfg.measuredExpansion.gain} value over your draft,
+          with {cfg.measuredExpansion.newCount} new countries. If nothing fits at all, the host decides whether that
+          player goes on without one.
+        </p>
+      </Part>
+      <Part title="Claims: holding a position">
+        <p>
+          Most missions are positions to hold. When you complete one, it becomes a public claim, and every player can
+          see what you must hold. It scores only when all of these are true:
+        </p>
+        <Bullets>
+          <li>
+            the round after next has started: a claim made in round 3 can score from round 5, never sooner, so every
+            rival gets a whole round to respond;
+          </li>
+          <li>
+            at least {hold}
+            {holdOther} have passed since the next round started, so a host can't rush the rounds (the host can make
+            this time longer in the lobby, never shorter);
+          </li>
+          <li>you have held it the whole time; and</li>
+          <li>no war you're in could still break it. A war that can't touch it doesn't matter.</li>
+        </Bullets>
+        <p>
+          Lose the position and the claim ends; complete it again and a new claim starts. Swapping which targets you
+          hold doesn't end a claim, as long as the mission never stops being complete. Campaign Veteran is a record, not
+          a position: it scores the moment you win the third war.
+        </p>
+      </Part>
+      <Part title="Points and the finish">
+        <p>
+          Points are never taken away: losing a country after a mission has scored costs nothing. When several players
+          reach {points.toWin} with the same change, the highest total wins, and equal totals share the victory.
+        </p>
+        <p>
+          The campaign then ends and can no longer change: wars still underway are cancelled without a winner (their
+          moves are kept), tokens offered as tribute go back, and every secret mission is revealed in the final results.
+        </p>
+      </Part>
+    </Section>
+  );
+}
+
+function MissionList({ kinds }: { kinds: readonly (keyof typeof MISSIONS)[] }) {
+  return (
+    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+      {kinds.map((kind) => (
+        <div key={kind} className="border-b border-line pb-2">
+          <dt className="font-semibold">
+            {MISSIONS[kind].name}
+            {MISSIONS[kind].long && (
+              <span className="ml-2 text-xs font-normal text-muted uppercase">Long campaign</span>
+            )}
+            {MISSIONS[kind].freeDraftOnly && (
+              <span className="ml-2 text-xs font-normal text-muted uppercase">Free drafts</span>
+            )}
+          </dt>
+          <dd className="text-[0.95rem] text-muted">{MISSIONS[kind].summary}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
   const answer = RESPONSE_WINDOW_TEXT[war.pace];
@@ -749,6 +896,15 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
     ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],
     ['A player answers an accord proposal', answer, 'The proposal lapses.'],
     ['A player moves', war.pace === 'live' ? 'Their clock' : perMoveText(war.hoursPerMove), 'They lose the game.'],
+    ...(rules.victory.mode === 'objectives'
+      ? [
+          [
+            'A player chooses a secret mission',
+            durationText(selectionMs(rules)),
+            'The option that fits them best is chosen for them.',
+          ] as [string, string, string],
+        ]
+      : []),
   ];
   return (
     <Section id="deadlines" title="Deadlines at a glance">

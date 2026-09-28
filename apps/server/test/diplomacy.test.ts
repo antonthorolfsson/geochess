@@ -49,7 +49,10 @@ async function setup({ status = 'active' }: { status?: 'lobby' | 'active' } = {}
   const ann = await signIn(server.app, 'Ann');
   const bo = await signIn(server.app, 'Bo');
   const cy = await signIn(server.app, 'Cy');
-  const { body } = await ann.post<{ id: string }>('/api/campaigns', { name: 'Diplomacy' });
+  const { body } = await ann.post<{ id: string }>('/api/campaigns', {
+    name: 'Diplomacy',
+    rules: { victory: { mode: 'open' } },
+  });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;
   await bo.post(`/api/invites/${inviteCode}/join`);

@@ -41,7 +41,11 @@ const FOOLS_MATE = 'f2f3 e7e5 g2g4 d8h4'.split(' ');
 async function setup(rules: CampaignRulesInput = {}, tokens = 1) {
   const ann = await signIn(server.app, 'Ann');
   const bo = await signIn(server.app, 'Bo');
-  const { body } = await ann.post<{ id: string }>('/api/campaigns', { name: 'War Room', rules });
+  // Set up by hand as an open-ended campaign: victory missions start from a draft.
+  const { body } = await ann.post<{ id: string }>('/api/campaigns', {
+    name: 'War Room',
+    rules: { victory: { mode: 'open' }, ...rules },
+  });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;
   await bo.post(`/api/invites/${inviteCode}/join`);

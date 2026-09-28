@@ -131,7 +131,7 @@ function GameBoard({
       lastMove: last ? ([last.slice(0, 2), last.slice(2, 4)] as Key[]) : undefined,
       check: chess.isCheck(),
       coordinates: true,
-      viewOnly: myColor === null || game.status === 'finished',
+      viewOnly: myColor === null || game.status === 'finished' || game.status === 'cancelled',
       animation: { enabled: !reducedMotion(), duration: 180 },
       movable: {
         free: false,
@@ -220,6 +220,9 @@ function GameBoard({
       )}
       {game.status === 'waiting' && (
         <Notice>This game starts when both players have finished their other games.</Notice>
+      )}
+      {game.status === 'cancelled' && (
+        <Notice>The campaign ended before this game did. The moves stand; there is no result.</Notice>
       )}
       {error && <Notice tone="error">{error}</Notice>}
 

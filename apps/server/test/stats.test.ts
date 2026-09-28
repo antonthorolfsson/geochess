@@ -39,7 +39,10 @@ const FOOLS_MATE = 'f2f3 e7e5 g2g4 d8h4'.split(' ');
 async function setup(rules: CampaignRulesInput = {}) {
   const ann = await signIn(server.app, 'Ann');
   const bo = await signIn(server.app, 'Bo');
-  const { body } = await ann.post<{ id: string }>('/api/campaigns', { name: 'Records', rules });
+  const { body } = await ann.post<{ id: string }>('/api/campaigns', {
+    name: 'Records',
+    rules: { victory: { mode: 'open' }, ...rules },
+  });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;
   await bo.post(`/api/invites/${inviteCode}/join`);
@@ -163,7 +166,10 @@ describe('empire statistics', () => {
   it('follow the draft as it happens, from the lobby on', async () => {
     const ann = await signIn(server.app, 'Ann');
     const bo = await signIn(server.app, 'Bo');
-    const { body } = await ann.post<{ id: string }>('/api/campaigns', { name: 'Draft Records' });
+    const { body } = await ann.post<{ id: string }>('/api/campaigns', {
+      name: 'Draft Records',
+      rules: { victory: { mode: 'open' } },
+    });
     const id = body.id;
     const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;
     await bo.post(`/api/invites/${inviteCode}/join`);

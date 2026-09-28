@@ -28,6 +28,9 @@ describe('rules in words', () => {
   it('lists the settings a campaign plays with', () => {
     const standard = Object.fromEntries(settingsList(DEFAULT_RULES).map((s) => [s.label, s.value]));
     expect(standard).toMatchObject({
+      Victory: 'First to 7 points',
+      'Claims are held': '24 hours after the next round starts',
+      'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
       'Time to answer': '24 hours',
       'War tokens': '1 a round, up to 3',
@@ -35,7 +38,11 @@ describe('rules in words', () => {
       'Lock on won countries': '2 rounds',
     });
     const live = parseRules({ war: { pace: 'live', draws: 'armageddon', truceRounds: 0, clockModifiers: false } });
-    expect(Object.fromEntries(settingsList(live).map((s) => [s.label, s.value]))).toMatchObject({
+    const liveSettings = Object.fromEntries(settingsList(live).map((s) => [s.label, s.value]));
+    // Rules stored without a victory setting are an open-ended campaign.
+    expect(liveSettings.Victory).toBe('Open-ended');
+    expect(liveSettings['Claims are held']).toBeUndefined();
+    expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',
       'Time to answer': '5 minutes',

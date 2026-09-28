@@ -16,7 +16,7 @@ async function setup(start = true) {
   const bo = await signIn(server.app, 'Bo');
   const created = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Lists',
-    rules: { draft: { mode: 'free' } },
+    rules: { draft: { mode: 'free' }, victory: { mode: 'open' } },
   });
   const id = created.body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

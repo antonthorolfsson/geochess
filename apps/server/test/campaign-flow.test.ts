@@ -67,7 +67,12 @@ describe('lobby', () => {
     const ann = await signIn(server.app, 'Ann');
     const c = await createCampaign(ann, { name: '  Iron Winter  ', rules: { draft: { mode: 'free' } } });
     expect(c).toMatchObject({ name: 'Iron Winter', status: 'lobby', hostId: 'dev_ann' });
-    expect(c.rules).toEqual({ ...DEFAULT_RULES, draft: { mode: 'free' } });
+    const { victory, ...rules } = c.rules;
+    const { victory: _victory, ...defaults } = DEFAULT_RULES;
+    expect(rules).toEqual({ ...defaults, draft: { mode: 'free' } });
+    // New campaigns play Objectives, with public missions ready to see in the lobby.
+    expect(victory.mode).toBe('objectives');
+    expect(victory.publicMissions.length).toBeGreaterThan(0);
     expect(c.members.map((m) => [m.userId, m.color])).toEqual([['dev_ann', 0]]);
 
     const list = await ann.get<CampaignSummary[]>('/api/campaigns');
@@ -79,7 +84,13 @@ describe('lobby', () => {
     const c = await createCampaign(ann, { name: 'Rules', rules: { draft: { mode: 'free' } } });
     expect((await ann.patch(`/api/campaigns/${c.id}`, { rules: { maxPlayers: 4 } })).status).toBe(200);
     const after = await ann.get<CampaignView>(`/api/campaigns/${c.id}`);
-    expect(after.body.rules).toEqual({ ...DEFAULT_RULES, maxPlayers: 4, draft: { mode: 'free' } });
+    expect({ ...after.body.rules, victory: null }).toEqual({
+      ...DEFAULT_RULES,
+      maxPlayers: 4,
+      draft: { mode: 'free' },
+      victory: null,
+    });
+    expect(after.body.rules.victory).toEqual(c.rules.victory);
     expect((await ann.patch(`/api/campaigns/${c.id}`, { rules: { maxPlayers: 12 } })).status).toBe(400);
   });
 
@@ -138,7 +149,7 @@ describe('draft', () => {
   async function draftingCampaign(mode: 'contiguous' | 'free' = 'contiguous') {
     const ann = await signIn(server.app, 'Ann');
     const bo = await signIn(server.app, 'Bo');
-    const c = await createCampaign(ann, { name: 'Draft', rules: { draft: { mode } } });
+    const c = await createCampaign(ann, { name: 'Draft', rules: { draft: { mode }, victory: { mode: 'open' } } });
     await bo.post(`/api/invites/${c.inviteCode}/join`);
     return { ann, bo, id: c.id };
   }

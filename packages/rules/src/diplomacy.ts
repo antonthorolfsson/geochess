@@ -182,7 +182,8 @@ export const PROPOSAL_REJECTION_MESSAGES: Record<ProposalRejection, string> = {
 };
 
 /** Whether accords can be proposed and signed: from the draft on, until the campaign ends. */
-export const diplomacyOpen = (status: CampaignStatus) => status === 'draft' || status === 'active';
+export const diplomacyOpen = (status: CampaignStatus) =>
+  status === 'draft' || status === 'selection' || status === 'active';
 
 /**
  * Why `proposerId` can't propose an accord to `partnerId`, or null if they can. An accord already

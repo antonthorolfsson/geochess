@@ -162,11 +162,11 @@ describe('war record', () => {
 
   it('counts wars by side and outcome', () => {
     const ann = warRecord(ANN, wars, resolutions);
-    expect(ann.attacking).toEqual({ won: 1, lost: 0, drawn: 1, tribute: 1, withdrawn: 1, underway: 0 });
-    expect(ann.defending).toEqual({ won: 1, lost: 0, drawn: 0, tribute: 0, withdrawn: 0, underway: 1 });
+    expect(ann.attacking).toEqual({ won: 1, lost: 0, drawn: 1, tribute: 1, withdrawn: 1, cancelled: 0, underway: 0 });
+    expect(ann.defending).toEqual({ won: 1, lost: 0, drawn: 0, tribute: 0, withdrawn: 0, cancelled: 0, underway: 1 });
     const bo = warRecord(BO, wars, resolutions);
-    expect(bo.attacking).toEqual({ won: 0, lost: 1, drawn: 0, tribute: 0, withdrawn: 0, underway: 1 });
-    expect(bo.defending).toEqual({ won: 0, lost: 1, drawn: 1, tribute: 1, withdrawn: 1, underway: 0 });
+    expect(bo.attacking).toEqual({ won: 0, lost: 1, drawn: 0, tribute: 0, withdrawn: 0, cancelled: 0, underway: 1 });
+    expect(bo.defending).toEqual({ won: 0, lost: 1, drawn: 1, tribute: 1, withdrawn: 1, cancelled: 0, underway: 0 });
   });
 
   it('lists countries won and lost, and tribute tokens', () => {

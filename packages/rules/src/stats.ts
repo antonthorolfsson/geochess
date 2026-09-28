@@ -174,7 +174,15 @@ export function acquisitions(
 // ---------------------------------------------------------------------------------------------
 // Wars and accords
 
-const emptyWarTally = (): WarTally => ({ won: 0, lost: 0, drawn: 0, tribute: 0, withdrawn: 0, underway: 0 });
+const emptyWarTally = (): WarTally => ({
+  won: 0,
+  lost: 0,
+  drawn: 0,
+  tribute: 0,
+  withdrawn: 0,
+  cancelled: 0,
+  underway: 0,
+});
 
 /** What each outcome counts as for the attacker and for the defender. */
 const OUTCOME_COUNTS: Record<WarOutcome, readonly [attacker: keyof WarTally, defender: keyof WarTally]> = {
@@ -183,6 +191,7 @@ const OUTCOME_COUNTS: Record<WarOutcome, readonly [attacker: keyof WarTally, def
   held: ['drawn', 'drawn'],
   tribute: ['tribute', 'tribute'],
   withdrawn: ['withdrawn', 'withdrawn'],
+  cancelled: ['cancelled', 'cancelled'],
 };
 
 export function warRecord(userId: UserId, wars: readonly WarFacts[], resolutions: readonly Resolution[]): WarRecord {

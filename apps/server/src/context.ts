@@ -20,6 +20,11 @@ export interface AppContext {
   log: FastifyBaseLogger;
   /** The current time. Injectable so tests can step through deadlines. */
   now(): Date;
+  /**
+   * A uniform number in [0, 1): crypto-backed in production, injectable so tests can deal
+   * predictable missions. Seeds for secret missions are drawn from it and kept server-side.
+   */
+  random(): number;
   /** Per-campaign serialization of state changes. */
   locks: KeyedMutex;
   /** Per-game serialization of moves. Taken before a campaign lock, never inside one. */

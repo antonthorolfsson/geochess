@@ -8,7 +8,7 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (269 tests).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (384 tests since victory missions).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -151,9 +151,113 @@ Tests: rules 117, data 53, web 30, server 69.
 - The contents chips are `<Link href="#…">`, not plain anchors: a native fragment navigation pushes a
   history entry Next's router ignores, which broke the back button. Pages that render after their
   data loads scroll to the address's `#section` themselves (`useScrollToHash`).
-- "How it ends" says campaigns have no fixed end, since nothing sets a campaign to `finished` yet.
+- "How it ends" said campaigns have no fixed end; it is now "Winning" (see below).
 
 Tests: web 34.
+
+**Victory missions** (2026-09-28, from
+[GeoChess_victory_conditions_coding_prompt.md](GeoChess_victory_conditions_coding_prompt.md);
+not committed yet):
+
+- **Modes.** `rules.victory.mode`: `objectives` for new campaigns (`DEFAULT_RULES`), `open` for
+  any stored rules without a `victory` key, so campaigns from before are unchanged. The host can
+  switch in the lobby. Holding and choosing times are lobby settings (null means the pace's
+  default: 24 h / 10 min to hold, 24 h / 5 min to choose), locked with the rules. The default
+  hold is also the least (`holdTimeIssue`), since the host starts rounds; changing the pace puts
+  both times back to the new pace's defaults (`mergeRules`).
+- **Catalog and numbers.** `packages/rules/src/victory/catalog.ts`: 10 public and 12 secret kinds
+  plus the Measured Expansion fallback, instantiated as specs (targets and thresholds filled in),
+  and `MISSION_RULES` (v1) with every threshold, generation limit, fit weight and timing default.
+  A campaign stores its version, so tuning means adding v2. Wording comes from `text.ts`
+  (`missionRequirement`, `revealRule`), shared by server notices and client cards.
+- **Evaluation.** `evaluate.ts` returns parts (one per requirement), `complete`, `near` (the
+  mission's own reveal rule; "one more conquest" means a country held by another player that
+  borders the empire, whatever tokens, truces or accords say) and evidence. History comes from
+  the event log (`victory/state.ts`): war results by event id, accord spans (renewals join up),
+  round starts. Protected Expansion counts whole rounds both accords were in force and countries
+  won from non-partners during the overlap.
+- **Lifecycle.** Draft end → `selection` (new status): baselines recorded, up to three options per
+  player from a server-private seed, persisted with their ranking; choosing is irrevocable; at the
+  deadline the rank-1 option is assigned (private notice). If nothing fits a player, the host
+  decides (`POST …/victory/proceed`). Round 1 (a `round.started` event) and tokens only come
+  when everyone is ready.
+- **Claims.** `settleVictory()` runs inside every `mutate()`, in a savepoint (`settleSafely`): if
+  it throws, the change still commits without it and the error is logged, so a scoring fault
+  can't stop wars, games or rounds (the campaign view likewise falls back to `victory: null`).
+  It first settles any game that finished while the change waited for the lock
+  (`settleFinishedGames`), then reveals (before any claim), starts, carries or interrupts claims,
+  computes blockers (`blockers.ts`: every permitted outcome of the claimant's unresolved wars,
+  combined; an unanswered declaration counts every redirect and tribute option; a war is named
+  only if its own outcome can break the claim), then awards every eligible claim of that change
+  together and checks the finish. A claim from round R scores from round R+2, once `eligibleAt`
+  (set when R+1 starts, from `campaigns.round_started_at`) has passed. The scheduler triggers one
+  check when a claim's time runs out (`time_reached`). Campaign Veteran scores at once.
+- **Notices** go through `scope.notify()`. A change that ends the campaign sends only the
+  notices marked `ending` (the result): no "war declared", "battle begun" or award notices for
+  things the ending called off.
+- **Persistence.** Migration `0006_victory`: `mission_players` (baseline, private options and
+  seed, chosen secret, reveal), `mission_claims` (one pending per player and mission, a partial
+  unique index), `mission_awards` (unique per campaign, player and mission), `campaign_results`
+  (written once); `campaigns.round_started_at`, `selection_deadline`, `finished_at`; war outcome
+  and game status `cancelled`.
+- **The end.** First to 7; crossing together goes to the higher total, equal totals share it.
+  The campaign becomes `finished`: games still underway stop first (which waits for any move
+  being saved; a war whose game ended in that moment is settled by its result), then unresolved
+  wars resolve as `cancelled` (no transfers, tribute tokens returned, games `cancelled` with
+  their moves), pending claims and proposals lapse, every secret is revealed
+  (`reason: 'final'`), and the result snapshot (with the map as it ends) is stored.
+- **Privacy.** `CampaignView.victory` is public; `mySecret` is the viewer's own. Another player's
+  unrevealed secret contributes nothing to views, events, pushes, notices or stats.
+- **Web.** A Missions tab (phones; a column tab on desktop): the race, your secret, claims with
+  what must be held, the earliest round, the holding time and any war in the way, public missions
+  with everyone's progress, revealed secrets, and the results. The lobby has a Victory section
+  (mode, the four cards with New targets, Change missions, timings). Selection happens in the
+  Missions tab. "Show on map" draws a mission's targets, what counts and routes
+  (`WorldMap`'s `mission` and `fit` props). Victory points lead the standings.
+- **Draft order** now comes from `ctx.random` (crypto in production), so tests can seed it.
+
+An independent review found no way for a secret to leak early and no scoring bug. It found
+seven smaller defects, all fixed with tests:
+
+- Consolidation took two parallel one-country links as a two-country join.
+- A claim's "waiting on" list named wars fought alongside the one that mattered.
+- A game that ended just before the change that ended the campaign had its war cancelled.
+- The change that ended a campaign still sent notices for what it called off.
+- Cancelled games read "In progress" in the war panel.
+- A fault in scoring would have blocked every change to the campaign.
+- Holding times could be set below the minimum.
+
+It also found secret options too predictable. Before the fix, a player's most frequent option
+came up for 58–100% of seeds and a rival's one-seed guess matched about 1.4 of the three. Now
+the most frequent comes up for 35–53% and a guess matches 0.2–0.9. The review left one thing as
+is: a possible raise is modelled as losing everything the attacker could stake from the
+launching country. That is conservative for every mission except Consolidation, where losing
+part of it could break a block that losing all of it wouldn't.
+
+Tests: rules 182, data 63, web 40, server 99 (`apps/server/vitest.config.ts` raises the hook
+timeout: seven in-memory databases booting at once took over 10 s on Windows).
+
+### Victory defaults taken while building (not asked; easy to change)
+
+- **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
+  continent (Regional Power); five positions worth 3–8 within four steps of a random hub, two
+  apart, over two subregions (Strategic Positions); endpoints four to six steps apart in different
+  subregions (The Great Connection); targets of different missions don't overlap. Secrets: each
+  needs 2–7 conquests (targets and the countries in the way, a greedy estimate), the nearest
+  target within 3; fit is closeness to 4 conquests, less for countries in the way, rivals past
+  two and target value past 16, plus a little seeded jitter. Dealing draws with the player's
+  private seed (`MissionRules.variety`): a kind per family from those that fit, each kind's
+  instance from its three best fits; the three are then ranked by fit (rank 1 is assigned at the
+  deadline). Drawing the best fits alone let rivals work out a player's options from the map.
+- **Two Fronts, Great Powers, Across the Seas, Consolidation** count "new" as held now and not in
+  the baseline. Consolidation with a scattered draft needs the join between drafted pieces to
+  need at least two new countries: parallel links, and a country touching several pieces, count
+  once.
+- **Unification** marks the most valuable country of two drafted pieces that need at least two
+  conquests to join; **Encirclement** routes can't pass through the center.
+- **Notices.** Reveals and claims go to every member, awards and lost claims to the player, the
+  result to everyone; tags dedupe per claim and per mission.
+- **Mission rules version 1** is the only one; the lobby can't pick another.
 
 ## Phase 2 decisions (settled with the user on 2026-09-27)
 
@@ -533,10 +637,10 @@ Smaller follow-ups, none blocking:
 
 | Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                    |
+| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                  |
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                   |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation)                                                                                                                                                                                                                                        |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                        |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results)                                                                                                                                                                             |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
 | `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
 
@@ -547,7 +651,9 @@ API: `/api/me`, `/api/auth/{dev,email,email/verify,lichess,lichess/callback,logo
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply}`,
 `/api/campaigns/:id/round/next`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
-`/api/campaigns/:id/stats`, `/api/campaigns/:id/feed?filter=&before=`, `/api/campaigns/:id/messages` (send; `?with=` reads a
+`/api/campaigns/:id/stats`, `/api/campaigns/:id/secret` (choose), `/api/campaigns/:id/victory/missions` (the host's four) and
+`…/missions/:slot/reroll`, `/api/campaigns/:id/victory/proceed`,
+`/api/campaigns/:id/feed?filter=&before=`, `/api/campaigns/:id/messages` (send; `?with=` reads a
 private conversation) and `…/messages/:messageId` (delete), `/api/campaigns/:id/chat` (unread
 counts) and `…/chat/read`, `/api/push/{key,subscribe,unsubscribe}`, `/api/invites/:code` and
 `…/join`, `/ws`.

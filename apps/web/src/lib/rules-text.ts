@@ -1,4 +1,14 @@
-import { RESPONSE_WINDOW_TEXT, raiseFloor, stakeFloor, type CampaignRules, type LiveClock } from '@empire/rules';
+import {
+  RESPONSE_WINDOW_TEXT,
+  durationText,
+  holdMs,
+  missionRules,
+  raiseFloor,
+  selectionMs,
+  stakeFloor,
+  type CampaignRules,
+  type LiveClock,
+} from '@empire/rules';
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
@@ -49,8 +59,19 @@ export function stakeTable(rules: CampaignRules): { value: number; stake: number
 
 /** The host's settings, in the words the rules use. */
 export function settingsList(rules: CampaignRules): { label: string; value: string }[] {
-  const { war } = rules;
+  const { war, victory } = rules;
+  const objectives = victory.mode === 'objectives';
   return [
+    {
+      label: 'Victory',
+      value: objectives ? `First to ${missionRules(victory.version).points.toWin} points` : 'Open-ended',
+    },
+    ...(objectives
+      ? [
+          { label: 'Claims are held', value: `${durationText(holdMs(rules))} after the next round starts` },
+          { label: 'Time to choose a secret', value: durationText(selectionMs(rules)) },
+        ]
+      : []),
     { label: 'Players', value: `Up to ${rules.maxPlayers}` },
     { label: 'Draft', value: rules.draft.mode === 'contiguous' ? 'Contiguous' : 'Free' },
     { label: 'Pace', value: war.pace === 'live' ? 'Live' : 'Correspondence' },

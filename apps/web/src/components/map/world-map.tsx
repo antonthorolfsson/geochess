@@ -46,6 +46,8 @@ export interface WorldMapProps {
   onSelect(id: TerritoryId | null): void;
   /** Set a new `nonce` to fly to a territory. */
   focus: { id: TerritoryId; nonce: number } | null;
+  /** Set a new `nonce` to frame several territories at once, such as a mission's targets. */
+  fit?: { ids: readonly TerritoryId[]; nonce: number } | null;
   /** Territories to frame when the map first appears, such as the player's empire. */
   initialFrame?: readonly TerritoryId[];
   /** Height in CSS pixels hidden behind a bottom sheet; framing and panning keep clear of it. */
@@ -57,6 +59,17 @@ export interface WorldMapProps {
   onSelectWar?(warId: string): void;
   /** A stake being built: the stake is outlined and a dashed arrow points at the target. */
   preview?: { launchId: TerritoryId; targetId: TerritoryId; stake: readonly TerritoryId[] } | null;
+  /**
+   * A victory mission called out: its targets outlined in dashes, the countries that count now
+   * filled, and a route (for connection missions) drawn through their label points.
+   */
+  mission?: MissionOverlayProps | null;
+}
+
+export interface MissionOverlayProps {
+  targets: readonly TerritoryId[];
+  held: readonly TerritoryId[];
+  path: readonly TerritoryId[] | null;
 }
 
 export interface MapWar {
@@ -167,6 +180,8 @@ export function WorldMap(props: WorldMapProps) {
     listed = [],
     wars = [],
     preview = null,
+    mission = null,
+    fit = null,
   } = props;
   const geo = useMemo(() => buildGeometry(topo, dataset), [topo, dataset]);
   const patternPrefix = svgId(useId());
@@ -313,6 +328,24 @@ export function WorldMap(props: WorldMapProps) {
     // Only react to new focus requests, not to resizes.
   }, [focus?.nonce]);
 
+  useEffect(() => {
+    const svg = svgRef.current;
+    const behavior = zoomRef.current;
+    const bounds =
+      fit &&
+      union(
+        fit.ids.flatMap((id) => {
+          const b = geo.byId.get(id)?.bounds;
+          return b ? [b] : [];
+        }),
+      );
+    if (!svg || !behavior || !bounds) return;
+    const next = clamp(frame(bounds, visibleBox(), 8));
+    if (prefersReducedMotion()) select(svg).call(behavior.transform, next);
+    else select(svg).transition().duration(650).call(behavior.transform, next);
+    // Only react to new requests, not to resizes.
+  }, [fit?.nonce]);
+
   // A country tapped low on a phone would end up under the sheet that opens; slide it into view.
   useEffect(() => {
     const svg = svgRef.current;
@@ -392,6 +425,24 @@ export function WorldMap(props: WorldMapProps) {
     () => (preview ? preview.stake.map((id) => geo.byId.get(id)?.d ?? '').join('') : ''),
     [preview, geo],
   );
+
+  const missionPaths = useMemo(() => {
+    if (!mission) return null;
+    const shapes = (ids: readonly TerritoryId[]) => ids.map((id) => geo.byId.get(id)?.d ?? '').join('');
+    const anchors = (mission.path ?? []).flatMap((id) => {
+      const anchor = geo.byId.get(id)?.anchor;
+      return anchor ? [anchor] : [];
+    });
+    return {
+      targets: shapes(mission.targets),
+      held: shapes(mission.held),
+      route: anchors.length > 1 ? `M${anchors.map(([x, y]) => `${x},${y}`).join('L')}` : '',
+      micro: mission.targets.flatMap((id) => {
+        const s = geo.byId.get(id);
+        return s?.micro ? [s] : [];
+      }),
+    };
+  }, [mission, geo]);
 
   const selected = selectedId ? geo.byId.get(selectedId) : undefined;
   const hover = hovered && hovered !== selectedId ? geo.byId.get(hovered) : undefined;
@@ -520,6 +571,62 @@ export function WorldMap(props: WorldMapProps) {
               strokeDasharray="5 3"
               pointerEvents="none"
             />
+          )}
+          {missionPaths && (
+            <g pointerEvents="none" aria-hidden="true">
+              {missionPaths.targets && (
+                <path
+                  d={missionPaths.targets}
+                  className="nss"
+                  fill="rgba(228,226,216,0.07)"
+                  stroke={PAPER}
+                  strokeWidth={1.8}
+                  strokeDasharray="6 3"
+                />
+              )}
+              {missionPaths.held && (
+                <path
+                  d={missionPaths.held}
+                  className="nss"
+                  fill="rgba(228,226,216,0.22)"
+                  stroke={PAPER}
+                  strokeWidth={2.2}
+                />
+              )}
+              {missionPaths.route && (
+                <>
+                  <path
+                    d={missionPaths.route}
+                    className="nss"
+                    fill="none"
+                    stroke={INK}
+                    strokeWidth={4.5}
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d={missionPaths.route}
+                    className="nss"
+                    fill="none"
+                    stroke={PAPER}
+                    strokeWidth={2}
+                    strokeDasharray="1 5"
+                    strokeLinecap="round"
+                  />
+                </>
+              )}
+              {missionPaths.micro.map((s) => (
+                <g key={s.id} transform={`translate(${s.anchor[0]},${s.anchor[1]})`}>
+                  <circle
+                    className="counter-scale"
+                    r={10}
+                    fill="none"
+                    stroke={PAPER}
+                    strokeWidth={1.6}
+                    strokeDasharray="3 2"
+                  />
+                </g>
+              ))}
+            </g>
           )}
           <WarArrows byId={geo.byId} wars={wars} preview={preview} onSelect={selectWar} />
           <Labels shapes={geo.shapes} scale={labelScale} showValues={showValues} />

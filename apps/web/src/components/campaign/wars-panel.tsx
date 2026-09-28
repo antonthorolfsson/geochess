@@ -87,7 +87,7 @@ function RoundStatus({ model }: { model: CampaignModel }) {
         </span>
         <span className="text-sm text-muted tabular-nums">{model.tokens}</span>
       </div>
-      {isHost && (
+      {isHost && campaign.status === 'active' && (
         <div className="space-y-1">
           <button
             type="button"

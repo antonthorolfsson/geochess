@@ -1,5 +1,6 @@
 import type { AppContext } from '../context';
 import { lapseProposals } from '../diplomacy/accords';
+import { runVictoryDeadlines } from '../victory/scheduler';
 import { armAllFlags, flagOverdueGames } from './games';
 import { expireResponses } from './service';
 
@@ -8,12 +9,14 @@ const POLL_MS = 5_000;
 
 /**
  * Everything due by now: unanswered declarations and counter-offers, flag-falls, half-settled
- * games, and accord proposals nobody answered.
+ * games, accord proposals nobody answered, secret missions not chosen in time, and claims whose
+ * holding time is up.
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
   await flagOverdueGames(ctx);
   await lapseProposals(ctx);
+  await runVictoryDeadlines(ctx);
 }
 
 /**

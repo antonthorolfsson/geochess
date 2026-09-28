@@ -112,6 +112,8 @@ export async function playMove(
   const view = await changeGame(ctx, gameId, userId, (game, chess) => {
     if (game.status === 'waiting') throw conflict('This game has not started yet.', 'not-started');
     if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
+    if (game.status === 'cancelled')
+      throw conflict('The campaign is over, so this game was called off.', 'game-cancelled');
     const mover = chess.turn;
     if (playerOf(game, mover) !== userId) throw conflict("It's not your move.", 'not-your-move');
     if (input.ply !== chess.ply) throw conflict('The position has changed. Check the board.', 'stale-move');
@@ -167,6 +169,8 @@ export async function gameAction(
   const at = ctx.now();
   return changeGame(ctx, gameId, userId, (game) => {
     if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
+    if (game.status === 'cancelled')
+      throw conflict('The campaign is over, so this game was called off.', 'game-cancelled');
     const color: Color = game.whiteId === userId ? 'white' : 'black';
     const opponentId = playerOf(game, opposite(color));
     const clocks = { clocks: clocksAt(game, at) };
@@ -207,7 +211,7 @@ export function armFlag(ctx: AppContext, game: GameRow): void {
 }
 
 /** Sends a game's new state to every member of its campaign; boards apply it without refetching. */
-async function publishGame(ctx: AppContext, game: GameRow): Promise<void> {
+export async function publishGame(ctx: AppContext, game: GameRow): Promise<void> {
   const rows = await ctx.db
     .select({ userId: members.userId })
     .from(members)

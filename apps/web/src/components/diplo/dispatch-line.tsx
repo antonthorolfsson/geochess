@@ -1,17 +1,18 @@
 'use client';
 
-import type { EventView, TerritoryId, WarView } from '@empire/rules';
+import { missionName, missionRequirement, type EventView, type TerritoryId, type WarView } from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { EmpireSwatch } from '../hatch';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 
-/** How a dispatch sits in the feed: wars in grease pencil, accords on paper, the rest plain. */
-export function dispatchTone(type: EventView['type']): 'war' | 'accord' | 'broken' | 'plain' {
+/** How a dispatch sits in the feed: wars in grease pencil, accords on paper, missions in amber, the rest plain. */
+export function dispatchTone(type: EventView['type']): 'war' | 'accord' | 'broken' | 'mission' | 'plain' {
   if (type === 'accord.broken') return 'broken';
   if (type.startsWith('war.')) return 'war';
   if (type.startsWith('accord.') || type.startsWith('reputation.')) return 'accord';
+  if (type.startsWith('mission') || type.startsWith('claim.') || type === 'campaign.won') return 'mission';
   return 'plain';
 }
 
@@ -54,7 +55,11 @@ export function DispatchLine({
   };
   switch (event.type) {
     case 'round.started':
-      return <strong>Round {event.payload.round} began. War tokens refilled.</strong>;
+      return event.payload.round === 1 ? (
+        <strong>Round 1 began: to war. Everyone has their first war token.</strong>
+      ) : (
+        <strong>Round {event.payload.round} began. War tokens refilled.</strong>
+      );
     case 'war.declared': {
       const { attackerId, defenderId, targetId, stake } = event.payload;
       return (
@@ -121,8 +126,62 @@ export function DispatchLine({
         held: `${target} held: the battle was drawn.`,
         tribute: `${name(war?.attackerId ?? null)} took tribute: ${taken || `${tokens} war ${tokens === 1 ? 'token' : 'tokens'}`}.`,
         withdrawn: `The war for ${target} was called off.`,
+        cancelled: `The war for ${target} was cancelled: the campaign ended first.`,
       }[outcome];
       return <strong>{warLine(warId, text)}</strong>;
+    }
+    case 'missions.dealt':
+      return (
+        <strong>Secret missions have been dealt. Each player chooses one, privately, before round 1 begins.</strong>
+      );
+    case 'mission.revealed': {
+      const { userId, mission, reason } = event.payload;
+      return (
+        <span>
+          <strong className="text-amber">
+            {name(userId)}’s secret mission {reason === 'final' ? 'was' : 'is'} {missionName(mission)}
+          </strong>
+          {reason === 'near' ? ', one step from completion' : reason === 'claim' ? ', now complete' : ''}:{' '}
+          {missionRequirement(mission, model.idx, { players: model.campaign.members.length })}
+        </span>
+      );
+    }
+    case 'claim.started': {
+      const { userId, kind, eligibleRound } = event.payload;
+      return (
+        <span>
+          <strong>
+            {name(userId)} claims {missionName({ kind })}
+          </strong>
+          : it can score in round {eligibleRound} at the earliest, if it’s still held then and no war can break it.
+        </span>
+      );
+    }
+    case 'claim.interrupted': {
+      const { userId, kind } = event.payload;
+      return (
+        <span className="text-muted">
+          {name(userId)} lost the position claimed for {missionName({ kind })} before it scored.
+        </span>
+      );
+    }
+    case 'mission.awarded': {
+      const { userId, kind, points, total } = event.payload;
+      return (
+        <strong className="text-amber">
+          {name(userId)} scored {missionName({ kind })}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
+        </strong>
+      );
+    }
+    case 'campaign.won': {
+      const winners = event.payload.winners.map((id) => name(id));
+      return (
+        <strong className="font-stencil text-lg tracking-wide text-amber">
+          {winners.length > 1
+            ? `${winners.slice(0, -1).join(', ')} and ${winners.at(-1)} share the victory.`
+            : `${winners[0]} wins the campaign.`}
+        </strong>
+      );
     }
     case 'accord.signed': {
       const { proposerId, recipientId, endsRound, terms, renews } = event.payload;

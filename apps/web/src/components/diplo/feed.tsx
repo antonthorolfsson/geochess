@@ -25,6 +25,7 @@ const TONE_BORDER = {
   war: 'border-grease/70',
   broken: 'border-grease',
   accord: 'border-paper/55',
+  mission: 'border-amber/70',
   plain: 'border-line-strong',
 } as const;
 

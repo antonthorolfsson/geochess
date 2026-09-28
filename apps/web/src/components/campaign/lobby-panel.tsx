@@ -20,10 +20,20 @@ import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
 import { EmpireSwatch } from '../hatch';
 import { Notice, Toggle } from '../ui';
+import { LobbyMissions } from '../victory/lobby-missions';
+import type { MissionFocus } from '../victory/missions-panel';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
 
-export function LobbyPanel({ model, onSelect }: { model: CampaignModel; onSelect(id: TerritoryId): void }) {
+export function LobbyPanel({
+  model,
+  onSelect,
+  onShowOnMap,
+}: {
+  model: CampaignModel;
+  onSelect(id: TerritoryId): void;
+  onShowOnMap(focus: MissionFocus): void;
+}) {
   const { campaign, isHost, me } = model;
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -49,6 +59,7 @@ export function LobbyPanel({ model, onSelect }: { model: CampaignModel; onSelect
 
   const takenBy = new Map(campaign.members.map((m) => [m.color, m]));
   const enough = campaign.members.length >= MIN_PLAYERS;
+  const missionsReady = !campaign.victory || campaign.victory.publicMissions.length === 4;
 
   return (
     <div className="space-y-6 p-4">
@@ -125,6 +136,13 @@ export function LobbyPanel({ model, onSelect }: { model: CampaignModel; onSelect
 
       <RulesSection model={model} onSave={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))} />
 
+      <LobbyMissions
+        model={model}
+        onSaveRules={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))}
+        onSelectCountry={onSelect}
+        onShowOnMap={onShowOnMap}
+      />
+
       <DraftListSection model={model} onSelect={onSelect} />
 
       {error && <Notice tone="error">{error}</Notice>}
@@ -135,15 +153,17 @@ export function LobbyPanel({ model, onSelect }: { model: CampaignModel; onSelect
             <button
               type="button"
               className="btn btn-primary w-full"
-              disabled={!enough || action.isPending}
+              disabled={!enough || !missionsReady || action.isPending}
               onClick={() => run(() => api.startDraft(campaign.id))}
             >
               Start the draft
             </button>
             <p className="text-sm text-muted">
-              {enough
-                ? 'The pick order is drawn at random and snakes back each round. Everyone can join until you start.'
-                : `You need at least ${MIN_PLAYERS} players. Share the invite link to fill the table.`}
+              {!enough
+                ? `You need at least ${MIN_PLAYERS} players. Share the invite link to fill the table.`
+                : !missionsReady
+                  ? 'Choose four public missions first, or play open-ended.'
+                  : 'The pick order is drawn at random and snakes back each round. Everyone can join until you start. The rules and missions lock when you do.'}
             </p>
           </>
         ) : (

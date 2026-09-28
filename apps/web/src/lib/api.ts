@@ -14,6 +14,7 @@ import type {
   MessageView,
   MessagesPage,
   ProposeAccordInput,
+  PublicMissionKind,
   SendMessageInput,
   WarReply,
   WarResponse,
@@ -125,6 +126,12 @@ export const api = {
     request('POST', `/campaigns/${id}/chat/read`, { with: peerId, lastId }),
 
   stats: (id: string) => request<CampaignStats>('GET', `/campaigns/${id}/stats`),
+
+  chooseSecret: (id: string, optionId: string) => request('POST', `/campaigns/${id}/secret`, { optionId }),
+  setPublicMissions: (id: string, kinds: PublicMissionKind[]) =>
+    request('PUT', `/campaigns/${id}/victory/missions`, { kinds }),
+  rerollMission: (id: string, slot: number) => request('POST', `/campaigns/${id}/victory/missions/${slot}/reroll`),
+  proceedWithoutSecrets: (id: string) => request('POST', `/campaigns/${id}/victory/proceed`),
 
   game: (gameId: string) => request<GameView>('GET', `/games/${gameId}`),
   move: (gameId: string, uci: string, ply: number) => request<GameView>('POST', `/games/${gameId}/move`, { uci, ply }),

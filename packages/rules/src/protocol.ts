@@ -5,9 +5,19 @@ import type { TerritoryId } from './dataset';
 import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
 import type { Opening } from './openings';
+import type { MissionSpec, SecretMissionSpec } from './victory/catalog';
+import type { Evaluation } from './victory/evaluate';
+import type { EffortEstimate } from './victory/generate';
 import type { Transfer, Truce, WarCounter, WarOutcome } from './war';
 
-export type CampaignStatus = 'lobby' | 'draft' | 'active' | 'finished';
+/**
+ * - `lobby`: players join and the host sets the rules.
+ * - `draft`: players claim countries in turn.
+ * - `selection`: Objectives campaigns only: each player chooses a secret mission before round 1.
+ * - `active`: at war, round by round.
+ * - `finished`: someone reached the victory points needed; nothing more can change.
+ */
+export type CampaignStatus = 'lobby' | 'draft' | 'selection' | 'active' | 'finished';
 
 export interface SessionUser {
   id: string;
@@ -120,7 +130,40 @@ export type CampaignEvent =
   | {
       type: 'reputation.earned';
       payload: { heldRound: number; gains: { userId: string; delta: number; reputation: number }[] };
-    };
+    }
+  /** The draft ended in an Objectives campaign: secret missions were dealt, to be chosen by `deadline`. */
+  | { type: 'missions.dealt'; payload: { deadline: string } }
+  /**
+   * A secret mission became public: its player came within one step of it (`near`), completed it
+   * (`claim`), or the campaign ended (`final`). Carries the mission's exact requirements.
+   */
+  | {
+      type: 'mission.revealed';
+      payload: { userId: string; mission: SecretMissionSpec; reason: 'near' | 'claim' | 'final' };
+    }
+  /** A player completed a territorial mission and must now hold it through the response window. */
+  | {
+      type: 'claim.started';
+      payload: {
+        claimId: number;
+        userId: string;
+        missionKey: string;
+        kind: MissionSpec['kind'];
+        eligibleRound: number;
+      };
+    }
+  /** The claimed position was lost before it scored. The points are still there to win. */
+  | {
+      type: 'claim.interrupted';
+      payload: { claimId: number; userId: string; missionKey: string; kind: MissionSpec['kind'] };
+    }
+  /** Points awarded for a mission, for good. `total` is the player's points after it. */
+  | {
+      type: 'mission.awarded';
+      payload: { userId: string; missionKey: string; kind: MissionSpec['kind']; points: number; total: number };
+    }
+  /** The campaign is won (by several players when they tie) and over. */
+  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number> } };
 
 export type CampaignEventType = CampaignEvent['type'];
 
@@ -185,6 +228,127 @@ export interface CampaignView {
    * the two players see.
    */
   accords: AccordView[];
+  /** Victory missions and points, in Objectives campaigns; null in open-ended ones. Public. */
+  victory: VictoryView | null;
+  /** The viewer's own secret mission (or options to choose from). Private: nobody else sees it. */
+  mySecret: MySecretView | null;
+}
+
+/** A mission a campaign plays with: public ones are keyed by slot (`p0`…), a secret one `secret`. */
+export interface MissionView {
+  key: string;
+  scope: 'public' | 'secret';
+  points: number;
+  spec: MissionSpec;
+}
+
+/**
+ * A claim on a territorial mission: from the moment it's complete until it scores or the position
+ * is lost. It can score from `eligibleRound` on, once `eligibleAt` has passed and no war could
+ * still break it.
+ */
+export interface ClaimView {
+  id: number;
+  userId: string;
+  missionKey: string;
+  status: 'pending' | 'awarded' | 'interrupted' | 'cancelled';
+  startedRound: number;
+  startedAt: string;
+  eligibleRound: number;
+  /** When the minimum holding time is up; set when the round after the claim's starts. */
+  eligibleAt: string | null;
+  /** Unresolved wars (by id) that could still break the position. */
+  blockedBy: string[];
+}
+
+export interface AwardView {
+  userId: string;
+  missionKey: string;
+  kind: MissionSpec['kind'];
+  points: number;
+  round: number;
+  awardedAt: string;
+}
+
+export interface RevealedSecretView {
+  mission: MissionView;
+  revealedRound: number;
+  revealedAt: string;
+  reason: 'near' | 'claim' | 'final';
+}
+
+export interface VictoryPlayerView {
+  userId: string;
+  points: number;
+  awards: AwardView[];
+  /** While secret missions are being chosen: whether this player has one. */
+  ready: boolean;
+  /** Their secret mission, once revealed. Until then nobody else learns anything about it. */
+  secret: RevealedSecretView | null;
+  /**
+   * Where they stand on each public mission (and a revealed secret), by mission key. Empty until
+   * the war begins.
+   */
+  progress: Record<string, Evaluation>;
+}
+
+export interface VictoryResultView {
+  winners: string[];
+  round: number;
+  finishedAt: string;
+  /** Every player, most points first. Secret missions are all revealed here, done or not. */
+  standings: {
+    userId: string;
+    points: number;
+    value: number;
+    countries: number;
+    awards: AwardView[];
+    secret: { mission: MissionView; completed: boolean } | null;
+  }[];
+  /** The map when the campaign ended. */
+  holdings: Record<TerritoryId, string>;
+}
+
+export interface VictoryView {
+  /** The mission rules version the campaign plays by. */
+  version: number;
+  pointsToWin: number;
+  publicPoints: number;
+  secretPoints: number;
+  /** The least time a claim is held after the next round starts. */
+  holdMs: number;
+  publicMissions: MissionView[];
+  players: VictoryPlayerView[];
+  /** Claims waiting to score. */
+  claims: ClaimView[];
+  /** While secret missions are being chosen. */
+  selection: {
+    deadline: string | null;
+    /** Players no secret option fitted: the host decides whether to go on without one. */
+    unresolved: string[];
+  } | null;
+  result: VictoryResultView | null;
+}
+
+export interface SecretOptionView {
+  id: string;
+  /** 1 is the best fit, assigned if no choice is made in time. */
+  rank: number;
+  spec: SecretMissionSpec;
+  estimate: EffortEstimate;
+}
+
+export interface MySecretView {
+  /** The options to choose from, until one is chosen. Never shown again after. */
+  options: SecretOptionView[] | null;
+  mission: MissionView | null;
+  /** Assigned automatically because time ran out. */
+  auto: boolean;
+  /** Nothing fitted and the host went on without a secret mission for this player. */
+  none: boolean;
+  revealed: boolean;
+  /** Where the player stands on it, once the war has begun. */
+  progress: Evaluation | null;
 }
 
 export interface AccordView {
@@ -323,8 +487,9 @@ export interface DeclareWarInput {
  * - `waiting`: a live game queued until both players are free.
  * - `playing`: underway (live games open with a short countdown, see `startsAt`).
  * - `finished`: see `result` and `reason`.
+ * - `cancelled`: the campaign ended first. The moves stand; there is no result.
  */
-export type GameStatus = 'waiting' | 'playing' | 'finished';
+export type GameStatus = 'waiting' | 'playing' | 'finished' | 'cancelled';
 
 export interface GameSummary {
   id: string;
@@ -416,6 +581,8 @@ export interface WarTally {
   tribute: number;
   /** Called off by the attacker (or their silence). */
   withdrawn: number;
+  /** Cut short when the campaign ended: neither won nor lost. */
+  cancelled: number;
   underway: number;
 }
 

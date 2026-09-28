@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CURRENT_MISSION_RULES, VICTORY_MODES, publicMissionSpecSchema } from './victory/catalog';
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
@@ -54,17 +55,63 @@ export const warRulesSchema = z.object({
   truceRounds: z.number().int().min(0).max(5).default(1),
 });
 
+/**
+ * Longer holding times the host can pick besides the pace's default, by pace, in minutes. The
+ * default is also the least: rounds are the host's to start, so the time is what stops a rushed
+ * round from cutting the response window short.
+ */
+export const HOLD_MINUTE_OPTIONS: Record<Pace, readonly number[]> = {
+  live: [15, 30, 60],
+  correspondence: [48 * 60, 72 * 60],
+};
+/** Times to choose a secret mission the host can pick besides the pace's default, by pace, in minutes. */
+export const SELECTION_MINUTE_OPTIONS: Record<Pace, readonly number[]> = {
+  live: [3, 10],
+  correspondence: [12 * 60, 48 * 60],
+};
+
+/**
+ * How a campaign is won. Rules stored before victory missions existed have no `victory` and read
+ * as open-ended, so no campaign underway gains missions or points; new campaigns start from
+ * `DEFAULT_RULES`, which plays Objectives.
+ */
+export const victoryRulesSchema = z.object({
+  mode: z.enum(VICTORY_MODES).default('open'),
+  /** The mission rules version (thresholds and generation limits) the campaign was created with. */
+  version: z.number().int().min(1).default(CURRENT_MISSION_RULES),
+  /** The public missions and their targets, generated in the lobby and locked when the draft starts. */
+  publicMissions: z.array(publicMissionSpecSchema).max(8).default([]),
+  /** Least time a claim is held after the next round starts, in minutes; null for the pace's default. */
+  holdMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(7 * 24 * 60)
+    .nullable()
+    .default(null),
+  /** Time to choose a secret mission once the draft ends, in minutes; null for the pace's default. */
+  selectionMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(7 * 24 * 60)
+    .nullable()
+    .default(null),
+});
+
 /** Every host setting for a campaign. Stored as JSON on the campaign; grows with each phase. */
 export const campaignRulesSchema = z.object({
   maxPlayers: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MAX_PLAYERS),
   draft: draftRulesSchema.prefault({}),
   war: warRulesSchema.prefault({}),
+  victory: victoryRulesSchema.prefault({}),
 });
 
 export type CampaignRules = z.infer<typeof campaignRulesSchema>;
 export type CampaignRulesInput = z.input<typeof campaignRulesSchema>;
 export type DraftMode = CampaignRules['draft']['mode'];
 export type WarRules = CampaignRules['war'];
+export type VictoryRules = CampaignRules['victory'];
 
 /**
  * Validates rules and fills defaults. Rules stored by earlier versions lack newer settings, so
@@ -74,7 +121,8 @@ export function parseRules(input: unknown): CampaignRules {
   return campaignRulesSchema.parse(input ?? {});
 }
 
-export const DEFAULT_RULES: CampaignRules = parseRules({});
+/** The settings a new campaign starts with: Objectives, its public missions generated on creation. */
+export const DEFAULT_RULES: CampaignRules = parseRules({ victory: { mode: 'objectives' } });
 
 export const campaignNameSchema = z
   .string()

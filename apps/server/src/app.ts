@@ -13,6 +13,7 @@ import { registerDiplomacyRoutes } from './diplomacy/routes';
 import type { Env } from './env';
 import { HttpError, forbidden } from './lib/errors';
 import { isPublicOrigin } from './lib/http';
+import { cryptoRandom } from './lib/ids';
 import { KeyedMutex } from './lib/mutex';
 import { Timers } from './lib/timers';
 import { createNotifier, type Notifier } from './notifications/notifier';
@@ -22,6 +23,7 @@ import { registerRealtimeRoutes } from './realtime/routes';
 import { OpeningNamer } from './stats/openings';
 import { registerStatsRoutes } from './stats/routes';
 import { registerWarRoutes } from './wars/routes';
+import { registerVictoryRoutes } from './victory/routes';
 import { startScheduler } from './wars/scheduler';
 
 export interface AppDeps {
@@ -32,6 +34,8 @@ export interface AppDeps {
   notifier?: Notifier;
   /** The clock. Tests pass their own to step through deadlines. */
   now?: () => Date;
+  /** Randomness for mission targets and secret options. Tests pass a seeded one. */
+  random?: () => number;
   /**
    * Whether to run the deadline scheduler and live flag timers. Tests turn it off and call
    * `runDueWork` themselves.
@@ -69,6 +73,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     notifier: deps.notifier ?? createNotifier({ db: deps.db, env: deps.env, mailer, log: app.log }),
     log: app.log,
     now: deps.now ?? (() => new Date()),
+    random: deps.random ?? cryptoRandom,
     locks: new KeyedMutex(),
     gameLocks: new KeyedMutex(),
     timers,
@@ -122,6 +127,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerWarRoutes(app, ctx);
   registerDiplomacyRoutes(app, ctx);
   registerStatsRoutes(app, ctx);
+  registerVictoryRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);
   registerRealtimeRoutes(app, ctx);
   return app;

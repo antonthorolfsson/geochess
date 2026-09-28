@@ -580,8 +580,10 @@ export function warTimeControl(rules: CampaignRules, modifiers: ClockModifiers, 
  * - `held`: a draw; nothing changes hands.
  * - `tribute`: the attacker accepted the defender's tribute instead of fighting.
  * - `withdrawn`: the attacker backed down (or ran out of time to answer a counter).
+ * - `cancelled`: the campaign ended before the war was settled; nothing changed hands, and it
+ *   counts as neither a win nor a loss.
  */
-export type WarOutcome = 'attacker' | 'defender' | 'held' | 'tribute' | 'withdrawn';
+export type WarOutcome = 'attacker' | 'defender' | 'held' | 'tribute' | 'withdrawn' | 'cancelled';
 
 /** What a finished game means for its war, including whether a drawn first game goes to Armageddon. */
 export function afterGame(
@@ -630,7 +632,7 @@ export interface ResolvedWar {
 export function activeTruces(rules: CampaignRules, round: number, resolved: readonly ResolvedWar[]): Truce[] {
   const byPair = new Map<string, Truce>();
   for (const war of resolved) {
-    if (war.outcome === 'withdrawn') continue;
+    if (war.outcome === 'withdrawn' || war.outcome === 'cancelled') continue;
     const endsRound = war.resolvedRound + rules.war.truceRounds;
     if (round >= endsRound) continue;
     const players = [war.attackerId, war.defenderId].sort() as [UserId, UserId];

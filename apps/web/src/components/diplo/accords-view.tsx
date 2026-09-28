@@ -295,24 +295,27 @@ function MyAccord({
         <span className="text-muted">Signed in round {accord.signedRound}.</span>
       </p>
       {accord.terms && <Terms>{accord.terms}</Terms>}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost btn-sm" disabled={renewing} onClick={onRenew}>
-          {renewing ? 'Renewal proposed' : 'Renew'}
-        </button>
-        <button
-          type="button"
-          className="btn btn-danger btn-sm ml-auto"
-          disabled={renounce.isPending}
-          onClick={() => {
-            const question =
-              `Renounce your accord with ${partner}? It ends now and everyone is told. Your reputation drops by ` +
-              `${-REPUTATION_BROKEN}, and you can't declare war on ${partner} until round ${round + 1} starts.`;
-            if (confirm(question)) renounce.mutate(undefined);
-          }}
-        >
-          Renounce
-        </button>
-      </div>
+      {/* Once the campaign is over, accords can be neither renewed nor broken. */}
+      {diplomacyOpen(model.campaign.status) && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-ghost btn-sm" disabled={renewing} onClick={onRenew}>
+            {renewing ? 'Renewal proposed' : 'Renew'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm ml-auto"
+            disabled={renounce.isPending}
+            onClick={() => {
+              const question =
+                `Renounce your accord with ${partner}? It ends now and everyone is told. Your reputation drops by ` +
+                `${-REPUTATION_BROKEN}, and you can't declare war on ${partner} until round ${round + 1} starts.`;
+              if (confirm(question)) renounce.mutate(undefined);
+            }}
+          >
+            Renounce
+          </button>
+        </div>
+      )}
       {renounce.error && <Notice tone="error">{errorMessage(renounce.error)}</Notice>}
     </article>
   );

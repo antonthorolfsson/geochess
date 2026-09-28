@@ -5,9 +5,13 @@ import {
   type CampaignRules,
   type Clocks,
   type GameEndReason,
+  type SecretMissionSpec,
+  type SecretOption,
   type TimeControl,
+  type VictoryResultView,
   type WarCounter,
 } from '@empire/rules';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -71,7 +75,7 @@ export const loginTokens = pgTable('login_tokens', {
   createdAt: createdAt(),
 });
 
-export const CAMPAIGN_STATUSES = ['lobby', 'draft', 'active', 'finished'] as const;
+export const CAMPAIGN_STATUSES = ['lobby', 'draft', 'selection', 'active', 'finished'] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
 export const campaigns = pgTable('campaigns', {
@@ -93,6 +97,11 @@ export const campaigns = pgTable('campaigns', {
   createdAt: createdAt(),
   draftStartedAt: timestamp('draft_started_at', { withTimezone: true }),
   startedAt: timestamp('started_at', { withTimezone: true }),
+  /** When the current round started (from victory missions on; claims time their holding from it). */
+  roundStartedAt: timestamp('round_started_at', { withTimezone: true }),
+  /** While secret missions are being chosen: when unchosen ones are assigned. */
+  selectionDeadline: timestamp('selection_deadline', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
 });
 
 export const members = pgTable(
@@ -143,7 +152,7 @@ export const holdings = pgTable(
 );
 
 export const WAR_STATUSES = ['declared', 'countered', 'ready', 'playing', 'resolved'] as const;
-export const WAR_OUTCOMES = ['attacker', 'defender', 'held', 'tribute', 'withdrawn'] as const;
+export const WAR_OUTCOMES = ['attacker', 'defender', 'held', 'tribute', 'withdrawn', 'cancelled'] as const;
 
 export const wars = pgTable(
   'wars',
@@ -177,7 +186,7 @@ export const wars = pgTable(
   (t) => [index('wars_campaign').on(t.campaignId, t.status), index('wars_respond_by').on(t.respondBy)],
 );
 
-export const GAME_STATUSES = ['waiting', 'playing', 'finished'] as const;
+export const GAME_STATUSES = ['waiting', 'playing', 'finished', 'cancelled'] as const;
 export const GAME_RESULTS = ['1-0', '0-1', '1/2-1/2'] as const;
 
 export const games = pgTable(
@@ -297,6 +306,119 @@ export const chatReads = pgTable(
   },
   (t) => [primaryKey({ columns: [t.campaignId, t.userId, t.conversation] })],
 );
+
+export const REVEAL_REASONS = ['near', 'claim', 'final'] as const;
+
+/**
+ * Victory missions, per player: their holdings when the draft finished (the baseline every
+ * post-draft comparison uses) and their secret mission. The options, seed and chosen mission are
+ * private to the player until the mission is revealed; discarded options never leave the server.
+ */
+export const missionPlayers = pgTable(
+  'mission_players',
+  {
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** Countries held when the draft finished. */
+    baseline: jsonb('baseline').$type<string[]>().notNull(),
+    baselineValue: integer('baseline_value').notNull(),
+    /** Server-private seed the secret options were drawn with. */
+    seed: bigint('seed', { mode: 'number' }).notNull(),
+    /** The secret options dealt, best fit first. Private. */
+    options: jsonb('options').$type<SecretOption[]>().notNull(),
+    /** The option chosen (or assigned); irrevocable. */
+    secretId: text('secret_id'),
+    secret: jsonb('secret').$type<SecretMissionSpec>(),
+    selectedAt: timestamp('selected_at', { withTimezone: true }),
+    /** Assigned automatically when time ran out. */
+    autoAssigned: boolean('auto_assigned').notNull().default(false),
+    /** No option fitted, and the host went on without a secret mission for this player. */
+    noSecret: boolean('no_secret').notNull().default(false),
+    /** Once revealed, the secret mission is public for good. */
+    revealedAt: timestamp('revealed_at', { withTimezone: true }),
+    revealedRound: integer('revealed_round'),
+    revealReason: text('reveal_reason', { enum: REVEAL_REASONS }),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.userId] })],
+);
+
+export const CLAIM_STATUSES = ['pending', 'awarded', 'interrupted', 'cancelled'] as const;
+
+/**
+ * Claim episodes on territorial missions: from the moment a mission is complete until it scores,
+ * the position is lost, or the campaign ends. A player has at most one pending claim per mission.
+ */
+export const missionClaims = pgTable(
+  'mission_claims',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** `p0`…`p3` for public missions, `secret` for the player's secret mission. */
+    missionKey: text('mission_key').notNull(),
+    status: text('status', { enum: CLAIM_STATUSES }).notNull(),
+    startedRound: integer('started_round').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    /** The first round it can score in. */
+    eligibleRound: integer('eligible_round').notNull(),
+    /** When the minimum holding time is up; set when the round after `startedRound` starts. */
+    eligibleAt: timestamp('eligible_at', { withTimezone: true }),
+    /** Whether a check has run since `eligibleAt` passed (so the scheduler looks once). */
+    timeReached: boolean('time_reached').notNull().default(false),
+    /** Unresolved wars that could still break the position. */
+    blockedBy: jsonb('blocked_by').$type<string[]>().notNull().default([]),
+    endedRound: integer('ended_round'),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('mission_claims_campaign').on(t.campaignId, t.status),
+    index('mission_claims_due').on(t.status, t.eligibleAt),
+    uniqueIndex('mission_claims_one_pending')
+      .on(t.campaignId, t.userId, t.missionKey)
+      .where(sql`${t.status} = 'pending'`),
+  ],
+);
+
+/** Victory points, for good: each player scores each mission at most once. */
+export const missionAwards = pgTable(
+  'mission_awards',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    missionKey: text('mission_key').notNull(),
+    kind: text('kind').notNull(),
+    points: integer('points').notNull(),
+    round: integer('round').notNull(),
+    awardedAt: timestamp('awarded_at', { withTimezone: true }).notNull(),
+    claimId: bigint('claim_id', { mode: 'number' }),
+  },
+  (t) => [uniqueIndex('mission_awards_once').on(t.campaignId, t.userId, t.missionKey)],
+);
+
+/** How an Objectives campaign ended: written once, when someone reaches the points to win. */
+export const campaignResults = pgTable('campaign_results', {
+  campaignId: text('campaign_id')
+    .primaryKey()
+    .references(() => campaigns.id, { onDelete: 'cascade' }),
+  winnerIds: jsonb('winner_ids').$type<string[]>().notNull(),
+  round: integer('round').notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }).notNull(),
+  /** Scores, missions (every secret one revealed) and the final map. */
+  snapshot: jsonb('snapshot').$type<VictoryResultView>().notNull(),
+});
 
 /** Append-only campaign history. Feeds, graphs and timelapses are derived from it. */
 export const events = pgTable(

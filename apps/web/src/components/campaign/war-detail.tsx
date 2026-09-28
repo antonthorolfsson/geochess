@@ -153,9 +153,11 @@ export function WarDetail({
                   <span className="block text-sm text-muted">
                     {g.status === 'finished' && g.result
                       ? resultText(g.result, g.reason)
-                      : g.status === 'waiting'
-                        ? 'Waiting for both players to be free'
-                        : 'In progress'}
+                      : g.status === 'cancelled'
+                        ? 'Called off: the campaign ended first'
+                        : g.status === 'waiting'
+                          ? 'Waiting for both players to be free'
+                          : 'In progress'}
                   </span>
                 </span>
                 <button

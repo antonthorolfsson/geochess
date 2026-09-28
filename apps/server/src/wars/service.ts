@@ -47,8 +47,8 @@ export const LIVE_COUNTDOWN_MS = 15_000;
 const warUrl = (war: WarRow) => `/c/${war.campaignId}?war=${war.id}`;
 const gameUrl = (campaignId: string, gameId: string) => `/c/${campaignId}?game=${gameId}`;
 
-function notify(ctx: AppContext, scope: MutationScope, notice: Notice): void {
-  scope.afterCommit(() => ctx.notifier.send(notice));
+function notify(_ctx: AppContext, scope: MutationScope, notice: Notice): void {
+  scope.notify(notice);
 }
 
 function windowText(scope: MutationScope): string {
@@ -436,23 +436,40 @@ async function startQueuedGames(ctx: AppContext, scope: MutationScope): Promise<
  * the tiebreak. Safe to call more than once.
  */
 export async function settleGame(ctx: AppContext, campaignId: string, gameId: string): Promise<void> {
-  await mutate(ctx, campaignId, async (scope) => {
-    const [game] = await scope.tx.select().from(games).where(eq(games.id, gameId));
-    if (game?.status !== 'finished' || !game.result) return;
-    const war = await findWar(scope, game.warId);
-    if (war.status !== 'playing') return;
-    if (!game.armageddon) {
-      const [tiebreak] = await scope.tx
-        .select({ id: games.id })
-        .from(games)
-        .where(and(eq(games.warId, war.id), eq(games.armageddon, true)));
-      if (tiebreak) return;
-    }
-    const next = afterGame(scope.campaign.rules, game.armageddon, winnerOf(game.result));
-    if (next === 'armageddon') await beginFighting(ctx, scope, war, true);
-    else await resolveWar(ctx, scope, war, next, { result: game.result, reason: game.reason ?? undefined });
-    await startQueuedGames(ctx, scope);
-  });
+  await mutate(ctx, campaignId, (scope) => settleFinishedGame(ctx, scope, gameId));
+}
+
+async function settleFinishedGame(ctx: AppContext, scope: MutationScope, gameId: string): Promise<void> {
+  const [game] = await scope.tx.select().from(games).where(eq(games.id, gameId));
+  if (game?.status !== 'finished' || !game.result) return;
+  const war = await findWar(scope, game.warId);
+  if (war.status !== 'playing') return;
+  if (!game.armageddon) {
+    const [tiebreak] = await scope.tx
+      .select({ id: games.id })
+      .from(games)
+      .where(and(eq(games.warId, war.id), eq(games.armageddon, true)));
+    if (tiebreak) return;
+  }
+  const next = afterGame(scope.campaign.rules, game.armageddon, winnerOf(game.result));
+  if (next === 'armageddon') await beginFighting(ctx, scope, war, true);
+  else await resolveWar(ctx, scope, war, next, { result: game.result, reason: game.reason ?? undefined });
+  await startQueuedGames(ctx, scope);
+}
+
+/**
+ * Settles, within a change already underway, every game that finished while this change waited
+ * for the campaign: a game settles its war just after it ends, in a change of its own, and
+ * anything scored before that must not miss (or end the campaign ahead of) the result.
+ */
+export async function settleFinishedGames(ctx: AppContext, scope: MutationScope): Promise<void> {
+  const finished = await scope.tx
+    .select({ id: games.id })
+    .from(games)
+    .innerJoin(wars, eq(wars.id, games.warId))
+    .where(and(eq(games.campaignId, scope.campaign.id), eq(games.status, 'finished'), eq(wars.status, 'playing')))
+    .orderBy(asc(games.finishedAt));
+  for (const { id } of finished) await settleFinishedGame(ctx, scope, id);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -504,6 +521,7 @@ async function resolveWar(
     held: [`${target} held`, `${target} held`],
     tribute: ['Tribute accepted', 'Tribute accepted'],
     withdrawn: ['War called off', 'War called off'],
+    cancelled: ['War cancelled', 'War cancelled'],
   };
   const [forAttacker, forDefender] = headline[outcome];
   for (const [userId, title] of [
@@ -532,7 +550,8 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
     requireHost(scope, userId, 'start the next round');
     requireActive(scope);
     const round = scope.campaign.round + 1;
-    await scope.tx.update(campaigns).set({ round }).where(eq(campaigns.id, campaignId));
+    const roundStartedAt = ctx.now();
+    await scope.tx.update(campaigns).set({ round, roundStartedAt }).where(eq(campaigns.id, campaignId));
     for (const m of scope.members) {
       const tokens = refillTokens(scope.campaign.rules, m.tokens);
       if (tokens === m.tokens) continue;
@@ -541,7 +560,7 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
         .set({ tokens })
         .where(and(eq(members.campaignId, campaignId), eq(members.userId, m.userId)));
     }
-    scope.campaign = { ...scope.campaign, round };
+    scope.campaign = { ...scope.campaign, round, roundStartedAt };
     await scope.log.add({ type: 'round.started', payload: { round } }, userId, round);
     await startRoundForAccords(ctx, scope);
   });

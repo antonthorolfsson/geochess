@@ -25,8 +25,39 @@ export function DraftStatus({ model, compact = false }: { model: CampaignModel; 
   const draft = campaign.draft;
 
   if (campaign.status !== 'draft' || !draft) {
+    const victory = campaign.victory;
+    if (campaign.status === 'selection') {
+      const waiting = victory?.players.filter((p) => !p.ready).length ?? 0;
+      const mine = campaign.mySecret;
+      return (
+        <div className="space-y-1">
+          <div className="label">Draft over · choosing secret missions</div>
+          <p className="text-[0.95rem] text-muted">
+            {mine?.options?.length ? <strong className="text-amber">Choose your secret mission. </strong> : null}
+            Round 1 begins when everyone has one
+            {waiting > 0 ? ` (${waiting} still choosing)` : ''}.
+          </p>
+        </div>
+      );
+    }
+    if (campaign.status === 'finished') {
+      const winners = victory?.result?.winners ?? [];
+      return (
+        <div className="space-y-1">
+          <div className="label">Campaign over · round {campaign.round}</div>
+          <p className="text-[0.95rem]">
+            {winners.length === 0
+              ? 'The campaign has ended.'
+              : `${winners.map((id) => model.membersById.get(id)?.name ?? 'A player').join(' and ')} ${
+                  winners.length > 1 ? 'share the victory' : 'won'
+                }.`}
+          </p>
+        </div>
+      );
+    }
     if (campaign.status !== 'active') return null;
     const waiting = model.awaitingMe.length;
+    const points = victory?.players.find((p) => p.userId === model.me.userId)?.points;
     return (
       <div className="space-y-1">
         <div className="label">Campaign underway · Round {campaign.round}</div>
@@ -39,7 +70,8 @@ export function DraftStatus({ model, compact = false }: { model: CampaignModel; 
           {model.activeWars.length === 0
             ? 'No wars underway.'
             : `${model.activeWars.length} ${model.activeWars.length === 1 ? 'war' : 'wars'} underway.`}{' '}
-          You have {model.tokens} war {model.tokens === 1 ? 'token' : 'tokens'}.
+          You have {model.tokens} war {model.tokens === 1 ? 'token' : 'tokens'}
+          {victory && points !== undefined ? ` and ${points} of ${victory.pointsToWin} victory points` : ''}.
         </p>
       </div>
     );
@@ -151,12 +183,16 @@ function UpNext({ model }: { model: CampaignModel }) {
 
 export function Standings({ model }: { model: CampaignModel }) {
   const empireHref = useEmpireHref(model.campaign.id);
+  const { status, victory } = model.campaign;
+  // In an Objectives campaign victory points are the race; value stays beside them.
+  const showPoints = victory !== null && (status === 'active' || status === 'finished');
+  const pointsOf = new Map(victory?.players.map((p) => [p.userId, p.points]) ?? []);
   const rows = model.campaign.members
     .map((m) => {
       const ids = model.holdingsByUser.get(m.userId) ?? [];
-      return { member: m, count: ids.length, value: totalValue(model.idx, ids) };
+      return { member: m, count: ids.length, value: totalValue(model.idx, ids), points: pointsOf.get(m.userId) ?? 0 };
     })
-    .sort((a, b) => b.value - a.value || b.count - a.count);
+    .sort((a, b) => (showPoints ? b.points - a.points : 0) || b.value - a.value || b.count - a.count);
   const showUnclaimed = model.campaign.status !== 'lobby' && model.unclaimed > 0;
   const showTokens = model.campaign.status === 'active';
   const showReputation = model.campaign.status !== 'lobby';
@@ -171,6 +207,13 @@ export function Standings({ model }: { model: CampaignModel }) {
         <thead>
           <tr className="text-left">
             <th className="label w-full pb-1 font-bold">Player</th>
+            {showPoints && (
+              <th className="label pb-1 pl-2 text-right font-bold text-amber">
+                <abbr title="Victory points" className="no-underline">
+                  VP
+                </abbr>
+              </th>
+            )}
             <th className="label pb-1 pl-2 text-right font-bold">Value</th>
             {showTokens && <th className="label pb-1 pl-3 text-right font-bold">Tokens</th>}
             {showReputation && (
@@ -183,7 +226,7 @@ export function Standings({ model }: { model: CampaignModel }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {rows.map(({ member, count, value }) => (
+          {rows.map(({ member, count, value, points }) => (
             <tr key={member.userId}>
               <td className="max-w-0 py-1.5">
                 <PlayerName
@@ -197,7 +240,8 @@ export function Standings({ model }: { model: CampaignModel }) {
                   {member.autodraft && model.campaign.status === 'draft' && ' · auto-draft'}
                 </span>
               </td>
-              <td className="py-1.5 pl-2 text-right font-semibold tabular-nums">{value}</td>
+              {showPoints && <td className="py-1.5 pl-2 text-right font-bold text-amber tabular-nums">{points}</td>}
+              <td className={`py-1.5 pl-2 text-right tabular-nums ${showPoints ? '' : 'font-semibold'}`}>{value}</td>
               {showTokens && <td className="py-1.5 pl-3 text-right tabular-nums">{member.tokens}</td>}
               {showReputation && <td className="py-1.5 pl-3 text-right tabular-nums">{member.reputation}</td>}
             </tr>
@@ -211,6 +255,7 @@ export function Standings({ model }: { model: CampaignModel }) {
                 </span>
                 <span className="block pl-6 text-xs tabular-nums">{countries(model.unclaimed)}</span>
               </td>
+              {showPoints && <td />}
               <td className="py-1.5 pl-2 text-right tabular-nums">{unclaimedValue}</td>
               {showTokens && <td />}
               {showReputation && <td />}

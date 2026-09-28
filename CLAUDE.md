@@ -31,6 +31,11 @@ when starting new work.**
   in-process timers for live flag-falls. Tests drive time through the injectable `ctx.now()`.
 - Empire statistics are derived on each request, never stored: `apps/server/src/stats/` gathers the
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
+- Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target
+  generation and claim blockers are in `packages/rules/src/victory/`; the server side is in
+  `apps/server/src/victory/`. `settleVictory()` runs inside every `mutate()` (reveals, claims,
+  awards, the finish). A player's secret mission and options are private until `mission.revealed`:
+  never put them in events, pushes, notices or another player's view before that.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and

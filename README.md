@@ -69,6 +69,36 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 - A chess profile: results by colour, how games ended, average length, the games themselves and
   the most-played openings, named from the Lichess openings list.
 
+**Victory missions** are in place. New campaigns play **Objectives** (the host can switch a
+campaign to open-ended in the lobby; campaigns created before missions existed stay open-ended):
+
+- Four **public missions**, worth 2 victory points each, chosen and shown with their exact targets
+  in the lobby and locked when the draft starts. The default set is Expansion, Strategic
+  Positions, The Great Connection and Campaign Veteran; the host can pick any four of ten and
+  draw new targets. Every player can score each public mission once: one player scoring it takes
+  nothing from the others.
+- One **secret mission** per player, worth 3. When the draft ends, each player is dealt up to three
+  options fitted to their empire (Northern Passage, Mediterranean Arc, Encirclement, Two-Theater
+  Power, Protected Expansion and more), privately, and chooses one before round 1; the best fit
+  is assigned if time runs out. A secret mission is revealed to everyone, for good, once its
+  player is one step from completing it, or completes it.
+- **Claims and the response window.** Completing a territorial mission starts a public claim. It
+  scores only once the round after next has started, at least 24 hours (10 minutes live) after
+  the next round started, if the position was held throughout and no unresolved war could still
+  break it. Campaign Veteran scores as soon as it's done.
+- **Winning.** The first to 7 points wins: two public missions and the secret, or all four public
+  ones. Points are never lost. Players crossing the line together are ranked by points, and equal
+  points share the victory. The campaign then becomes read-only: wars underway are cancelled
+  without a result (moves kept), and every secret mission is revealed in the final results.
+- A **Missions** tab (a column tab on desktop) with the race for points, your secret mission and
+  your progress, claims waiting to score and what threatens them, everyone's progress on the
+  public missions, and each mission's targets and routes on the map. Victory points lead the
+  standings; territory value stays beside them.
+
+The numbers (points, thresholds, generation limits, timings) are in `MISSION_RULES` in
+`packages/rules/src/victory/catalog.ts`. Each campaign keeps the version it was created with, so
+tuning them after a playtest never changes a campaign already underway.
+
 ## Quick start
 
 Requires Node.js 22.12+ (24 recommended) and pnpm 10.
@@ -89,12 +119,12 @@ To try it on a phone, open `http://<your computer's LAN address>:3000` on the sa
 
 ## Repository layout
 
-| Path             | Package          | What it is                                                                                                                                                                                                                     |
-| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, accords, chess and clocks (chessops), opening names, empire statistics, campaign settings, empire colors, API types. |
-| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, the versioned datasets it builds, and the opening names table.                                                                                                        |
-| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                                                                    |
-| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars, the chess board (chessground), diplomacy and chat, empire statistics.                                                                                             |
+| Path             | Package          | What it is                                                                                                                                                                                                                                       |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/rules` | `@empire/rules`  | Pure TypeScript game rules shared by client and server: dataset types, adjacency, snake draft, war rules, accords, chess and clocks (chessops), opening names, empire statistics, victory missions, campaign settings, empire colors, API types. |
+| `packages/data`  | `@empire/data`   | Map and country data pipeline, its hand-editable config, the versioned datasets it builds, and the opening names table.                                                                                                                          |
+| `apps/server`    | `@empire/server` | Authoritative game server: Fastify HTTP API, WebSockets, Drizzle ORM on Postgres or PGlite.                                                                                                                                                      |
+| `apps/web`       | `@empire/web`    | Next.js installable web app: map room, lobbies, draft, wars, the chess board (chessground), diplomacy and chat, empire statistics.                                                                                                               |
 
 ## Commands
 

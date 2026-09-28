@@ -51,8 +51,8 @@ const accordUrl = (campaignId: string, accordId: string) => `/c/${campaignId}?ac
  */
 const accordTag = (campaignId: string, otherId: string) => `accord:${campaignId}:${otherId}`;
 
-function notify(ctx: AppContext, scope: MutationScope, notice: Notice): void {
-  scope.afterCommit(() => ctx.notifier.send(notice));
+function notify(_ctx: AppContext, scope: MutationScope, notice: Notice): void {
+  scope.notify(notice);
 }
 
 async function findAccord(scope: MutationScope, accordId: string): Promise<AccordRow> {
@@ -341,6 +341,7 @@ export async function renounceAccord(
         : notFound('Accord not found.');
     }
     if (accord.status !== 'active') throw conflict('This accord is no longer in force.', 'not-in-force');
+    if (!diplomacyOpen(scope.campaign.status)) throw conflict('The campaign is over.', 'closed');
     const round = scope.campaign.round;
     const partnerId = partnerIn(accord, userId);
     await scope.tx

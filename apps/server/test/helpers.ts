@@ -28,6 +28,7 @@ export interface TestServer {
 export async function startTestServer(
   dataset: Dataset = lineDataset(),
   env: NodeJS.ProcessEnv = {},
+  opts: { random?: () => number } = {},
 ): Promise<TestServer> {
   const database = await openDatabase({ dataDir: null });
   const mail: TestServer['mail'] = [];
@@ -41,6 +42,7 @@ export async function startTestServer(
     mailer,
     notifier: { send: async (n) => void notices.push(n) },
     now: () => new Date(now),
+    random: opts.random,
     scheduler: false,
   });
   return {

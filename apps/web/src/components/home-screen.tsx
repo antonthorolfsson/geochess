@@ -63,6 +63,7 @@ function Landing() {
 const STATUS_LABEL: Record<CampaignSummary['status'], string> = {
   lobby: 'Lobby',
   draft: 'Drafting',
+  selection: 'Choosing secret missions',
   active: 'Underway',
   finished: 'Finished',
 };

@@ -8,13 +8,14 @@ import {
   type EventView,
   type InvitePreview,
 } from '@empire/rules';
-import { and, asc, count, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import { accords, campaigns, events, games, holdings, members, users, wars } from '../db/schema';
+import { accords, campaigns, events, games, holdings, members, missionPlayers, users, wars } from '../db/schema';
 import { visibleAccords } from '../diplomacy/accords';
 import { unreadPrivateMessages } from '../diplomacy/chat';
 import { toAccordView } from '../diplomacy/views';
 import { notFound } from '../lib/errors';
+import { victoryViews } from '../victory/views';
 import { relevantWars, trucesFrom, type GameRow } from '../wars/board';
 import { toWarView } from '../wars/views';
 
@@ -106,6 +107,22 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         : [];
       const gamesByWar = new Map<string, GameRow[]>();
       for (const g of gameRows) gamesByWar.set(g.warId, [...(gamesByWar.get(g.warId) ?? []), g]);
+      // Public missions and progress for everyone; the viewer's own secret mission for them alone.
+      // In a savepoint: should working them out fail, the rest of the campaign still loads.
+      const { victory, mySecret } = await tx
+        .transaction(() =>
+          victoryViews(
+            ctx,
+            tx,
+            c,
+            memberRows.map((m) => m.userId),
+            viewerId,
+          ),
+        )
+        .catch((err: unknown) => {
+          ctx.log.error({ err, campaignId }, 'could not work out the victory missions view');
+          return { victory: null, mySecret: null };
+        });
 
       const order = c.draftOrder;
       return {
@@ -138,6 +155,8 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
           holdingRows.filter((h) => h.acquiredRound > 0).map((h) => [h.territoryId, h.acquiredRound]),
         ),
         accords: (await visibleAccords(tx, campaignId, viewerId)).map(toAccordView),
+        victory,
+        mySecret,
       };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
@@ -218,8 +237,24 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
       and(inArray(accords.campaignId, campaignIds), eq(accords.status, 'proposed'), eq(accords.recipientId, userId)),
     )
     .groupBy(accords.campaignId);
+  // A secret mission waiting to be chosen.
+  const secrets = await ctx.db
+    .select({ campaignId: missionPlayers.campaignId, n: count() })
+    .from(missionPlayers)
+    .innerJoin(campaigns, eq(campaigns.id, missionPlayers.campaignId))
+    .where(
+      and(
+        inArray(missionPlayers.campaignId, campaignIds),
+        eq(missionPlayers.userId, userId),
+        eq(campaigns.status, 'selection'),
+        isNull(missionPlayers.secret),
+        eq(missionPlayers.noSecret, false),
+        sql`jsonb_array_length(${missionPlayers.options}) > 0`,
+      ),
+    )
+    .groupBy(missionPlayers.campaignId);
   const out = new Map<string, number>();
-  for (const { campaignId, n } of [...answers, ...moves, ...proposals]) {
+  for (const { campaignId, n } of [...answers, ...moves, ...proposals, ...secrets]) {
     out.set(campaignId, (out.get(campaignId) ?? 0) + n);
   }
   return out;

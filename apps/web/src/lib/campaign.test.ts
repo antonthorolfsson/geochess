@@ -37,6 +37,8 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     truces: [],
     acquired: {},
     accords: [],
+    victory: null,
+    mySecret: null,
     ...overrides,
   };
 }

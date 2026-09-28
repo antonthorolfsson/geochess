@@ -1,6 +1,6 @@
 'use client';
 
-import type { CampaignStatus, TerritoryId } from '@empire/rules';
+import { missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -12,11 +12,13 @@ import { useRealtime, useServerMessages } from '@/lib/realtime';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
+import { findMission, missionOverlay, progressOf, rivalClaims, titleOf } from '@/lib/victory';
 import { countryName, outcomeText, playerName } from '@/lib/wars';
 import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
+import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
@@ -26,34 +28,47 @@ import { TerritoryPanel } from './territory-panel';
 import { WarDetail, type StakePreview } from './war-detail';
 import { WarsPanel } from './wars-panel';
 
-type Tab = 'lobby' | 'map' | 'wars' | 'draft' | 'diplo' | 'empire';
+type Tab = 'lobby' | 'map' | 'wars' | 'draft' | 'missions' | 'diplo' | 'empire';
 
-const AT_WAR: { id: Tab; label: string }[] = [
-  { id: 'map', label: 'Map' },
-  { id: 'wars', label: 'Wars' },
-  { id: 'diplo', label: 'Diplo' },
-  { id: 'empire', label: 'Empire' },
-];
-
-const TABS: Record<CampaignStatus, { id: Tab; label: string }[]> = {
-  lobby: [
-    { id: 'lobby', label: 'Lobby' },
-    { id: 'map', label: 'Map' },
-    { id: 'diplo', label: 'Diplo' },
-  ],
-  draft: [
-    { id: 'map', label: 'Map' },
-    { id: 'draft', label: 'Draft' },
-    { id: 'diplo', label: 'Diplo' },
-    { id: 'empire', label: 'Empire' },
-  ],
-  active: AT_WAR,
-  finished: AT_WAR,
+const TAB: Record<Tab, { id: Tab; label: string }> = {
+  lobby: { id: 'lobby', label: 'Lobby' },
+  map: { id: 'map', label: 'Map' },
+  wars: { id: 'wars', label: 'Wars' },
+  draft: { id: 'draft', label: 'Draft' },
+  missions: { id: 'missions', label: 'Missions' },
+  diplo: { id: 'diplo', label: 'Diplo' },
+  empire: { id: 'empire', label: 'Empire' },
 };
 
-/** What the desktop's left column shows: the lobby, draft or war room, or diplomacy. */
-type Side = 'main' | 'diplo';
-const MAIN_LABEL: Record<CampaignStatus, string> = { lobby: 'Lobby', draft: 'Draft', active: 'Wars', finished: 'Wars' };
+/** The phone tabs for each stage; Objectives campaigns add Missions from the draft on. */
+function tabsFor(status: CampaignStatus, objectives: boolean): { id: Tab; label: string }[] {
+  const ids: Tab[] = {
+    lobby: ['lobby', 'map', 'diplo'] as Tab[],
+    draft: objectives
+      ? (['map', 'draft', 'missions', 'diplo', 'empire'] as Tab[])
+      : (['map', 'draft', 'diplo', 'empire'] as Tab[]),
+    // Choosing a secret mission is the one thing to do between the draft and round 1.
+    selection: ['missions', 'map', 'diplo', 'empire'] as Tab[],
+    active: objectives
+      ? (['map', 'wars', 'missions', 'diplo', 'empire'] as Tab[])
+      : (['map', 'wars', 'diplo', 'empire'] as Tab[]),
+    // The results come first once someone has won.
+    finished: objectives
+      ? (['missions', 'map', 'wars', 'diplo', 'empire'] as Tab[])
+      : (['map', 'wars', 'diplo', 'empire'] as Tab[]),
+  }[status];
+  return ids.map((id) => TAB[id]);
+}
+
+/** What the desktop's left column shows: the lobby, draft or war room, the missions, or diplomacy. */
+type Side = 'main' | 'missions' | 'diplo';
+const MAIN_LABEL: Record<CampaignStatus, string> = {
+  lobby: 'Lobby',
+  draft: 'Draft',
+  selection: 'Missions',
+  active: 'Wars',
+  finished: 'Wars',
+};
 
 /** A campaign: the map room, with any page opened over it (an empire's statistics) as `children`. */
 export function CampaignScreen({ id, children }: { id: string; children?: ReactNode }) {
@@ -116,7 +131,7 @@ function usePanelParams(campaignId: string, overPage: boolean) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const set = useCallback(
-    (key: 'war' | 'game' | 'chat' | 'accord', value: string | null) => {
+    (key: 'war' | 'game' | 'chat' | 'accord' | 'missions', value: string | null) => {
       const params = new URLSearchParams(window.location.search);
       if (value) params.set(key, value);
       else params.delete(key);
@@ -142,6 +157,8 @@ function usePanelParams(campaignId: string, overPage: boolean) {
     chatWith: searchParams.get('chat'),
     /** An accord to show, e.g. from a notification. */
     accordId: searchParams.get('accord'),
+    /** Open the missions, e.g. from a notification about a claim or a reveal. */
+    missions: searchParams.get('missions') !== null,
     set,
   };
 }
@@ -156,7 +173,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const { userId: empireOf } = useParams<{ userId?: string }>();
   const { connected } = useRealtime();
   const isDesktop = useIsDesktop();
-  const tabs = TABS[campaign.status];
+  const objectives = campaign.victory !== null;
+  const tabs = tabsFor(campaign.status, objectives);
   const [tab, setTab] = useState<Tab>(tabs[0]!.id);
   const [selected, setSelected] = useState<TerritoryId | null>(null);
   const [focus, setFocus] = useState<{ id: TerritoryId; nonce: number } | null>(null);
@@ -173,7 +191,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const myMoves = myGames.filter((g) => g.myMove).length;
   const answers = model.answersNeeded;
   const unread = useUnread(campaign.id);
-  const [side, setSide] = useState<Side>('main');
+  // A finished Objectives campaign opens on its results.
+  const [side, setSide] = useState<Side>(campaign.status === 'finished' && objectives ? 'missions' : 'main');
   const [diploView, setDiploView] = useState<DiploView>('dispatches');
 
   // A conversation or accord in the address (a notification, the back button) opens Diplo on it.
@@ -217,13 +236,44 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (warId && !isDesktop && tabRef.current !== 'map' && tabRef.current !== 'wars') setTab('wars');
   }, [warId, isDesktop]);
 
-  // Jump to the natural first tab when the campaign moves on (e.g. the host starts the draft).
+  // Jump to the natural first tab when the campaign moves on (e.g. the host starts the draft), and
+  // to the results when it ends.
   const status = campaign.status;
   const lastStatus = useRef(status);
   useEffect(() => {
-    if (lastStatus.current !== status) setTab(TABS[status][0]!.id);
+    if (lastStatus.current !== status) {
+      setTab(tabsFor(status, objectives)[0]!.id);
+      if (status === 'finished' && objectives) setSide('missions');
+      if (status === 'active') setSide('main');
+    }
     lastStatus.current = status;
-  }, [status]);
+  }, [status, objectives]);
+
+  // A link to the missions (a notification about a claim, a reveal or the result) opens them.
+  const { missions: missionsLinked } = panels;
+  useEffect(() => {
+    if (!missionsLinked || !objectives) return;
+    setTab('missions');
+    setSide(campaign.status === 'selection' ? 'main' : 'missions');
+    panels.set('missions', null);
+  }, [missionsLinked, objectives, campaign.status, panels]);
+
+  // A mission called out on the map, recomputed as the campaign changes (and dropped if it
+  // stops being one the viewer may see).
+  const [missionFocus, setMissionFocus] = useState<MissionFocus | null>(null);
+  const missionMap = useMemo(() => {
+    if (!missionFocus) return null;
+    if (missionFocus.kind === 'option') {
+      return { label: missionName(missionFocus.spec), overlay: missionOverlay(model, missionFocus.spec, undefined) };
+    }
+    const played = findMission(model, missionFocus.ownerId, missionFocus.key);
+    if (!played) return null;
+    const whose = missionFocus.ownerId ?? me;
+    return {
+      label: titleOf(played.mission),
+      overlay: missionOverlay(model, played.mission.spec, progressOf(model, whose, missionFocus.key)),
+    };
+  }, [missionFocus, model, me]);
 
   // Tell the player when their pick comes up.
   const wasMyTurn = useRef(model.myTurn);
@@ -271,6 +321,29 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       } else if (e.type === 'accord.broken' && e.payload.partnerId === me) {
         setToast(`${playerName(current, e.payload.breakerId)} broke your accord`);
         navigator.vibrate?.([80, 60, 80]);
+      } else if (e.type === 'mission.revealed' && e.payload.reason !== 'final') {
+        setToast(
+          e.payload.userId === me
+            ? 'Your secret mission is revealed'
+            : `${playerName(current, e.payload.userId)}’s secret: ${missionName(e.payload.mission)}`,
+        );
+      } else if (e.type === 'claim.started') {
+        const mission = missionName({ kind: e.payload.kind });
+        setToast(
+          e.payload.userId === me
+            ? `Claim started: ${mission}`
+            : `${playerName(current, e.payload.userId)} claims ${mission}`,
+        );
+      } else if (e.type === 'claim.interrupted' && e.payload.userId === me) {
+        setToast(`Claim lost: ${missionName({ kind: e.payload.kind })}`);
+      } else if (e.type === 'mission.awarded' && e.payload.userId === me) {
+        setToast(`+${e.payload.points} victory points`);
+        navigator.vibrate?.(120);
+      } else if (e.type === 'campaign.won') {
+        const winners = e.payload.winners;
+        setToast(
+          winners.includes(me) ? 'Victory' : `${winners.map((id) => playerName(current, id)).join(' and ')} won`,
+        );
       }
     }
   });
@@ -300,15 +373,19 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (fresh && (latest.attackerId === me || latest.defenderId === me)) setToast(outcomeText(model, latest));
   }, [model, me]);
 
+  // A secret mission waiting to be chosen.
+  const mustChoose = campaign.status === 'selection' && Boolean(campaign.mySecret?.options?.length);
   const flag = model.myTurn
     ? '(Your pick) '
-    : myMoves > 0
-      ? '(Your move) '
-      : answers > 0
-        ? '(Answer needed) '
-        : unread.direct > 0
-          ? '(New message) '
-          : '';
+    : mustChoose
+      ? '(Choose a mission) '
+      : myMoves > 0
+        ? '(Your move) '
+        : answers > 0
+          ? '(Answer needed) '
+          : unread.direct > 0
+            ? '(New message) '
+            : '';
   const page = empireOf
     ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · `
     : pageSegment === 'rules'
@@ -333,6 +410,18 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const selectOnMap = (id: TerritoryId | null) => {
     setSelected(id);
     if (id && panels.warId) panels.set('war', null);
+  };
+  /** Calls a mission out on the map, framing its targets; phones switch to the map to show it. */
+  const [fit, setFit] = useState<{ ids: TerritoryId[]; nonce: number } | null>(null);
+  const showMission = (focus: MissionFocus) => {
+    setMissionFocus(focus);
+    setSelected(null);
+    if (!isDesktop) setTab('map');
+    const spec = focus.kind === 'option' ? focus.spec : findMission(model, focus.ownerId, focus.key)?.mission.spec;
+    const progress = focus.kind === 'mission' ? progressOf(model, focus.ownerId ?? me, focus.key) : undefined;
+    const overlay = spec ? missionOverlay(model, spec, progress) : null;
+    const ids = overlay ? [...overlay.targets, ...(overlay.path ?? [])] : [];
+    if (ids.length > 0) setFit({ ids, nonce: Date.now() });
   };
   const flyTo = (id: TerritoryId) => {
     selectOnMap(id);
@@ -426,17 +515,36 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       onOpenWar={showWarFromDiplo}
     />
   );
-  // Badges: amber when something needs the player, plain for unread channel messages.
+  const missionsPanel = objectives && (
+    <MissionsPanel model={model} onSelectCountry={flyTo} onShowOnMap={showMission} onOpenWar={showWarFromDiplo} />
+  );
+  // Badges: amber when something needs the player, plain for unread channel messages and for
+  // rivals' claims waiting to score.
   const warsNeedMe = model.awaitingMe.length + myMoves;
   const diploNeedsMe = model.proposalsToMe.length + unread.direct;
+  const rivalsClaiming = objectives ? rivalClaims(model).length : 0;
   const leftPanel =
     campaign.status === 'lobby' ? (
-      <LobbyPanel model={model} onSelect={flyTo} />
+      <LobbyPanel model={model} onSelect={flyTo} onShowOnMap={showMission} />
+    ) : campaign.status === 'selection' ? (
+      missionsPanel
     ) : atWar ? (
       warRoom
     ) : (
       <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />
     );
+  const sides = [
+    {
+      id: 'main' as const,
+      label: MAIN_LABEL[campaign.status],
+      badge: model.myTurn || mustChoose ? 1 : warsNeedMe,
+      alert: true,
+    },
+    ...(objectives && campaign.status !== 'lobby' && campaign.status !== 'selection'
+      ? [{ id: 'missions' as const, label: 'Missions', badge: rivalsClaiming }]
+      : []),
+    { id: 'diplo' as const, label: 'Diplo', badge: diploNeedsMe || unread.channel, alert: diploNeedsMe > 0 },
+  ];
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
@@ -445,6 +553,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         connected={connected}
         myMoves={myMoves}
         answers={answers}
+        mustChoose={mustChoose}
         back={
           overPage
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
@@ -466,25 +575,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           >
             <SegmentTabs<Side>
               label="Campaign"
-              value={side}
+              value={sides.some((s) => s.id === side) ? side : 'main'}
               onChange={setSide}
-              tabs={[
-                {
-                  id: 'main',
-                  label: MAIN_LABEL[campaign.status],
-                  badge: model.myTurn ? 1 : warsNeedMe,
-                  alert: true,
-                },
-                {
-                  id: 'diplo',
-                  label: 'Diplo',
-                  badge: diploNeedsMe || unread.channel,
-                  alert: diploNeedsMe > 0,
-                },
-              ]}
+              tabs={sides}
             />
             {side === 'diplo' ? (
               <div className="min-h-0 flex-1">{diploPanel}</div>
+            ) : side === 'missions' && sides.some((s) => s.id === 'missions') ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">{missionsPanel}</div>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto">{leftPanel}</div>
             )}
@@ -508,20 +606,44 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             wars={mapWars}
             onSelectWar={showWar}
             preview={preview}
+            mission={missionMap?.overlay ?? null}
+            fit={fit}
           />
 
-          <div className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg items-start gap-2">
-            <div className="pointer-events-auto flex-1">
-              <CountrySearch idx={model.idx} onPick={flyTo} />
-            </div>
-            {campaign.status === 'active' && (
-              <MapToggle pressed={showTargets} onClick={() => setShowTargets((v) => !v)}>
-                Targets
+          <div className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2">
+            <div className="flex items-start gap-2">
+              <div className="pointer-events-auto flex-1">
+                <CountrySearch idx={model.idx} onPick={flyTo} />
+              </div>
+              {campaign.status === 'active' && (
+                <MapToggle pressed={showTargets} onClick={() => setShowTargets((v) => !v)}>
+                  Targets
+                </MapToggle>
+              )}
+              <MapToggle pressed={showValues} onClick={() => setShowValues((v) => !v)}>
+                Values
               </MapToggle>
+            </div>
+            {missionMap && (
+              <div
+                role="status"
+                className="pointer-events-auto flex min-h-11 max-w-full items-center gap-2 self-start rounded-[3px] border border-paper/60 bg-panel/95 pl-3 shadow-lg backdrop-blur"
+              >
+                <span className="min-w-0 truncate text-sm">
+                  <span className="text-muted">Showing </span>
+                  <strong className="font-stencil text-base tracking-wide">{missionMap.label}</strong>
+                  {missionMap.overlay.targets.length === 0 && <span className="text-muted"> · no fixed targets</span>}
+                </span>
+                <button
+                  type="button"
+                  className="flex size-11 shrink-0 items-center justify-center text-lg text-muted hover:text-paper"
+                  aria-label="Stop showing the mission"
+                  onClick={() => setMissionFocus(null)}
+                >
+                  ✕
+                </button>
+              </div>
             )}
-            <MapToggle pressed={showValues} onClick={() => setShowValues((v) => !v)}>
-              Values
-            </MapToggle>
           </div>
 
           {/* Phones: a sheet over the map for the selected country or war, or the campaign at a glance. */}
@@ -540,9 +662,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           {/* Phones: other tabs cover the map (which stays mounted to keep its zoom). */}
           {!isDesktop && tab !== 'map' && (
             <div className={`absolute inset-0 bg-gunmetal ${tab === 'diplo' ? 'flex flex-col' : 'overflow-y-auto'}`}>
-              {tab === 'lobby' && <LobbyPanel model={model} onSelect={flyTo} />}
+              {tab === 'lobby' && <LobbyPanel model={model} onSelect={flyTo} onShowOnMap={showMission} />}
               {tab === 'wars' && (warPanel ?? warRoom)}
               {tab === 'draft' && <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />}
+              {tab === 'missions' && missionsPanel}
               {tab === 'diplo' && diploPanel}
               {tab === 'empire' && <EmpirePanel model={model} onSelect={flyTo} />}
             </div>
@@ -591,8 +714,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             const alert =
               (t.id === 'draft' && model.myTurn) ||
               (t.id === 'wars' && warsNeedMe > 0) ||
+              (t.id === 'missions' && mustChoose) ||
               (t.id === 'diplo' && diploNeedsMe > 0);
-            const quiet = t.id === 'diplo' && !alert && unread.channel > 0;
+            const quiet =
+              !alert && ((t.id === 'diplo' && unread.channel > 0) || (t.id === 'missions' && rivalsClaiming > 0));
             return (
               <button
                 key={t.id}
@@ -603,9 +728,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
                   else if (panels.gameId) closeGame();
                 }}
                 aria-current={tab === t.id && !overPage ? 'page' : undefined}
-                className={`relative min-h-14 text-sm font-bold tracking-[0.12em] uppercase ${
-                  tab === t.id && !overPage ? 'text-paper' : 'text-faint'
-                }`}
+                className={`relative min-h-14 font-bold uppercase ${
+                  tabs.length > 4 ? 'text-[0.8rem] tracking-[0.06em]' : 'text-sm tracking-[0.12em]'
+                } ${tab === t.id && !overPage ? 'text-paper' : 'text-faint'}`}
               >
                 {tab === t.id && !overPage && (
                   <span className="absolute inset-x-6 top-0 h-0.5 bg-amber" aria-hidden="true" />
@@ -615,7 +740,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
                   <span className="absolute top-3 ml-1 size-2 rounded-full bg-amber" aria-label="needs you" />
                 )}
                 {quiet && (tab !== t.id || overPage) && (
-                  <span className="absolute top-3 ml-1 size-2 rounded-full bg-paper/70" aria-label="unread messages" />
+                  <span
+                    className="absolute top-3 ml-1 size-2 rounded-full bg-paper/70"
+                    aria-label={t.id === 'missions' ? 'rivals’ claims' : 'unread messages'}
+                  />
                 )}
               </button>
             );
@@ -646,6 +774,7 @@ function CampaignHeader({
   connected,
   myMoves,
   answers,
+  mustChoose,
   back,
   rules,
 }: {
@@ -653,17 +782,28 @@ function CampaignHeader({
   connected: boolean;
   myMoves: number;
   answers: number;
+  /** A secret mission is waiting to be chosen. */
+  mustChoose: boolean;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
   back: { href: string; label: string };
   /** The rules page, always a tap away; `open` while it's showing. */
   rules: { href: string; open: boolean };
 }) {
   const { campaign } = model;
+  const victory = campaign.victory;
+  const myPoints = victory?.players.find((p) => p.userId === model.me.userId)?.points ?? 0;
+  const winners = victory?.result?.winners.map((id) => model.membersById.get(id)?.name ?? 'A player') ?? [];
   const statusLine = {
     lobby: `Lobby · ${campaign.members.length} of ${campaign.rules.maxPlayers} players`,
     draft: campaign.draft ? `Draft · Round ${campaign.draft.round} of ${model.totalRounds}` : 'Draft',
-    active: `Round ${campaign.round} · ${model.tokens} war ${model.tokens === 1 ? 'token' : 'tokens'}`,
-    finished: 'Finished',
+    selection: 'Draft over · choosing secret missions',
+    active:
+      `Round ${campaign.round} · ${model.tokens} war ${model.tokens === 1 ? 'token' : 'tokens'}` +
+      (victory ? ` · ${myPoints} of ${victory.pointsToWin} VP` : ''),
+    finished:
+      winners.length > 0
+        ? `Finished · ${winners.join(' and ')} ${winners.length > 1 ? 'share it' : 'won'}`
+        : 'Finished',
   }[campaign.status];
   const wars = model.activeWars.length;
   return (
@@ -690,9 +830,9 @@ function CampaignHeader({
           {wars} {wars === 1 ? 'war' : 'wars'} ⚑
         </span>
       )}
-      {(model.myTurn || myMoves > 0 || answers > 0) && (
+      {(model.myTurn || mustChoose || myMoves > 0 || answers > 0) && (
         <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
-          {model.myTurn ? 'Your pick' : myMoves > 0 ? 'Your move' : 'Answer needed'}
+          {model.myTurn ? 'Your pick' : mustChoose ? 'Choose mission' : myMoves > 0 ? 'Your move' : 'Answer needed'}
         </span>
       )}
       <Link
@@ -716,6 +856,13 @@ function CampaignHeader({
 function MapFooter({ model, onOpen }: { model: CampaignModel; onOpen(tab: Tab): void }) {
   const { campaign } = model;
   const atWar = campaign.status === 'active' || campaign.status === 'finished';
+  const toMissions = campaign.victory !== null && (campaign.status === 'selection' || campaign.status === 'finished');
+  const target: Tab = toMissions ? 'missions' : atWar ? 'wars' : 'draft';
+  const label = {
+    missions: campaign.status === 'finished' ? 'Results' : 'Missions',
+    wars: 'Wars',
+    draft: 'Draft board',
+  }[target as 'missions' | 'wars' | 'draft'];
   return (
     <div className="border-t border-line-strong bg-panel/95 p-3 backdrop-blur">
       {campaign.status === 'lobby' ? (
@@ -730,12 +877,8 @@ function MapFooter({ model, onOpen }: { model: CampaignModel; onOpen(tab: Tab): 
           <div className="min-w-0 flex-1">
             <DraftStatus model={model} compact />
           </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm shrink-0"
-            onClick={() => onOpen(atWar ? 'wars' : 'draft')}
-          >
-            {atWar ? 'Wars' : 'Draft board'}
+          <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => onOpen(target)}>
+            {label}
           </button>
         </div>
       )}

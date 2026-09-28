@@ -80,6 +80,8 @@ export function outcomeText(model: CampaignModel, war: WarView): string {
       return `${defender} paid tribute`;
     case 'withdrawn':
       return `${attacker} called off the attack`;
+    case 'cancelled':
+      return 'Cancelled: the campaign ended first';
     case null:
       return '';
   }

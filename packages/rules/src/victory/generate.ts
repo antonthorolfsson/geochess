@@ -164,15 +164,19 @@ function greatConnection(
   random: Random,
   taken: ReadonlySet<TerritoryId>,
 ): PublicMissionSpec | null {
-  const [lo, hi] = cfg.greatConnection.distance;
+  const [lo, hi] = cfg.greatConnection.between;
   // Endpoints on the mainland of the graph: not microstates, not dead ends, not already a target.
   const ends = idx.ids.filter((id) => !idx.byId.get(id)!.micro && idx.neighbors(id).length >= 2 && !taken.has(id));
   for (const a of shuffled(ends, random).slice(0, 80)) {
+    // The shortest chain counts land and sea lanes, as the mission does, and has to be as short on
+    // the map: across the Bering Strait, Finland is only three countries from Haiti.
     const dist = hopDistances(idx, a);
+    const onMap = hopDistances(idx, a, { onMap: true });
     const region = idx.byId.get(a)!.subregion;
     const partners = ends.filter((b) => {
       const d = dist.get(b);
-      return b !== a && d !== undefined && d >= lo && d <= hi && idx.byId.get(b)!.subregion !== region;
+      if (d === undefined || onMap.get(b) !== d) return false;
+      return d - 1 >= lo && d - 1 <= hi && idx.byId.get(b)!.subregion !== region;
     });
     const b = shuffled(partners, random)[0];
     if (b) return { kind: 'great_connection', endpoints: [a, b].sort() as [TerritoryId, TerritoryId] };

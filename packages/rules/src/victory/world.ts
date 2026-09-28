@@ -132,13 +132,32 @@ export function pathWithin(
   return path.reverse();
 }
 
-/** Steps between two countries by land or sea lane, ignoring ownership. */
-export function hopDistances(idx: DatasetIndex, from: TerritoryId): Map<TerritoryId, number> {
+/**
+ * Whether two neighbors only meet across the edge of the map: their label points are more than half
+ * the world apart, so on a map centred on Greenwich the link leaves one side and comes back on the
+ * other (Russia and the United States across the Bering Strait).
+ */
+export function crossesMapEdge(idx: DatasetIndex, a: TerritoryId, b: TerritoryId): boolean {
+  const [x] = idx.byId.get(a)!.anchor;
+  const [y] = idx.byId.get(b)!.anchor;
+  return Math.abs(x - y) > 180;
+}
+
+/**
+ * Steps between two countries by land or sea lane, ignoring ownership. With `onMap`, links that
+ * cross the edge of the map don't count.
+ */
+export function hopDistances(
+  idx: DatasetIndex,
+  from: TerritoryId,
+  opts: { onMap?: boolean } = {},
+): Map<TerritoryId, number> {
   const dist = new Map<TerritoryId, number>([[from, 0]]);
   const queue = [from];
   for (let i = 0; i < queue.length; i++) {
     const id = queue[i]!;
     for (const n of idx.neighbors(id)) {
+      if (opts.onMap && crossesMapEdge(idx, id, n)) continue;
       if (!dist.has(n)) {
         dist.set(n, dist.get(id)! + 1);
         queue.push(n);

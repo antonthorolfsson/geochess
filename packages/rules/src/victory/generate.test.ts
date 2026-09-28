@@ -120,6 +120,30 @@ describe('public missions', () => {
     expect(a).toEqual(b);
   });
 
+  it('link two countries with six to ten between them, on a chain that stays on the map', () => {
+    // Twenty-four countries around the equator. The first and last meet across the date line, where
+    // B03 and B20 have only six countries between them; along the belt they have sixteen.
+    const belt = (i: number) => `B${String(i).padStart(2, '0')}`;
+    const places: Record<string, Place> = {};
+    for (let i = 0; i < 24; i++) {
+      places[belt(i)] = {
+        v: 3,
+        land: i + 1 < 24 ? [belt(i + 1)] : [],
+        sea: i === 0 ? [belt(23)] : [],
+        sub: `Belt ${i}`,
+        at: [-172.5 + 15 * i, 0],
+      };
+    }
+    const ring = buildMap(places);
+    for (let seed = 1; seed <= 30; seed++) {
+      const spec = generatePublicMission('great_connection', ring, DEFAULT_RULES, seededRandom(seed));
+      if (spec?.kind !== 'great_connection') throw new Error(`seed ${seed}: no endpoints`);
+      const [a, b] = spec.endpoints.map((id) => Number(id.slice(1))) as [number, number];
+      expect(b - a - 1).toBeGreaterThanOrEqual(6);
+      expect(b - a - 1).toBeLessThanOrEqual(10);
+    }
+  });
+
   it('pick a region of workable size that is not a whole continent', () => {
     const spec = generatePublicMission('regional_power', idx, DEFAULT_RULES, seededRandom(3));
     expect(spec).toMatchObject({ kind: 'regional_power', minTerritories: 3 });

@@ -8,7 +8,7 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (393 tests since password sign-in).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (395 tests as of 2026-09-28).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -276,8 +276,8 @@ timeout: seven in-memory databases booting at once took over 10 s on Windows).
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
   continent (Regional Power); five positions worth 3–8 within four steps of a random hub, two
-  apart, over two subregions (Strategic Positions); endpoints four to six steps apart in different
-  subregions (The Great Connection); targets of different missions don't overlap. Secrets: each
+  apart, over two subregions (Strategic Positions); endpoints in different subregions (The Great
+  Connection, see below); targets of different missions don't overlap. Secrets: each
   needs 2–7 conquests (targets and the countries in the way, a greedy estimate), the nearest
   target within 3; fit is closeness to 4 conquests, less for countries in the way, rivals past
   two and target value past 16, plus a little seeded jitter. Dealing draws with the player's
@@ -293,6 +293,13 @@ timeout: seven in-memory databases booting at once took over 10 s on Windows).
 - **Notices.** Reveals and claims go to every member, awards and lost claims to the player, the
   result to everyone; tags dedupe per claim and per mission.
 - **Mission rules version 1** is the only one; the lobby can't pick another.
+- **The Great Connection** (the user's call, 2026-09-28): the endpoints have six to ten countries
+  between them on the shortest chain, by land or sea lane as the mission counts it, and the chain
+  must be as short without crossing the edge of the map (`crossesMapEdge`: Russia to the United
+  States over the Bering Strait, and the date-line lanes to Polynesia). It used to be four to six
+  steps, and hubs like Russia made pairs look random: Finland and Haiti were three countries apart
+  through Russia, Alaska and the Bahamas. Changed in version 1 rather than a new version: the
+  numbers only pick targets in the lobby, and campaigns past it keep the targets they stored.
 
 ## Phase 2 decisions (settled with the user on 2026-09-27)
 

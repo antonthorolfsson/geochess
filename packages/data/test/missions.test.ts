@@ -4,9 +4,11 @@ import {
   PUBLIC_MISSION_KINDS,
   captureCosts,
   components,
+  crossesMapEdge,
   evaluateMission,
   generatePublicMission,
   generatePublicMissions,
+  hopDistances,
   indexDataset,
   parseRules,
   pickerAt,
@@ -79,7 +81,17 @@ describe(`missions on ${index.latest}`, () => {
     }
   });
 
-  it('generates the default set for many seeds, with short, contestable routes and spread positions', () => {
+  it('finds the links that cross the edge of the map', () => {
+    const edge = idx.ids.flatMap((a) =>
+      idx
+        .neighbors(a)
+        .filter((b) => a < b && crossesMapEdge(idx, a, b))
+        .map((b) => `${a}-${b}`),
+    );
+    expect(edge.sort()).toEqual(['FJI-POLYNESIA', 'MICRONESIA-POLYNESIA', 'NZL-POLYNESIA', 'RUS-USA']);
+  });
+
+  it('generates the default set for many seeds, with spread positions and routes that stay on the map', () => {
     for (let seed = 1; seed <= 25; seed++) {
       const result = generatePublicMissions(MISSION_RULES_V1.defaultPublic, idx, objectives, seededRandom(seed));
       if ('error' in result) throw new Error(`seed ${seed}: ${result.error}`);
@@ -91,6 +103,10 @@ describe(`missions on ${index.latest}`, () => {
       expect(positions.territories.some((id) => connection.endpoints.includes(id))).toBe(false);
       const [a, b] = connection.endpoints;
       expect(idx.byId.get(a)!.subregion).not.toBe(idx.byId.get(b)!.subregion);
+      const between = hopDistances(idx, a).get(b)! - 1;
+      expect(between, `${a}-${b}`).toBeGreaterThanOrEqual(6);
+      expect(between, `${a}-${b}`).toBeLessThanOrEqual(10);
+      expect(hopDistances(idx, a, { onMap: true }).get(b)! - 1, `${a}-${b}`).toBe(between);
     }
   });
 

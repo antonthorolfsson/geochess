@@ -189,7 +189,8 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     name: 'The Great Connection',
     scope: 'public',
     timing: 'claim',
-    summary: 'Hold two marked countries and an unbroken chain of yours between them.',
+    summary:
+      'Hold two marked countries with six to ten countries between them, and an unbroken chain of yours linking them.',
   }),
   campaign_veteran: info({
     kind: 'campaign_veteran',
@@ -391,7 +392,11 @@ export interface MissionRules {
     /** ... and at least this many steps from each other. */
     spacing: number;
   };
-  greatConnection: { distance: readonly [number, number] };
+  /**
+   * Countries between the two endpoints on the shortest chain (inclusive), by land or sea lane.
+   * Such a chain must also exist without crossing the edge of the map.
+   */
+  greatConnection: { between: readonly [number, number] };
   campaignVeteran: { wins: number; opponents: number; attackWins: number };
   greatPowers: { minValue: number; count: number; newCount: number };
   acrossTheSeas: { count: number };
@@ -452,7 +457,7 @@ export const MISSION_RULES_V1: MissionRules = {
   expansion: { gain: 15 },
   regionalPower: { sharePct: 60, minTerritories: 3, size: [5, 12], value: [20, 55] },
   strategicPositions: { count: 5, need: 3, value: [3, 8], radius: 4, spacing: 2 },
-  greatConnection: { distance: [4, 6] },
+  greatConnection: { between: [6, 10] },
   campaignVeteran: { wins: 3, opponents: 2, attackWins: 1 },
   greatPowers: { minValue: 8, count: 3, newCount: 2 },
   acrossTheSeas: { count: 3 },

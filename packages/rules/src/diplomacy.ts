@@ -235,7 +235,7 @@ export function feedShows(filter: FeedFilter, item: FeedItem): boolean {
     case 'all':
       return true;
     case 'wars':
-      return type.startsWith('war.') || type === 'round.started';
+      return type.startsWith('war.') || type === 'round.started' || type === 'country.fortified';
     case 'accords':
       return type.startsWith('accord.') || type.startsWith('reputation.');
     case 'chat':

@@ -54,6 +54,8 @@ export interface WorldMapProps {
   bottomInset?: number;
   /** The player's draft list, marked on the map with its order. */
   listed?: readonly TerritoryId[];
+  /** Fortified countries, marked with a rampart under their label. */
+  fortified?: readonly TerritoryId[];
   /** Active wars, drawn as grease-pencil arrows from the launching country to the target. */
   wars?: readonly MapWar[];
   onSelectWar?(warId: string): void;
@@ -178,6 +180,7 @@ export function WorldMap(props: WorldMapProps) {
     initialFrame,
     bottomInset = 0,
     listed = [],
+    fortified = [],
     wars = [],
     preview = null,
     mission = null,
@@ -631,6 +634,7 @@ export function WorldMap(props: WorldMapProps) {
           <WarArrows byId={geo.byId} wars={wars} preview={preview} onSelect={selectWar} />
           <Labels shapes={geo.shapes} scale={labelScale} showValues={showValues} />
           <DraftListMarkers byId={geo.byId} listed={listed} />
+          <FortifiedMarkers byId={geo.byId} fortified={fortified} />
         </g>
       </svg>
 
@@ -778,6 +782,33 @@ function DraftListMarkers({ byId, listed }: { byId: Geometry['byId']; listed: re
                 <text textAnchor="middle" dy="0.35em" fontSize={10} fontWeight={700} fill={AMBER}>
                   {i + 1}
                 </text>
+              </g>
+            </g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/** A small rampart under each fortified country's label. */
+function FortifiedMarkers({ byId, fortified }: { byId: Geometry['byId']; fortified: readonly TerritoryId[] }) {
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      {fortified.map((id) => {
+        const shape = byId.get(id);
+        if (!shape) return null;
+        return (
+          <g key={id} transform={`translate(${shape.anchor[0]},${shape.anchor[1]})`}>
+            <g className="counter-scale">
+              <g transform="translate(0,15)">
+                <path
+                  d="M-7,5 L-7,-3 L-4.5,-3 L-4.5,-6 L-1.5,-6 L-1.5,-3 L1.5,-3 L1.5,-6 L4.5,-6 L4.5,-3 L7,-3 L7,5 Z"
+                  fill={PAPER}
+                  stroke={INK}
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                />
               </g>
             </g>
           </g>

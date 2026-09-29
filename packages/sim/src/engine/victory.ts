@@ -174,16 +174,19 @@ export function settle(s: SimState, only?: ReadonlySet<UserId>): void {
   if (s.cfg.mode === 'normal') finish(s, winners);
 }
 
-/** The campaign ends: unfinished wars are cancelled with nothing changing hands, claims lapse. */
+/**
+ * The campaign ends: unfinished wars are cancelled with nothing changing hands (tokens held back
+ * as tribute, or paid for a counter still unanswered, go back), claims and peace offers lapse.
+ */
 export function finish(s: SimState, winners: UserId[]): void {
   s.status = 'finished';
   s.winners = winners;
   s.finishedRound = s.round;
+  for (const offer of s.peaceOffers) if (offer.status === 'proposed') offer.status = 'lapsed';
   for (const war of s.wars) {
     if (war.status === 'resolved') continue;
-    if (war.status === 'countered' && war.counter?.kind === 'tribute' && war.counter.tokens > 0) {
-      s.byId.get(war.defenderId)!.tokens += war.counter.tokens;
-    }
+    const held = war.status === 'countered' ? (war.counter?.tokens ?? 0) : 0;
+    if (held > 0) s.byId.get(war.defenderId)!.tokens += held;
     war.status = 'resolved';
     war.outcome = 'cancelled';
     war.resolvedRound = s.round;

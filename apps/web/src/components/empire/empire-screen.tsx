@@ -251,11 +251,13 @@ const COLUMNS: { key: SortKey; label: string; className?: string }[] = [
 function acquisitionText(model: CampaignModel, id: TerritoryId, a: Acquisition | undefined): string {
   // Right after a war the map can be ahead of the statistics: say only what the map knows.
   const changedHands = model.campaign.acquired[id];
-  if (changedHands && a?.via !== 'war' && a?.via !== 'tribute') return `Changed hands in round ${changedHands}`;
+  if (changedHands && (a === undefined || a.via === 'draft')) return `Changed hands in round ${changedHands}`;
   if (!a) return '';
   if (a.via === 'draft') return a.pick === null ? 'Drafted' : `Drafted, pick ${a.pick + 1}`;
   const from = playerName(model, a.from);
-  return a.via === 'tribute' ? `Tribute from ${from}, round ${a.round}` : `Won from ${from}, round ${a.round}`;
+  if (a.via === 'tribute') return `Tribute from ${from}, round ${a.round}`;
+  if (a.via === 'peace') return `Peace terms with ${from}, round ${a.round}`;
+  return `Won from ${from}, round ${a.round}`;
 }
 
 function Countries({

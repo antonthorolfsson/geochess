@@ -3,11 +3,12 @@ import { and, eq, gte, ne, or } from 'drizzle-orm';
 import type { CampaignRow } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import type { Tx } from '../db/client';
-import { holdings, wars, type games } from '../db/schema';
+import { holdings, wars, type games, type peaceOffers } from '../db/schema';
 import { warAccords } from '../diplomacy/accords';
 
 export type WarRow = typeof wars.$inferSelect;
 export type GameRow = typeof games.$inferSelect;
+export type PeaceOfferRow = typeof peaceOffers.$inferSelect;
 
 /** Wars that still matter: unresolved ones, and ones resolved recently enough to hold a truce. */
 export async function relevantWars(db: Tx | AppContext['db'], campaign: CampaignRow): Promise<WarRow[]> {
@@ -34,7 +35,12 @@ export function trucesFrom(campaign: CampaignRow, rows: readonly WarRow[]): Truc
 /** Everything the war rules need about a campaign right now. */
 export async function loadBoard(ctx: AppContext, tx: Tx, campaign: CampaignRow): Promise<WarBoard> {
   const rows = await tx
-    .select({ territoryId: holdings.territoryId, ownerId: holdings.ownerId, acquiredRound: holdings.acquiredRound })
+    .select({
+      territoryId: holdings.territoryId,
+      ownerId: holdings.ownerId,
+      acquiredRound: holdings.acquiredRound,
+      fortifiedUntil: holdings.fortifiedUntil,
+    })
     .from(holdings)
     .where(eq(holdings.campaignId, campaign.id));
   const warRows = await relevantWars(tx, campaign);
@@ -43,7 +49,12 @@ export async function loadBoard(ctx: AppContext, tx: Tx, campaign: CampaignRow):
     idx: ctx.datasets.get(campaign.datasetVersion),
     rules: campaign.rules,
     round: campaign.round,
-    holdings: new Map(rows.map((r) => [r.territoryId, { ownerId: r.ownerId, acquiredRound: r.acquiredRound }])),
+    holdings: new Map(
+      rows.map((r) => [
+        r.territoryId,
+        { ownerId: r.ownerId, acquiredRound: r.acquiredRound, fortifiedUntil: r.fortifiedUntil },
+      ]),
+    ),
     wars: warRows.filter((w) => w.status !== 'resolved').map(activeWar),
     truces: trucesFrom(campaign, warRows),
     accords: accordsInForce(accordRows, campaign.round),

@@ -99,6 +99,7 @@ export async function statsView(ctx: AppContext, campaignId: string, viewerId: s
         outcome: p.outcome,
         transfers: p.transfers,
         tokens: p.tokens ?? 0,
+        terms: p.terms ?? null,
       },
     ];
   });

@@ -1,4 +1,5 @@
 import {
+  MATCHED_RAISE_MIN_PCT,
   RESPONSE_WINDOW_TEXT,
   durationText,
   holdMs,
@@ -48,7 +49,19 @@ export function liveClockText(clock: LiveClock): string {
 export const timeControlText = (rules: CampaignRules) =>
   rules.war.pace === 'live' ? rules.war.liveClock : perMoveText(rules.war.hoursPerMove);
 
-/** What a stake must be worth against a target of each value, as declared and after a raise. */
+/**
+ * What the stake table's second row shows, if anything: the stake a raise to a percentage demands,
+ * and a fortified country needs. A matched raise depends on the country put in, so has no row.
+ */
+export function raisedRowLabel(rules: CampaignRules): string | null {
+  const { raise, fortify } = rules.war;
+  const raised = raise === 'token' || raise === 'free';
+  if (raised && fortify) return 'After a raise, or fortified';
+  if (raised) return 'After a raise';
+  return fortify ? 'Fortified' : null;
+}
+
+/** What a stake must be worth against a target of each value, as declared and after a raise (or fortified). */
 export function stakeTable(rules: CampaignRules): { value: number; stake: number; raised: number }[] {
   return Array.from({ length: 10 }, (_, i) => ({
     value: i + 1,
@@ -85,8 +98,30 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Clock modifiers', value: war.clockModifiers ? 'On' : 'Off' },
     { label: 'War tokens', value: `${war.tokensPerRound} a round, up to ${war.tokenCap}` },
     { label: 'Least stake', value: `${war.stakeFloorPct}% of the target` },
-    { label: 'Raised stake', value: `${war.raisePct}% of the target` },
+    { label: 'Raising the stakes', value: raiseText(rules) },
+    ...(raisedRowLabel(rules) ? [{ label: 'Raised stake', value: `${war.raisePct}% of the target` }] : []),
+    {
+      label: 'Redirects',
+      value: `${war.redirect === 'nearby' ? 'Near the target' : 'Anywhere on the border'}, ${war.redirectToken ? 'for a token' : 'free'}`,
+    },
+    { label: 'Fortifying', value: war.fortify ? 'A token, until the round after next' : 'Off' },
+    { label: 'Peace terms', value: war.peaceTerms ? 'Until the game ends' : 'Off: tribute instead' },
+    { label: 'Calling off a declaration', value: war.recall ? 'Until the defender answers' : 'Off' },
     { label: 'Truce after a war', value: war.truceRounds === 0 ? 'None' : plural(war.truceRounds, 'round') },
     { label: 'Lock on won countries', value: war.lockRounds === 0 ? 'None' : plural(war.lockRounds, 'round') },
   ];
+}
+
+/** How the campaign's defenders raise the stakes, in a few words. */
+export function raiseText(rules: CampaignRules): string {
+  switch (rules.war.raise) {
+    case 'matched':
+      return `Matched: a country worth ${MATCHED_RAISE_MIN_PCT}–100% of the target`;
+    case 'token':
+      return `For a token, to ${rules.war.raisePct}% of the target`;
+    case 'free':
+      return `Free, to ${rules.war.raisePct}% of the target`;
+    case 'off':
+      return 'None';
+  }
 }

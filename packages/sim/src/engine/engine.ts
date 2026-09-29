@@ -11,7 +11,7 @@ import { createState } from './state';
 import type { SimConfig, SimState, SimWar } from './types';
 import { finish, settle } from './victory';
 import { missionWorld } from './world';
-import { declare, fight, reply, respond, type Reply } from './wars';
+import { answerPeace, declare, fight, fortify, offerPeace, recall, reply, respond, type Reply } from './wars';
 
 export interface RunOptions {
   bots: Bots;
@@ -31,6 +31,12 @@ function playRound(s: SimState, bots: Bots): void {
   for (let wave = 0; wave < s.cfg.waves && s.status === 'active'; wave++) {
     for (const id of shuffled(s.order, s.rng.order)) {
       const player = s.byId.get(id)!;
+      // A country to fortify, once a round, before declaring.
+      const fortified = wave === 0 && s.status === 'active' ? bots.fortify(s, player) : null;
+      if (fortified) {
+        const refused = fortify(s, id, fortified);
+        if (refused) fail(s, `${id} fortified ${fortified} illegally: ${refused}`);
+      }
       while (player.tokens > 0 && s.status === 'active') {
         const d = bots.declare(s, player, wave);
         if (!d) break;
@@ -42,15 +48,38 @@ function playRound(s: SimState, bots: Bots): void {
         if (s.cfg.debug) checkInvariants(s);
       }
     }
+    if (s.rules.war.recall) {
+      for (const war of s.wars.filter((w) => w.status === 'declared')) {
+        if (!bots.recall(s, war)) continue;
+        const refused = recall(s, war);
+        if (refused) fail(s, `${war.attackerId} called off ${war.id} illegally: ${refused}`);
+        if (s.status !== 'active') return;
+      }
+    }
     for (const war of shuffled(
       s.wars.filter((w) => w.status === 'declared'),
       s.rng.order,
     )) {
-      const refused = respond(s, war, bots.respond(s, war));
+      if (war.status !== 'declared') continue;
+      let answer = bots.respond(s, war);
+      if (answer.kind === 'peace') {
+        // Terms first; turned down, the fallback answers the declaration.
+        const offer = offerPeace(s, war, war.defenderId, answer.terms);
+        if (typeof offer === 'string') fail(s, `${war.defenderId} offered illegal terms in ${war.id}: ${offer}`);
+        else {
+          const refused = answerPeace(s, war, offer, bots.answerPeace(s, war, offer));
+          if (refused) fail(s, `${war.attackerId} answered terms in ${war.id} illegally: ${refused}`);
+        }
+        if (s.status !== 'active') return;
+        if (war.status !== 'declared') continue;
+        answer = answer.fallback;
+      }
+      const refused = respond(s, war, answer);
       if (refused) {
         fail(s, `${war.defenderId} answered ${war.id} illegally: ${refused}`);
         respond(s, war, { kind: 'accept' });
       }
+      if (s.status !== 'active') return;
     }
     for (const war of shuffled(
       s.wars.filter((w) => w.status === 'countered'),

@@ -1,9 +1,10 @@
-import { colorToMove, type GameSummary, type GameView, type WarView } from '@empire/rules';
-import { and, asc, eq } from 'drizzle-orm';
+import { colorToMove, type GameSummary, type GameView, type PeaceOfferView, type WarView } from '@empire/rules';
+import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import { games, members, wars } from '../db/schema';
+import type { Db, Tx } from '../db/client';
+import { games, members, peaceOffers, wars } from '../db/schema';
 import { notFound } from '../lib/errors';
-import type { GameRow, WarRow } from './board';
+import type { GameRow, PeaceOfferRow, WarRow } from './board';
 
 export function toGameSummary(game: GameRow): GameSummary {
   return {
@@ -56,11 +57,52 @@ export async function warView(ctx: AppContext, campaignId: string, warId: string
     : [];
   if (!war) throw notFound('War not found.');
   const rows = await ctx.db.select().from(games).where(eq(games.warId, war.id)).orderBy(asc(games.createdAt));
-  return toWarView(war, rows);
+  return toWarView(war, rows, await peaceOffersFor(ctx.db, campaignId, viewerId, [war.id]));
 }
 
-/** `games` are the war's games in the order they were played. */
-export function toWarView(war: WarRow, games: readonly GameRow[]): WarView {
+/**
+ * The viewer's own peace offers (made or received) in these wars, newest first. Nobody else's:
+ * offers are private to the two players at war.
+ */
+export async function peaceOffersFor(
+  db: Tx | Db,
+  campaignId: string,
+  viewerId: string,
+  warIds: readonly string[],
+): Promise<PeaceOfferRow[]> {
+  if (warIds.length === 0) return [];
+  return db
+    .select()
+    .from(peaceOffers)
+    .where(
+      and(
+        eq(peaceOffers.campaignId, campaignId),
+        inArray(peaceOffers.warId, [...warIds]),
+        or(eq(peaceOffers.proposerId, viewerId), eq(peaceOffers.recipientId, viewerId)),
+      ),
+    )
+    .orderBy(desc(peaceOffers.createdAt));
+}
+
+export function toPeaceOfferView(offer: PeaceOfferRow): PeaceOfferView {
+  return {
+    id: offer.id,
+    warId: offer.warId,
+    proposerId: offer.proposerId,
+    recipientId: offer.recipientId,
+    terms: offer.terms,
+    status: offer.status,
+    createdAt: offer.createdAt.toISOString(),
+    respondBy: offer.respondBy?.toISOString() ?? null,
+    endedAt: offer.endedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * `games` are the war's games in the order they were played; `peace` the viewer's own offers in
+ * it (any others are left out here too).
+ */
+export function toWarView(war: WarRow, games: readonly GameRow[], peace: readonly PeaceOfferRow[] = []): WarView {
   return {
     id: war.id,
     attackerId: war.attackerId,
@@ -78,5 +120,7 @@ export function toWarView(war: WarRow, games: readonly GameRow[]): WarView {
     declaredAt: war.declaredAt.toISOString(),
     resolvedAt: war.resolvedAt?.toISOString() ?? null,
     games: games.map(toGameSummary),
+    reserves: war.reserves,
+    peace: peace.filter((o) => o.warId === war.id).map(toPeaceOfferView),
   };
 }

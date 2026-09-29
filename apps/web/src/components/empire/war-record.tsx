@@ -13,6 +13,7 @@ const OUTCOMES: { key: keyof WarTally; label: string; always?: boolean }[] = [
   { key: 'drawn', label: 'Drawn', always: true },
   { key: 'lost', label: 'Lost', always: true },
   { key: 'tribute', label: 'Settled by tribute' },
+  { key: 'settled', label: 'Ended by peace terms' },
   { key: 'withdrawn', label: 'Called off' },
   { key: 'cancelled', label: 'Cut short by the end' },
   { key: 'underway', label: 'Underway' },
@@ -79,7 +80,7 @@ export function WarRecordView({
       )}
       {(record.tokensTaken > 0 || record.tokensPaid > 0) && (
         <p className="text-[0.95rem] text-muted">
-          War tokens as tribute: {record.tokensTaken} taken, {record.tokensPaid} paid.
+          War tokens as tribute or in peace terms: {record.tokensTaken} taken, {record.tokensPaid} paid.
         </p>
       )}
 
@@ -164,7 +165,7 @@ function Changes({
               {t && <ValueBadge value={t.value} />}
               <span className="min-w-0 flex-1 truncate text-sm text-muted">
                 {direction} {playerName(model, c.otherId)} · round {c.round}
-                {c.via === 'tribute' ? ' · tribute' : ''}
+                {c.via === 'tribute' ? ' · tribute' : c.via === 'peace' ? ' · peace terms' : ''}
               </span>
               <Link
                 href={`/c/${model.campaign.id}?war=${c.warId}`}

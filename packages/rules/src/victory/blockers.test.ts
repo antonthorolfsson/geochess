@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RULES } from '../config';
+import { DEFAULT_RULES, parseRules } from '../config';
 import type { WarBoard } from '../war';
 import { claimBlockers, possibleTransfers, type OpenWar } from './blockers';
 import type { MissionSpec } from './catalog';
@@ -31,10 +31,13 @@ const idx = buildMap({
 });
 const positions: MissionSpec = { kind: 'strategic_positions', territories: ['P1', 'P2', 'P3', 'P4', 'P5'], need: 3 };
 
-function board(owners: Record<string, string>, wars: OpenWar[]): WarBoard {
+/** The original game's answers: a free raise, redirects anywhere, and tribute. */
+const ORIGINAL = { ...DEFAULT_RULES, war: parseRules({}).war };
+
+function board(owners: Record<string, string>, wars: OpenWar[], rules = DEFAULT_RULES): WarBoard {
   return {
     idx,
-    rules: DEFAULT_RULES,
+    rules,
     round: 3,
     holdings: new Map(Object.entries(owners).map(([id, ownerId]) => [id, { ownerId, acquiredRound: 0 }])),
     wars: wars.map((w) => ({
@@ -76,9 +79,28 @@ describe('possible outcomes of a war', () => {
 
   it('a declaration not yet answered: also every redirect and tribute the defender may offer', () => {
     const w: OpenWar = { ...fought('w1', BO, ANN, 'X', ['B1']), status: 'declared' };
-    const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
+    const outcomes = possibleTransfers(board(owners, [w], ORIGINAL), w).map((t) =>
+      t.map((x) => x.territoryId).join(','),
+    );
     // Tribute: any of Ann's countries worth less than X (5). A raise could stake all of Bo's connected countries.
     expect(outcomes).toEqual(expect.arrayContaining(['', 'X', 'B1', 'P1', 'P5', 'B1,B2,B3']));
+  });
+
+  it('a declaration not yet answered, with the revised answers: any country a matched raise could put in', () => {
+    const w: OpenWar = { ...fought('w1', BO, ANN, 'X', ['B1']), status: 'declared' };
+    const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
+    // A matched raise puts in one of Ann's countries worth no more than X (5) or than Bo could still
+    // add (B2 and B3, 6), taken with X if Bo wins. No tribute: peace terms need Ann's agreement.
+    expect(outcomes).toEqual(['', 'X', 'B1', 'B1,B2,B3', 'X,P1', 'X,P2', 'X,P3', 'X,P4', 'X,P5']);
+  });
+
+  it('a met matched raise: the added country is at stake with the target', () => {
+    const w: OpenWar = {
+      ...fought('w1', BO, ANN, 'X', ['B1', 'B2']),
+      counter: { kind: 'raise', minValue: 9, added: 'P1' },
+    };
+    const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
+    expect(outcomes).toEqual(['', 'X,P1', 'B1,B2']);
   });
 });
 

@@ -257,43 +257,7 @@ export async function answerAccord(
     }
 
     if (!diplomacyOpen(scope.campaign.status)) throw conflict(PROPOSAL_REJECTION_MESSAGES.closed, 'closed');
-    const round = scope.campaign.round;
-    const now = ctx.now();
-    const renewed = await accordInForce(scope, accord.proposerId, accord.recipientId);
-    if (renewed) {
-      await scope.tx
-        .update(accords)
-        .set({ status: 'renewed', endedRound: round, endedAt: now })
-        .where(eq(accords.id, renewed.id));
-    }
-    const endsRound = accordEndsRound(round, accord.rounds);
-    await scope.tx
-      .update(accords)
-      .set({
-        status: 'active',
-        respondBy: null,
-        signedRound: round,
-        signedAt: now,
-        endsRound,
-        renews: renewed?.id ?? null,
-      })
-      .where(eq(accords.id, accord.id));
-    await scope.log.add(
-      {
-        type: 'accord.signed',
-        payload: {
-          accordId: accord.id,
-          proposerId: accord.proposerId,
-          recipientId: accord.recipientId,
-          rounds: accord.rounds,
-          endsRound,
-          terms: accord.terms,
-          renews: renewed?.id ?? null,
-        },
-      },
-      userId,
-      round,
-    );
+    const endsRound = await signProposal(ctx, scope, accord, userId);
     notify(ctx, scope, {
       userId: accord.proposerId,
       title: `${recipient} signed your accord`,
@@ -302,6 +266,83 @@ export async function answerAccord(
       tag: accordTag(campaignId, userId),
     });
   });
+}
+
+/**
+ * Signs a proposal: it comes into force at once, renewing any accord between the two, and becomes
+ * public. Returns the round at whose start it ends.
+ */
+async function signProposal(
+  ctx: AppContext,
+  scope: MutationScope,
+  accord: AccordRow,
+  signerId: string | null,
+): Promise<number> {
+  const round = scope.campaign.round;
+  const now = ctx.now();
+  const renewed = await accordInForce(scope, accord.proposerId, accord.recipientId);
+  if (renewed) {
+    await scope.tx
+      .update(accords)
+      .set({ status: 'renewed', endedRound: round, endedAt: now })
+      .where(eq(accords.id, renewed.id));
+  }
+  const endsRound = accordEndsRound(round, accord.rounds);
+  await scope.tx
+    .update(accords)
+    .set({
+      status: 'active',
+      respondBy: null,
+      signedRound: round,
+      signedAt: now,
+      endsRound,
+      renews: renewed?.id ?? null,
+    })
+    .where(eq(accords.id, accord.id));
+  await scope.log.add(
+    {
+      type: 'accord.signed',
+      payload: {
+        accordId: accord.id,
+        proposerId: accord.proposerId,
+        recipientId: accord.recipientId,
+        rounds: accord.rounds,
+        endsRound,
+        terms: accord.terms,
+        renews: renewed?.id ?? null,
+      },
+    },
+    signerId,
+    round,
+  );
+  return endsRound;
+}
+
+/**
+ * An accord both players agreed to elsewhere (with peace terms), signed at once as if proposed and
+ * accepted in the same moment. Returns the round at whose start it ends.
+ */
+export async function signAgreedAccord(
+  ctx: AppContext,
+  scope: MutationScope,
+  agreed: { proposerId: string; recipientId: string; rounds: number; terms: string | null },
+): Promise<number> {
+  const now = ctx.now();
+  const [accord] = await scope.tx
+    .insert(accords)
+    .values({
+      id: newId(),
+      campaignId: scope.campaign.id,
+      proposerId: agreed.proposerId,
+      recipientId: agreed.recipientId,
+      status: 'proposed',
+      rounds: agreed.rounds,
+      terms: agreed.terms,
+      proposedRound: scope.campaign.round,
+      proposedAt: now,
+    })
+    .returning();
+  return signProposal(ctx, scope, accord!, agreed.recipientId);
 }
 
 /** The proposer takes back a proposal that hasn't been answered. */

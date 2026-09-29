@@ -474,3 +474,37 @@ VARIANTS['v3-backstab-2r'] = {
     patchSecret: patchSecret((spec) => (spec.kind === 'backstab' ? { ...spec, rounds: 2, count: 2 } : null)),
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// War answers. Campaigns play a new campaign's answers (a matched raise, nearby redirects that
+// cost a token, fortifying, calling a declaration off, peace terms); these play others.
+
+VARIANTS['original-answers'] = {
+  variant: {
+    name: 'original-answers',
+    description:
+      'The original answers: a free raise to 125%, redirects anywhere at no cost, tribute, no fortifying or calling off.',
+    war: {
+      raise: 'free',
+      redirect: 'anywhere',
+      redirectToken: false,
+      fortify: false,
+      peaceTerms: false,
+      recall: false,
+    },
+  },
+};
+VARIANTS['raise-token'] = {
+  variant: {
+    name: 'raise-token',
+    description: 'A raise to 125% that costs the defender a war token, which the attacker gets for meeting it.',
+    war: { raise: 'token' },
+  },
+};
+VARIANTS['raise-off'] = {
+  variant: {
+    name: 'raise-off',
+    description: 'No raising, and a stake floor of 100%.',
+    war: { raise: 'off', stakeFloorPct: 100 },
+  },
+};

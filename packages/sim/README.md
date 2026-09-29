@@ -25,9 +25,12 @@ Runs write one JSON line per campaign to `packages/sim/out/<name>/shard-*.jsonl`
 pick up where they stopped if interrupted. `--workers` sets the number of child processes (default:
 cores − 2); `--out` names the directory.
 
-Campaigns play what a new campaign plays: the current mission rules version and a last round of 25.
-`--mission-rules 2` plays an earlier version (the balance report's first runs were version 2), and
-`--last-round 30` or `--last-round none` another season length (`trace` takes both too).
+Campaigns play what a new campaign plays: the current mission rules version, a last round of 25 and
+the revised war answers (a matched raise, nearby redirects that cost a token, fortifying, calling a
+declaration off, and peace terms in place of tribute). `--mission-rules 2` plays an earlier version
+(the balance report's first runs were version 2), and `--last-round 30` or `--last-round none`
+another season length (`trace` takes both too). The report's runs also played the original answers:
+add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to compare with them.
 
 ## What a campaign does
 
@@ -51,9 +54,13 @@ extra time, a draw rate, and how decisive games end (checkmate, timeout, resigna
 `src/bots/standard.ts` values everything in country value, a victory point being worth `vpValue`.
 They draft toward public targets, choose the secret that shows the least effort, declare the war
 with the best expected value (country value, mission progress, missions completed or broken,
-rivals' visible claims broken or handed over, allowing for a raise), answer with the best of
-accept, raise, redirect and tribute, and sign accords with neighbours they don't want to fight,
-breaking them for a much better target or for Backstab. Rivals only ever see public missions,
+rivals' visible claims broken or handed over, allowing for a raise, with reserves set aside to meet
+a token raise), answer with the best of accept, raise (putting in the country whose bigger war is
+best for them, for a matched raise), redirect and tribute (or, with peace terms, a cheaper country
+or tokens offered for peace and an accord, answering as they otherwise would if it's turned down),
+fortify a country a complete or claimed mission leans on when they have a token to spare, and sign
+accords with neighbours they don't want to fight, breaking them for a much better target or for
+Backstab. They never call a declaration off unless a test sets `recallRate`. Rivals only ever see public missions,
 pending claims and revealed secrets. `greedy` bots play on value alone.
 
 The knobs are in `src/bots/knobs.ts`; the scenarios in `src/scenarios.ts` vary them one at a time.

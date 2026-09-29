@@ -3,7 +3,7 @@
  * wars whenever the expected value gain beats the threshold. The baseline for how often missions
  * get done by accident.
  */
-import { attackableTargets, suggestPick, valueOf } from '@empire/rules';
+import { attackableTargets, clockTarget, suggestPick, valueOf } from '@empire/rules';
 import { warBoard } from '../engine/board';
 import { warOdds } from '../engine/chess';
 import type { SimState, SimWar } from '../engine/types';
@@ -36,7 +36,10 @@ export function greedyBots(knobs: BotKnobs): Bots {
       const threshold = player.tokens >= s.rules.war.tokenCap ? knobs.declareThresholdAtCap : knobs.declareThreshold;
       return best && best.u > threshold ? best : null;
     },
+    fortify: () => null,
+    recall: () => false,
     respond: () => ({ kind: 'accept' }),
+    answerPeace: () => false,
     reply(s, war: SimWar) {
       const counter = war.counter!;
       if (counter.kind === 'tribute') return { kind: 'accept' };
@@ -51,8 +54,14 @@ export function greedyBots(knobs: BotKnobs): Bots {
             })?.stake
           : war.stake;
       if (!stake) return { kind: 'withdraw' };
-      const odds = warOdds(s, war.attackerId, war.defenderId, targetId, board);
-      const u = odds.attacker * s.idx.byId.get(targetId)!.value - odds.defender * value(s, stake);
+      const clockId = clockTarget(s.rules, {
+        targetId,
+        redirectedFrom: counter.kind === 'redirect' ? war.targetId : null,
+      });
+      const odds = warOdds(s, war.attackerId, war.defenderId, clockId, board);
+      // A matched raise's country comes with the target; a paid counter's token comes to the attacker.
+      const won = value(s, counter.kind === 'raise' && counter.added ? [targetId, counter.added] : [targetId]);
+      const u = odds.attacker * won - odds.defender * value(s, stake) + (counter.tokens ?? 0);
       if (u <= 0) return { kind: 'withdraw' };
       return counter.kind === 'raise' ? { kind: 'accept', stake } : { kind: 'accept' };
     },

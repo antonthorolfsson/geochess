@@ -5,26 +5,39 @@
  * - declaring: the chance of winning times what the target is worth (value, mission progress,
  *   missions it completes, rivals' claims it breaks), less the chance of losing times what the
  *   stake is worth (value, progress, claims of ours it breaks, rivals' missions it hands them),
- *   allowing for a raise;
- * - answering: the best of accepting, raising, redirecting and tribute, given how the attacker
- *   would reply;
+ *   allowing for a raise (and setting reserves aside to meet a token raise at once);
+ * - answering: the best of accepting, raising, redirecting and tribute (or, with peace terms, a
+ *   cheaper country or tokens offered for peace), given how the attacker would reply;
+ * - fortifying a country an open or complete mission leans on, with a token to spare;
  * - accords with neighbours not worth attacking, broken when a partner's country is worth much more
  *   than any other target (or when the secret mission is Backstab).
  */
 import {
+  PEACE_MAX_TOKENS,
+  WHITE_PEACE,
   attackableTargets,
   bordersAny,
   canRaise,
+  checkTarget,
   clockModifiers,
+  clockTarget,
+  counterCost,
+  fortifiedUntil,
   hopDistances,
   leadersAt,
+  peaceTransfers,
+  raiseDemand,
   raiseFloor,
+  raiseOptions,
   redirectOptions,
   shuffled,
   stakeFloor,
+  stakeFromReserves,
+  tributeCountries,
   tributeOptions,
   valueOf,
   type MissionWorld,
+  type PeaceTerms,
   type PublicMissionSpec,
   type TerritoryId,
   type Transfer,
@@ -36,13 +49,13 @@ import { oddsWithModifier, type WarOdds } from '../engine/chess';
 import { accordInForce, answer, propose, renounce } from '../engine/diplomacy';
 import type { DraftPicker } from '../engine/lifecycle';
 import { heldBy, pointsToWin } from '../engine/state';
-import type { SimPlayer, SimState, SimWar } from '../engine/types';
+import type { SimPeaceOffer, SimPlayer, SimState, SimWar } from '../engine/types';
 import { hasScored, isComplete } from '../engine/victory';
 import type { Declaration, Reply, Response } from '../engine/wars';
 import { missionWorld } from '../engine/world';
 import { gumbel } from '../random';
 import { boardKeeping, lightningOpen, secretChooser, stakeFor } from './common';
-import type { Bots } from './index';
+import type { Answer, Bots } from './index';
 import type { BotKnobs } from './knobs';
 import { missionModels, openSlots, visibleSlots, worldAfter, type BattleEvent, type MissionModel } from './valuation';
 
@@ -229,6 +242,10 @@ interface WarPlan {
   defenderId: UserId;
   launchId: TerritoryId;
   stake: TerritoryId[];
+  /** The defender's country a matched raise put in, won with the target. */
+  added?: TerritoryId | null;
+  /** The country whose clock the war is fought on, when not the target (a nearby redirect). */
+  clockId?: TerritoryId;
 }
 
 /**
@@ -278,10 +295,11 @@ function attackValue(ctx: Ctx, plan: WarPlan, models: readonly MissionModel[] = 
   const { s } = ctx;
   const { targetId, defenderId, launchId, stake } = plan;
   const me = ctx.me;
-  const o = odds(ctx, me, defenderId, targetId);
+  const o = odds(ctx, me, defenderId, plan.clockId ?? targetId);
   const base = s.byId.get(me)!.baseline;
   const viaSea = (s.idx.byId.get(launchId)?.sea.includes(targetId) ?? false) && !base.has(targetId);
-  const take: Transfer[] = [{ territoryId: targetId, from: defenderId, to: me }];
+  const won = plan.added ? [targetId, plan.added] : [targetId];
+  const take: Transfer[] = won.map((id) => ({ territoryId: id, from: defenderId, to: me }));
   const lose: Transfer[] = stake.map((id) => ({ territoryId: id, from: me, to: defenderId }));
   const winEvent: BattleEvent = {
     role: 'attacker',
@@ -311,7 +329,7 @@ function attackValue(ctx: Ctx, plan: WarPlan, models: readonly MissionModel[] = 
     endReason: 'checkmate',
   });
 
-  let win = s.idx.byId.get(targetId)!.value + progressGain(ctx, models, [targetId], winEvent);
+  let win = valueOf(s.idx, won) + progressGain(ctx, models, won, winEvent);
   win += exactSwing(ctx, me, models, winWorld);
   const artist = models.find((m) => m.slot.spec.kind === 'checkmate_artist' && !m.complete);
   if (artist && isComplete(s, winMate, me, artist.slot.spec)) {
@@ -335,6 +353,8 @@ function keepSet(models: readonly MissionModel[]): Set<TerritoryId> {
 
 interface Candidate extends WarPlan {
   u: number;
+  /** Countries set aside to meet a raise at once. */
+  reserves?: TerritoryId[];
 }
 
 /** The best way to attack a target: stake choice, and allowing for a raise. */
@@ -357,32 +377,40 @@ function bestPlanFor(ctx: Ctx, targetId: TerritoryId, keep: ReadonlySet<Territor
   const floor = raiseFloor(s.rules, s.idx.byId.get(targetId)!.value);
   // Having just been raised off this target, only come back with a stake that meets the raise.
   const raisedBefore = recentlyWithdrawn(ctx, targetId);
+  // A matched raise is the defender's bet, taken when they expect to win: no discount for it here.
+  const style = s.rules.war.raise;
   for (const plan of plans) {
     const asDeclared = attackValue(ctx, { targetId, defenderId, launchId: plan.launchId, stake: plan.stake });
     let u = asDeclared;
     let stake = plan.stake;
-    if (plan.value < floor) {
+    let reserves: TerritoryId[] | undefined;
+    if ((style === 'free' || style === 'token') && plan.value < floor) {
       const raised =
         stakeFor(kept, me, targetId, { launchId: plan.launchId, minValue: floor }) ??
         stakeFor(board, me, targetId, { launchId: plan.launchId, minValue: floor });
       const raisedValue = raised
         ? attackValue(ctx, { targetId, defenderId, launchId: plan.launchId, stake: raised.stake })
         : -Infinity;
+      // Meeting a token raise earns the defender's token.
+      const bonus = style === 'token' ? TOKEN_VALUE : 0;
       // A defender with a mission at stake raises whenever they can; others now and then.
       const raiseChance =
         raisedBefore !== null || contested(ctx, { targetId, defenderId, launchId: plan.launchId, stake: plan.stake })
           ? 1
           : ctx.knobs.raiseRate;
       // After a raise: fight on the bigger stake if it's worth it, else withdraw, a wasted declaration.
-      const afterRaise = raisedValue > 0 ? raisedValue : WASTED;
+      const afterRaise = raisedValue + bonus > 0 ? raisedValue + bonus : WASTED;
       u = (1 - raiseChance) * asDeclared + raiseChance * afterRaise;
-      // Staking the raise up front takes the option away from the defender.
       if (raised && raisedValue > u) {
+        // Staking the raise up front takes the option away from the defender.
         u = raisedValue;
         stake = raised.stake;
+      } else if (raised && style === 'token' && raisedValue + bonus > 0) {
+        // Set aside what meeting it takes, so a raise is met at once.
+        reserves = raised.stake.filter((id) => !plan.stake.includes(id));
       }
     }
-    if (!best || u > best.u) best = { targetId, defenderId, launchId: plan.launchId, stake, u };
+    if (!best || u > best.u) best = { targetId, defenderId, launchId: plan.launchId, stake, reserves, u };
   }
   return best;
 }
@@ -438,19 +466,35 @@ function declareFor(s: SimState, player: SimPlayer, knobs: BotKnobs): Declaratio
   // Keep two tokens for Lightning Campaign, unless this war is worth it anyway.
   if (knobs.saveForLightning && player.tokens < 2 && lightningOpen(s, player.id) && !atCap) threshold += TOKEN_VALUE;
   if (best.u <= threshold) return null;
-  return { targetId: best.targetId, launchId: best.launchId, stake: best.stake };
+  return {
+    targetId: best.targetId,
+    launchId: best.launchId,
+    stake: best.stake,
+    ...(best.reserves?.length ? { reserves: best.reserves } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
 // Answering
 
-/** The defender's expected value of fighting for `targetId` against this stake. */
-function defendValue(ctx: Ctx, war: SimWar, targetId: TerritoryId, stake: readonly TerritoryId[]): number {
+/**
+ * The defender's expected value of fighting for `atRisk` (the target, and a country a matched raise
+ * put in) against this stake, on `clockId`'s clock (the target's unless a nearby redirect keeps
+ * the original's).
+ */
+function defendValue(
+  ctx: Ctx,
+  war: SimWar,
+  atRisk: readonly TerritoryId[],
+  stake: readonly TerritoryId[],
+  clockId: TerritoryId = atRisk[0]!,
+): number {
   const { s } = ctx;
   const me = ctx.me;
-  const o = odds(ctx, war.attackerId, me, targetId);
+  const targetId = atRisk[0]!;
+  const o = odds(ctx, war.attackerId, me, clockId);
   const won: Transfer[] = stake.map((id) => ({ territoryId: id, from: war.attackerId, to: me }));
-  const lost: Transfer[] = [{ territoryId: targetId, from: me, to: war.attackerId }];
+  const lost: Transfer[] = atRisk.map((id) => ({ territoryId: id, from: me, to: war.attackerId }));
   const base = { attackerId: war.attackerId, defenderId: me, launchId: war.launchId, targetId };
   const winWorld = worldAfter(s, ctx.world, won, {
     ...base,
@@ -474,7 +518,7 @@ function defendValue(ctx: Ctx, war: SimWar, targetId: TerritoryId, stake: readon
   };
   let win = valueOf(s.idx, stake) + progressGain(ctx, ctx.mine, stake, e) + exactSwing(ctx, me, ctx.mine, winWorld);
   win += rivalSwing(ctx, war.attackerId, winWorld);
-  let loss = s.idx.byId.get(targetId)!.value + progressLoss(ctx, ctx.mine, [targetId]);
+  let loss = valueOf(s.idx, atRisk) + progressLoss(ctx, ctx.mine, atRisk);
   loss -= exactSwing(ctx, me, ctx.mine, lossWorld);
   loss -= rivalSwing(ctx, war.attackerId, lossWorld);
   return o.defender * win - o.attacker * loss;
@@ -508,9 +552,61 @@ function attackerValue(
   war: SimWar,
   targetId: TerritoryId,
   stake: readonly TerritoryId[],
+  extra: Pick<WarPlan, 'added' | 'clockId'> = {},
 ) {
   const ctx = context(s, knobs, war.attackerId);
-  return attackValue(ctx, { targetId, defenderId: war.defenderId, launchId: war.launchId, stake: [...stake] });
+  return attackValue(ctx, {
+    targetId,
+    defenderId: war.defenderId,
+    launchId: war.launchId,
+    stake: [...stake],
+    ...extra,
+  });
+}
+
+/** What peace terms are worth to one of the two players, against the war as it stands. */
+function peaceValueFor(s: SimState, knobs: BotKnobs, war: SimWar, terms: PeaceTerms, userId: UserId): number {
+  const ctx = context(s, knobs, userId);
+  const transfers = peaceTransfers(war, terms);
+  const after = worldAfter(s, ctx.world, transfers, {
+    attackerId: war.attackerId,
+    defenderId: war.defenderId,
+    launchId: war.launchId,
+    targetId: war.targetId,
+    outcome: 'settled',
+    transfers,
+    endReason: null,
+  });
+  const gained = transfers.filter((t) => t.to === userId).map((t) => t.territoryId);
+  const lost = transfers.filter((t) => t.from === userId).map((t) => t.territoryId);
+  const attacking = userId === war.attackerId;
+  const tokens = attacking
+    ? terms.tokensToAttacker - terms.tokensToDefender
+    : terms.tokensToDefender - terms.tokensToAttacker;
+  return (
+    valueOf(s.idx, gained) -
+    valueOf(s.idx, lost) +
+    progressGain(ctx, ctx.mine, gained, null) -
+    progressLoss(ctx, ctx.mine, lost) +
+    exactSwing(ctx, userId, ctx.mine, after) +
+    rivalSwing(ctx, attacking ? war.defenderId : war.attackerId, after) +
+    tokens * TOKEN_VALUE
+  );
+}
+
+/**
+ * The stake an attacker would meet a raise with, and whether it happens at once: from their
+ * reserves if they cover it (the server meets it itself), else the cheapest they could stake.
+ */
+function meetStake(s: SimState, board: WarBoard, war: SimWar, minValue: number) {
+  const fromReserves = war.reserves.length > 0 ? stakeFromReserves(s.idx, war.stake, war.reserves, minValue) : null;
+  if (fromReserves) return { stake: fromReserves, automatic: true };
+  const stake = stakeFor(board, war.attackerId, war.targetId, {
+    launchId: war.launchId,
+    minValue,
+    exceptWarId: war.id,
+  })?.stake;
+  return stake ? { stake, automatic: false } : null;
 }
 
 /** How the attacker values a tribute country. */
@@ -560,11 +656,13 @@ function missionAtStake(ctx: Ctx, war: SimWar): boolean {
   return exactSwing(ctx, ctx.me, ctx.mine, after) < 0 || rivalSwing(ctx, war.attackerId, after) < 0;
 }
 
-function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Response {
+function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
   const board = warBoard(s);
   const ctx = context(s, knobs, war.defenderId, board);
   const active = board.wars.find((w) => w.id === war.id)!;
-  const accept = defendValue(ctx, war, war.targetId, war.stake);
+  const rules = s.rules.war;
+  const tokens = s.byId.get(ctx.me)!.tokens;
+  const accept = defendValue(ctx, war, [war.targetId], war.stake);
   let best: { r: Response; u: number } = { r: { kind: 'accept' }, u: accept };
   // When a mission hangs on the war (ours or the attacker's), the defender looks at every answer.
   const matters = missionAtStake(ctx, war);
@@ -573,38 +671,127 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Response {
   };
 
   if (canRaise(board, active) && (matters || s.rng.bots() < knobs.raiseRate)) {
-    const floor = raiseFloor(s.rules, s.idx.byId.get(war.targetId)!.value);
-    const raised = stakeFor(board, war.attackerId, war.targetId, {
-      launchId: war.launchId,
-      minValue: floor,
-      exceptWarId: war.id,
-    });
-    const goesAhead = raised && attackerValue(s, knobs, war, war.targetId, raised.stake) > 0;
-    consider({ kind: 'raise' }, goesAhead ? defendValue(ctx, war, war.targetId, raised.stake) : WITHDRAWAL_VALUE);
+    if (rules.raise === 'matched') {
+      // Put in the country whose bigger war is best for us, among the cheapest to lose.
+      const options = raiseOptions(board, active)
+        .map((id) => ({ id, cost: s.idx.byId.get(id)!.value + progressLoss(ctx, ctx.mine, [id]) }))
+        .sort((a, b) => a.cost - b.cost || (a.id < b.id ? -1 : 1))
+        .slice(0, 3);
+      for (const { id } of options) {
+        const met = meetStake(s, board, war, raiseDemand(board, active, id));
+        const goesAhead =
+          met !== null && (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake, { added: id }) > 0);
+        consider(
+          { kind: 'raise', territoryId: id },
+          goesAhead ? defendValue(ctx, war, [war.targetId, id], met.stake) : WITHDRAWAL_VALUE,
+        );
+      }
+    } else {
+      const cost = counterCost(s.rules, 'raise');
+      if (tokens >= cost) {
+        const met = meetStake(s, board, war, raiseDemand(board, active));
+        // The attacker gets the token for meeting a token raise.
+        const goesAhead =
+          met !== null &&
+          (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake) + cost * TOKEN_VALUE > 0);
+        const u = goesAhead ? defendValue(ctx, war, [war.targetId], met.stake) : WITHDRAWAL_VALUE;
+        consider({ kind: 'raise' }, u - cost * TOKEN_VALUE);
+      }
+    }
   }
 
+  let peace: { terms: PeaceTerms; u: number } | null = null;
   if (matters || s.rng.bots() < knobs.counterRate) {
+    const cost = counterCost(s.rules, 'redirect');
+    if (tokens >= cost) {
+      for (const id of redirectOptions(board, active)) {
+        const clockId = clockTarget(s.rules, { targetId: id, redirectedFrom: war.targetId });
+        const goesAhead = attackerValue(s, knobs, war, id, war.stake, { clockId }) + cost * TOKEN_VALUE > 0;
+        const u = goesAhead ? defendValue(ctx, war, [id], war.stake, clockId) : WITHDRAWAL_VALUE;
+        consider({ kind: 'redirect', targetId: id }, u - cost * TOKEN_VALUE);
+      }
+    }
     const fightOn = attackerValue(s, knobs, war, war.targetId, war.stake);
-    for (const id of redirectOptions(board, active)) {
-      const goesAhead = attackerValue(s, knobs, war, id, war.stake) > 0;
-      consider({ kind: 'redirect', targetId: id }, goesAhead ? defendValue(ctx, war, id, war.stake) : WITHDRAWAL_VALUE);
-    }
-    const cheapest = tributeOptions(board, active)
-      .map((id) => ({ id, cost: tributeCost(ctx, war, id) }))
-      .sort((a, b) => a.cost - b.cost)
-      .slice(0, 3);
-    for (const { id, cost } of cheapest) {
-      const taken = attackerTributeValue(s, knobs, war, id) >= fightOn;
-      consider({ kind: 'tribute', territoryId: id }, taken ? -cost : accept);
-    }
-    const tokens = s.byId.get(ctx.me)!.tokens;
-    for (let k = 1; k <= tokens; k++) {
-      const taken = k * TOKEN_VALUE >= fightOn;
-      consider({ kind: 'tribute', tokens: k }, taken ? -k * TOKEN_VALUE : accept);
-      if (taken) break;
+    const cheapest = (ids: TerritoryId[]) =>
+      ids
+        .map((id) => ({ id, cost: tributeCost(ctx, war, id) }))
+        .sort((a, b) => a.cost - b.cost)
+        .slice(0, 3);
+    if (!rules.peaceTerms) {
+      for (const { id, cost } of cheapest(tributeOptions(board, active))) {
+        const taken = attackerTributeValue(s, knobs, war, id) >= fightOn;
+        consider({ kind: 'tribute', territoryId: id }, taken ? -cost : accept);
+      }
+      for (let k = 1; k <= tokens; k++) {
+        const taken = k * TOKEN_VALUE >= fightOn;
+        consider({ kind: 'tribute', tokens: k }, taken ? -k * TOKEN_VALUE : accept);
+        if (taken) break;
+      }
+    } else {
+      // Peace terms in place of tribute: a cheaper country or tokens, with an accord for lasting
+      // peace. Turned down, the best answer above still stands.
+      const accordRounds = knobs.peaceAccordRounds > 0 ? knobs.peaceAccordRounds : null;
+      const offer = (terms: PeaceTerms, u: number) => {
+        if (peaceValueFor(s, knobs, war, terms, war.attackerId) < fightOn) return;
+        if (!peace || u > peace.u) peace = { terms, u };
+      };
+      for (const { id, cost } of cheapest(tributeCountries(board, active))) {
+        offer({ ...WHITE_PEACE, toAttacker: [id], accordRounds }, -cost);
+      }
+      for (let k = 1; k <= Math.min(tokens, PEACE_MAX_TOKENS); k++) {
+        if (k * TOKEN_VALUE < fightOn) continue;
+        offer({ ...WHITE_PEACE, tokensToAttacker: k, accordRounds }, -k * TOKEN_VALUE);
+        break;
+      }
     }
   }
+  const chosen = peace as { terms: PeaceTerms; u: number } | null;
+  if (chosen && chosen.u > best.u + 0.05) return { kind: 'peace', terms: chosen.terms, fallback: best.r };
   return best.r;
+}
+
+/** Whether the player offered terms takes them: they must be worth at least fighting on. */
+function answerPeaceFor(s: SimState, war: SimWar, offer: SimPeaceOffer, knobs: BotKnobs): boolean {
+  const me = offer.recipientId;
+  const ctx = context(s, knobs, me);
+  const added =
+    war.status === 'ready' || war.status === 'playing'
+      ? war.counter?.kind === 'raise'
+        ? war.counter.added
+        : null
+      : null;
+  const clockId = clockTarget(s.rules, war);
+  const fightOn =
+    me === war.attackerId
+      ? attackValue(ctx, {
+          targetId: war.targetId,
+          defenderId: war.defenderId,
+          launchId: war.launchId,
+          stake: war.stake,
+          added: added ?? null,
+          clockId,
+        })
+      : defendValue(ctx, war, added ? [war.targetId, added] : [war.targetId], war.stake, clockId);
+  return peaceValueFor(s, knobs, war, offer.terms, me) >= fightOn;
+}
+
+/** A country an open or complete mission leans on, that a rival could attack now, fortified with a token to spare. */
+function fortifyFor(s: SimState, player: SimPlayer, knobs: BotKnobs): TerritoryId | null {
+  if (!s.rules.war.fortify || !knobs.fortify || player.tokens < 2) return null;
+  const board = warBoard(s);
+  const ctx = context(s, knobs, player.id, board);
+  const rivals = s.players.filter((p) => p.id !== player.id && p.eliminatedRound === null).map((p) => p.id);
+  let best: { id: TerritoryId; worth: number } | null = null;
+  for (const m of ctx.mine) {
+    if (!m.complete && !m.pending) continue;
+    for (const id of m.critical) {
+      if (s.holdings.get(id)?.ownerId !== player.id || fortifiedUntil(board, id) !== null) continue;
+      if (!rivals.some((r) => checkTarget(board, r, id) === null)) continue;
+      const w = worth(ctx, m) + s.idx.byId.get(id)!.value;
+      if (!best || w > best.worth || (w === best.worth && id < best.id)) best = { id, worth: w };
+    }
+  }
+  return best?.id ?? null;
 }
 
 function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
@@ -623,8 +810,11 @@ function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
         defenderId: war.defenderId,
         launchId: war.launchId,
         stake: raised.stake,
+        added: counter.added ?? null,
       });
-      return u > 0 ? { kind: 'accept', stake: raised.stake } : { kind: 'withdraw' };
+      // A token raise's token comes to the attacker for meeting it.
+      const bonus = (counter.tokens ?? 0) * TOKEN_VALUE;
+      return u + bonus > 0 ? { kind: 'accept', stake: raised.stake } : { kind: 'withdraw' };
     }
     case 'redirect': {
       const u = attackValue(ctx, {
@@ -632,8 +822,10 @@ function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
         defenderId: war.defenderId,
         launchId: war.launchId,
         stake: war.stake,
+        clockId: clockTarget(s.rules, { targetId: counter.targetId, redirectedFrom: war.targetId }),
       });
-      return u > 0 ? { kind: 'accept' } : { kind: 'withdraw' };
+      const bonus = (counter.tokens ?? 0) * TOKEN_VALUE;
+      return u + bonus > 0 ? { kind: 'accept' } : { kind: 'withdraw' };
     }
     case 'tribute': {
       const fightOn = attackValue(ctx, {
@@ -772,8 +964,11 @@ export function standardBots(knobs: BotKnobs): Bots {
     draftPick: draftPicker(knobs),
     chooseSecret: secretChooser(knobs),
     diplomacy: (s) => diplomacy(s, knobs),
+    fortify: (s, player) => (heldBy(s, player.id).size === 0 ? null : fortifyFor(s, player, knobs)),
     declare: (s, player) => (heldBy(s, player.id).size === 0 ? null : declareFor(s, player, knobs)),
+    recall: (s) => knobs.recallRate > 0 && s.rng.bots() < knobs.recallRate,
     respond: (s, war) => respondFor(s, war, knobs),
+    answerPeace: (s, war, offer) => answerPeaceFor(s, war, offer, knobs),
     reply: (s, war) => replyFor(s, war, knobs),
   };
 }

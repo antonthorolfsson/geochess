@@ -9,6 +9,7 @@ import type {
   MissionRules,
   MissionSpec,
   MissionWar,
+  PeaceTerms,
   PublicMissionKind,
   PublicMissionSpec,
   RoundStart,
@@ -69,7 +70,10 @@ export interface SimConfig {
    * plays on to the points to win. Ignored in horizon mode.
    */
   lastRound: number | null;
-  /** Host war settings over the defaults (draws, stake floor, raise, truces, tokens). */
+  /**
+   * Host war settings over a new campaign's (draws, stake floor, the raise and the other answers,
+   * truces, tokens).
+   */
   war: Partial<CampaignRules['war']>;
   chess: ChessModel;
   elo: EloSetup;
@@ -104,6 +108,8 @@ export interface SimWar {
   targetId: TerritoryId;
   launchId: TerritoryId;
   stake: TerritoryId[];
+  /** Countries set aside at the declaration to meet a raise. */
+  reserves: TerritoryId[];
   status: WarStatus;
   counter: WarCounter | null;
   redirectedFrom: TerritoryId | null;
@@ -117,9 +123,19 @@ export interface SimWar {
   transfers: Transfer[];
   endReason: GameEndReason | null;
   armageddon: boolean;
-  /** The defender's answer and the attacker's reply, for the record. */
-  response: 'accept' | 'raise' | 'redirect' | 'tribute-country' | 'tribute-tokens' | null;
+  /** The defender's answer and the attacker's reply, for the record (`peace`: settled before an answer). */
+  response: 'accept' | 'raise' | 'redirect' | 'tribute-country' | 'tribute-tokens' | 'peace' | null;
   reply: 'accept' | 'withdraw' | 'refuse' | null;
+}
+
+/** Terms offered to end a war, answered at once (the answer window is shorter than a round). */
+export interface SimPeaceOffer {
+  id: string;
+  warId: string;
+  proposerId: UserId;
+  recipientId: UserId;
+  terms: PeaceTerms;
+  status: 'proposed' | 'accepted' | 'declined' | 'withdrawn' | 'lapsed';
 }
 
 export interface SimAccord extends AccordRecord {
@@ -170,6 +186,17 @@ export interface WarStats {
   valueTaken: number;
   valueRepelled: number;
   valueTribute: number;
+  /** Value peace terms handed the attacker, less what they handed the defender. */
+  valueSettled: number;
+  /** Raises met at once from the reserves set aside at the declaration. */
+  fromReserves: number;
+  /** Declarations the attacker called off before an answer. */
+  recalled: number;
+  /** Countries fortified. */
+  fortified: number;
+  /** Peace terms offered, and accepted. */
+  peaceOffered: number;
+  peaceAccepted: number;
 }
 
 /** What the players did, in order: enough to replay a campaign through the real server. */
@@ -179,9 +206,22 @@ export type SimAction =
   | { t: 'round'; round: number }
   /** The host moves on from the last round: the season ends on points. */
   | { t: 'end' }
-  | { t: 'declare'; war: string; by: UserId; targetId: TerritoryId; launchId: TerritoryId; stake: TerritoryId[] }
+  | {
+      t: 'declare';
+      war: string;
+      by: UserId;
+      targetId: TerritoryId;
+      launchId: TerritoryId;
+      stake: TerritoryId[];
+      reserves?: TerritoryId[];
+    }
   | { t: 'respond'; war: string; response: Response }
   | { t: 'reply'; war: string; reply: Reply }
+  | { t: 'recall'; war: string }
+  | { t: 'fortify'; by: UserId; territoryId: TerritoryId }
+  | { t: 'peace'; war: string; offer: string; by: UserId; terms: PeaceTerms }
+  /** `accord`: the accord the accepted terms signed, if they named one. */
+  | { t: 'peace-answer'; war: string; offer: string; accept: boolean; accord?: string }
   | { t: 'game'; war: string; armageddon: boolean; winner: 'white' | 'black' | null; reason: GameEndReason }
   | { t: 'propose'; accord: string; by: UserId; to: UserId; rounds: number }
   | { t: 'answer'; accord: string; accept: boolean }
@@ -202,6 +242,7 @@ export interface SimState {
   status: 'lobby' | 'draft' | 'selection' | 'active' | 'finished';
   holdings: Map<TerritoryId, Holding>;
   wars: SimWar[];
+  peaceOffers: SimPeaceOffer[];
   accords: SimAccord[];
   history: {
     wars: MissionWar[];

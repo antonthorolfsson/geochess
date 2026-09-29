@@ -4,7 +4,8 @@ import { requireUser } from '../auth/session';
 import type { AppContext } from '../context';
 import { parse } from '../lib/http';
 import { gameAction, gameView, playMove } from './games';
-import { declareWar, nextRound, replyToWar, respondToWar } from './service';
+import { answerPeace, proposePeace, withdrawPeace } from './peace';
+import { declareWar, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
 import { warView } from './views';
 
 const id = z.string().min(1).max(40);
@@ -13,13 +14,34 @@ const stake = z.array(territory).min(1).max(200);
 
 const campaignParams = z.object({ id });
 const warParams = z.object({ id, warId: id });
+const offerParams = z.object({ id, warId: id, offerId: id });
 const gameParams = z.object({ gameId: id });
 
-const declareInput = z.object({ targetId: territory, launchId: territory, stake });
+const declareInput = z.object({
+  targetId: territory,
+  launchId: territory,
+  stake,
+  reserves: z.array(territory).max(200).optional(),
+});
+
+const fortifyInput = z.object({ territoryId: territory });
+
+const tokens = z.number().int().min(0).max(99);
+const peaceInput = z.object({
+  terms: z.object({
+    toAttacker: z.array(territory).max(200),
+    toDefender: z.array(territory).max(200),
+    tokensToAttacker: tokens,
+    tokensToDefender: tokens,
+    accordRounds: z.number().int().min(1).max(99).nullable(),
+  }),
+});
+
+const peaceAnswerInput = z.object({ answer: z.enum(['accept', 'decline']) });
 
 const responseInput = z.discriminatedUnion('response', [
   z.object({ response: z.literal('accept') }),
-  z.object({ response: z.literal('raise') }),
+  z.object({ response: z.literal('raise'), territoryId: territory.optional() }),
   z.object({ response: z.literal('redirect'), targetId: territory }),
   z.object({
     response: z.literal('tribute'),
@@ -68,6 +90,42 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
     const params = parse(warParams, req.params);
     await replyToWar(ctx, params.id, params.warId, user.id, parse(replyInput, req.body));
     return { ok: true };
+  });
+
+  app.post('/api/campaigns/:id/wars/:warId/recall', async (req) => {
+    const user = requireUser(req);
+    const params = parse(warParams, req.params);
+    await recallWar(ctx, params.id, params.warId, user.id);
+    return { ok: true };
+  });
+
+  app.post('/api/campaigns/:id/wars/:warId/peace', async (req, reply) => {
+    const user = requireUser(req);
+    const params = parse(warParams, req.params);
+    reply.code(201);
+    return proposePeace(ctx, params.id, params.warId, user.id, parse(peaceInput, req.body));
+  });
+
+  app.post('/api/campaigns/:id/wars/:warId/peace/:offerId/answer', async (req) => {
+    const user = requireUser(req);
+    const params = parse(offerParams, req.params);
+    const { answer } = parse(peaceAnswerInput, req.body);
+    await answerPeace(ctx, params.id, params.warId, params.offerId, user.id, answer);
+    return { ok: true };
+  });
+
+  app.post('/api/campaigns/:id/wars/:warId/peace/:offerId/withdraw', async (req) => {
+    const user = requireUser(req);
+    const params = parse(offerParams, req.params);
+    await withdrawPeace(ctx, params.id, params.warId, params.offerId, user.id);
+    return { ok: true };
+  });
+
+  app.post('/api/campaigns/:id/fortify', async (req) => {
+    const user = requireUser(req);
+    const params = parse(campaignParams, req.params);
+    const { territoryId } = parse(fortifyInput, req.body);
+    return fortifyCountry(ctx, params.id, user.id, territoryId);
   });
 
   app.post('/api/campaigns/:id/round/next', async (req) => {

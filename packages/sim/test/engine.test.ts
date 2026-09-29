@@ -1,16 +1,29 @@
-import { missionComplete, protectedEpisodes, seededRandom, type TerritoryId } from '@empire/rules';
+import {
+  WHITE_PEACE,
+  attackableTargets,
+  missionComplete,
+  protectedEpisodes,
+  raiseDemand,
+  raiseOptions,
+  seededRandom,
+  suggestStake,
+  tributeCountries,
+  type TerritoryId,
+} from '@empire/rules';
 import { describe, expect, it } from 'vitest';
 import { makeBots } from '../src/bots';
 import { answer, propose, renounce } from '../src/engine/diplomacy';
 import { runCampaign } from '../src/engine/engine';
 import { nextRound } from '../src/engine/lifecycle';
 import { heldBy } from '../src/engine/state';
-import { fight, reply, respond } from '../src/engine/wars';
+import { warBoard } from '../src/engine/board';
+import { finish } from '../src/engine/victory';
+import { answerPeace, declare, fight, fortify, offerPeace, recall, reply, respond } from '../src/engine/wars';
 import { isComplete } from '../src/engine/victory';
 import { missionWorld } from '../src/engine/world';
 import { recordOf } from '../src/record';
 import { baseConfig } from '../src/scenarios';
-import { awardsOf, declareOn, give, idx, pointsOf, result, scripted, targetOf, war } from './helpers';
+import { ORIGINAL_ANSWERS, awardsOf, declareOn, give, idx, pointsOf, result, scripted, targetOf, war } from './helpers';
 
 /** In the scripted three-player draft p1 holds France, Germany and Italy; p2 China; p3 India. */
 const positions = (territories: TerritoryId[], need = 3) => ({
@@ -91,12 +104,13 @@ describe('historic missions', () => {
     renounce(s, s.accords[0]!, 'p1');
     expect(s.byId.get('p1')!.revealedRound).toBe(2);
     nextRound(s);
-    // Tokens as tribute take no country: they don't count.
+    // Tokens in peace terms take no country: they don't count.
     const paid = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));
     s.byId.get('p2')!.tokens = 1;
-    respond(s, paid, { kind: 'tribute', tokens: 1 });
-    reply(s, paid, { kind: 'accept' });
-    expect(paid.outcome).toBe('tribute');
+    const offer = offerPeace(s, paid, 'p2', { ...WHITE_PEACE, tokensToAttacker: 1 });
+    if (typeof offer === 'string') throw new Error(offer);
+    expect(answerPeace(s, paid, offer, true)).toBeNull();
+    expect(paid.outcome).toBe('settled');
     expect(pointsOf(s, 'p1')).toBe(0);
     nextRound(s);
     nextRound(s);
@@ -205,7 +219,7 @@ describe('accords', () => {
 
 describe('tribute', () => {
   it('holds offered tokens back, returning them if refused and handing them over if accepted', () => {
-    const s = scripted({ players: 3, publics: () => [] });
+    const s = scripted({ players: 3, publics: () => [], config: { war: ORIGINAL_ANSWERS } });
     const p2 = s.byId.get('p2')!;
     p2.tokens = 2;
     const p1 = s.byId.get('p1')!;
@@ -222,6 +236,106 @@ describe('tribute', () => {
     reply(s, accepted, { kind: 'accept' });
     expect(p1.tokens).toBe(before + 2);
     expect(p2.tokens).toBe(0);
+  });
+});
+
+describe('the revised answers', () => {
+  it('a matched raise puts a country in, which a win takes with the target', () => {
+    const s = scripted({ players: 3, publics: () => [] });
+    // The first of p2's countries p1 can attack where p2 has something to put in.
+    const raisable = [...attackableTargets(warBoard(s), 'p1')].sort().find((targetId) => {
+      if (s.holdings.get(targetId)!.ownerId !== 'p2') return false;
+      const plan = suggestStake(warBoard(s), 'p1', targetId)!;
+      const trial = { id: 'trial', attackerId: 'p1', defenderId: 'p2', targetId, stake: plan.stake, offered: null };
+      return raiseOptions({ ...warBoard(s), wars: [trial] }, trial).length > 0;
+    })!;
+    const w = declareOn(s, 'p1', raisable);
+    const board = warBoard(s);
+    const active = board.wars.find((x) => x.id === w.id)!;
+    const added = raiseOptions(board, active)[0]!;
+    expect(respond(s, w, { kind: 'raise' })).toBe('raise-country');
+    expect(respond(s, w, { kind: 'raise', territoryId: added })).toBeNull();
+    const counter = w.counter as { kind: 'raise'; minValue: number; added: string };
+    expect(counter.added).toBe(added);
+    const plan = suggestStake(warBoard(s), 'p1', w.targetId, {
+      launchId: w.launchId,
+      minValue: counter.minValue,
+      exceptWarId: w.id,
+    })!;
+    expect(reply(s, w, { kind: 'accept', stake: plan.stake })).toBeNull();
+    fight(s, w, result('attacker'));
+    expect(w.transfers.map((t) => t.territoryId)).toEqual([w.targetId, added]);
+    expect(s.holdings.get(added)!.ownerId).toBe('p1');
+  });
+
+  it('reserves meet a token raise at once, and the attacker gets the token', () => {
+    const s = scripted({ players: 3, publics: () => [], config: { war: { raise: 'token' } } });
+    const p1 = s.byId.get('p1')!;
+    const p2 = s.byId.get('p2')!;
+    p1.tokens = 1;
+    p2.tokens = 1;
+    const targetId = targetOf(s, 'p1', 'p2');
+    const floor = raiseDemand(warBoard(s), { targetId, stake: [] });
+    const plan = suggestStake(warBoard(s), 'p1', targetId)!;
+    const raised = suggestStake(warBoard(s), 'p1', targetId, { launchId: plan.launchId, minValue: floor })!;
+    const reserves = raised.stake.filter((id) => !plan.stake.includes(id));
+    const w = declare(s, 'p1', { targetId, launchId: plan.launchId, stake: plan.stake, reserves });
+    if (typeof w === 'string') throw new Error(w);
+    const replies = s.actions.filter((a) => a.t === 'reply').length;
+    expect(respond(s, w, { kind: 'raise' })).toBeNull();
+    // Met at once, which the server does itself: no reply to replay.
+    expect(w.status).toBe('ready');
+    expect(s.actions.filter((a) => a.t === 'reply').length).toBe(replies);
+    expect(s.stats.fromReserves).toBe(1);
+    expect([p1.tokens, p2.tokens]).toEqual([1, 0]);
+  });
+
+  it('a declaration can be called off before an answer; a country fortified needs a raised stake', () => {
+    const s = scripted({ players: 3, publics: () => [] });
+    const w = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));
+    expect(recall(s, w)).toBeNull();
+    expect(w.outcome).toBe('withdrawn');
+    const p2 = s.byId.get('p2')!;
+    p2.tokens = 1;
+    const targetId = targetOf(s, 'p1', 'p2');
+    const before = suggestStake(warBoard(s), 'p1', targetId)!.value;
+    expect(fortify(s, 'p2', targetId)).toBeNull();
+    expect(p2.tokens).toBe(0);
+    expect(s.holdings.get(targetId)!.fortifiedUntil).toBe(s.round + 2);
+    expect(suggestStake(warBoard(s), 'p1', targetId)?.value ?? Infinity).toBeGreaterThan(before);
+  });
+
+  it('peace terms settle a war and sign any accord they name', () => {
+    const s = scripted({ players: 3, publics: () => [] });
+    const w = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));
+    const board = warBoard(s);
+    const tribute = tributeCountries(
+      board,
+      board.wars.find((x) => x.id === w.id)!,
+    )[0]!;
+    const declined = offerPeace(s, w, 'p2', { ...WHITE_PEACE, toAttacker: [tribute] });
+    if (typeof declined === 'string') throw new Error(declined);
+    expect(answerPeace(s, w, declined, false)).toBeNull();
+    expect(w.status).toBe('declared');
+    const offer = offerPeace(s, w, 'p2', { ...WHITE_PEACE, toAttacker: [tribute], accordRounds: 2 });
+    if (typeof offer === 'string') throw new Error(offer);
+    expect(answerPeace(s, w, offer, true)).toBeNull();
+    expect(w).toMatchObject({ status: 'resolved', outcome: 'settled', response: 'peace' });
+    expect(s.holdings.get(tribute)!.ownerId).toBe('p1');
+    expect(s.accords.at(-1)).toMatchObject({ proposerId: 'p2', recipientId: 'p1', status: 'active', rounds: 2 });
+    expect(s.actions.at(-1)).toMatchObject({ t: 'peace-answer', accept: true, accord: s.accords.at(-1)!.id });
+  });
+
+  it('the campaign’s end gives back a token paid for a counter still unanswered', () => {
+    const s = scripted({ players: 3, publics: () => [], config: { war: { raise: 'token' } } });
+    const p2 = s.byId.get('p2')!;
+    p2.tokens = 1;
+    const w = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));
+    expect(respond(s, w, { kind: 'raise' })).toBeNull();
+    expect(p2.tokens).toBe(0);
+    finish(s, ['p3']);
+    expect(p2.tokens).toBe(1);
+    expect(w.outcome).toBe('cancelled');
   });
 });
 

@@ -1,7 +1,8 @@
 /**
  * How the bots play. The defaults aim at a competent, casual friend group: players chase their
- * missions and block claims they can see, mostly accept wars, raise now and then, sign accords
- * with neighbours they don't want to fight and rarely break them.
+ * missions and block claims they can see, mostly accept wars, raise now and then, fortify what
+ * their missions lean on, sign accords with neighbours they don't want to fight and rarely break
+ * them.
  */
 export interface BotKnobs {
   /** `standard` chases missions; `greedy` plays on country value alone, with no diplomacy. */
@@ -27,8 +28,17 @@ export interface BotKnobs {
   declareThresholdAtCap: number;
   /** Chance a defender raises when raising is worth it to them. */
   raiseRate: number;
-  /** Chance a defender considers a redirect or tribute when the target matters to them. */
+  /** Chance a defender considers a redirect, tribute or peace terms when the target matters to them. */
   counterRate: number;
+  /** Rounds of accord a defender asks for with the terms they offer (0 for none). */
+  peaceAccordRounds: number;
+  /** Whether bots fortify the countries their missions lean on. */
+  fortify: boolean;
+  /**
+   * Chance an attacker calls a declaration off before the defender answers. Nothing in the bots'
+   * reckoning calls for it, so it's 0 but for tests that need the rule exercised.
+   */
+  recallRate: number;
   /** Weight on breaking a rival's visible claim or revealed secret. */
   blockWeight: number;
   /** Weight on attacking the leader of the race. */
@@ -61,6 +71,9 @@ export const DEFAULT_KNOBS: BotKnobs = {
   declareThresholdAtCap: -0.5,
   raiseRate: 0.35,
   counterRate: 0.8,
+  peaceAccordRounds: 2,
+  fortify: true,
+  recallRate: 0,
   blockWeight: 1,
   leaderWeight: 0.5,
   accords: true,

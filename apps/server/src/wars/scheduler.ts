@@ -2,6 +2,7 @@ import type { AppContext } from '../context';
 import { lapseProposals } from '../diplomacy/accords';
 import { runVictoryDeadlines } from '../victory/scheduler';
 import { armAllFlags, flagOverdueGames } from './games';
+import { lapsePeaceOffers } from './peace';
 import { expireResponses } from './service';
 
 /** How often the server looks for deadlines that have passed. Live flag-falls have their own timers. */
@@ -9,13 +10,14 @@ const POLL_MS = 5_000;
 
 /**
  * Everything due by now: unanswered declarations and counter-offers, flag-falls, half-settled
- * games, accord proposals nobody answered, secret missions not chosen in time, and claims whose
- * holding time is up.
+ * games, accord proposals and peace offers nobody answered, secret missions not chosen in time,
+ * and claims whose holding time is up.
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
   await flagOverdueGames(ctx);
   await lapseProposals(ctx);
+  await lapsePeaceOffers(ctx);
   await runVictoryDeadlines(ctx);
 }
 

@@ -3,7 +3,7 @@ import { warDataset } from '@empire/rules/testing';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaigns, holdings, members } from '../src/db/schema';
-import { listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
+import { ORIGINAL_ANSWERS, listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
 
 /**
  * War lifecycle tests on the war test map. Ann holds A1 A2 A3 A4 A6; Bo holds B1 B2 B5 B7 B10 Q2
@@ -37,14 +37,18 @@ const OWNERS: Record<string, string> = {
 const SCHOLARS_MATE = 'e2e4 e7e5 f1c4 b8c6 d1h5 g8f6 h5f7'.split(' ');
 const FOOLS_MATE = 'f2f3 e7e5 g2g4 d8h4'.split(' ');
 
-/** An active campaign in round 1 with the war map split between Ann and Bo, each holding `tokens`. */
+/**
+ * An active campaign in round 1 with the war map split between Ann and Bo, each holding `tokens`.
+ * It plays the original answers (a free raise, redirects anywhere, tribute), which campaigns
+ * stored before the revised ones keep; war-answers.test.ts covers the revised answers.
+ */
 async function setup(rules: CampaignRulesInput = {}, tokens = 1) {
   const ann = await signIn(server.app, 'Ann');
   const bo = await signIn(server.app, 'Bo');
   // Set up by hand as an open-ended campaign: victory missions start from a draft.
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'War Room',
-    rules: { victory: { mode: 'open' }, ...rules },
+    rules: { victory: { mode: 'open' }, ...rules, war: { ...ORIGINAL_ANSWERS, ...rules.war } },
   });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

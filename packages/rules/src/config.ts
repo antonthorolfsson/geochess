@@ -34,6 +34,31 @@ export const CORRESPONDENCE_HOURS = [12, 24, 48, 72] as const;
 export const DRAW_RULES = ['defender-holds', 'armageddon'] as const;
 export type DrawRule = (typeof DRAW_RULES)[number];
 
+/**
+ * How a defender raises the stakes:
+ * - `matched`: they put one of their own countries into the war, worth no more than the target;
+ *   the attacker adds at least as much to the stake or withdraws, and winning takes both countries.
+ * - `token`: they pay a war token to demand a stake of `raisePct` of the target's value; the
+ *   token goes to the attacker if they fight on.
+ * - `free`: they demand a stake of `raisePct` at no cost (the original rule).
+ * - `off`: no raising.
+ */
+export const RAISE_STYLES = ['matched', 'token', 'free', 'off'] as const;
+export type RaiseStyle = (typeof RAISE_STYLES)[number];
+
+/**
+ * Where a defender may redirect an attack:
+ * - `nearby`: to a country bordering the original target, and the war keeps that target's clock.
+ * - `anywhere`: to any country bordering the attacker's empire (the original rule).
+ */
+export const REDIRECT_RULES = ['nearby', 'anywhere'] as const;
+export type RedirectRule = (typeof REDIRECT_RULES)[number];
+
+/**
+ * War settings. Rules stored before a setting existed read as the original game (a free raise,
+ * redirects anywhere and free, tribute, no fortifying or recall), so no campaign underway
+ * changes; new campaigns start from `DEFAULT_RULES`, which plays the revised answers.
+ */
 export const warRulesSchema = z.object({
   pace: z.enum(PACES).default('correspondence'),
   liveClock: z.enum(LIVE_CLOCKS).default('5+3'),
@@ -47,13 +72,39 @@ export const warRulesSchema = z.object({
   tokenCap: z.number().int().min(1).max(10).default(3),
   /** The least a stake may be worth, as a percentage of the target's value (rounded up). */
   stakeFloorPct: z.number().int().min(50).max(200).default(80),
-  /** What a defender's raise demands, as a percentage of the target's value (rounded up). */
+  /**
+   * What a raise to a percentage demands (the `token` and `free` styles), and what a war on a
+   * fortified country needs, as a percentage of the target's value (rounded up).
+   */
   raisePct: z.number().int().min(100).max(300).default(125),
   /** Rounds after a country changes hands in a war before it can be staked. */
   lockRounds: z.number().int().min(0).max(5).default(2),
   /** Rounds two players can't declare war on each other after a war between them resolves. */
   truceRounds: z.number().int().min(0).max(5).default(1),
+  raise: z.enum(RAISE_STYLES).default('free'),
+  redirect: z.enum(REDIRECT_RULES).default('anywhere'),
+  /** Redirecting costs the defender a war token, which goes to the attacker if they fight on. */
+  redirectToken: z.boolean().default(false),
+  /** A player may spend a war token to fortify a country: war on it needs a stake of `raisePct`. */
+  fortify: z.boolean().default(false),
+  /**
+   * Either player may offer terms to end a war until its game is over: countries or tokens either
+   * way, or nothing, and an accord. Replaces tribute as an answer.
+   */
+  peaceTerms: z.boolean().default(false),
+  /** The attacker may call off a declaration until the defender answers. */
+  recall: z.boolean().default(false),
 });
+
+/** The war settings new campaigns start with, over the original game's. */
+export const REVISED_WAR_RULES = {
+  raise: 'matched',
+  redirect: 'nearby',
+  redirectToken: true,
+  fortify: true,
+  peaceTerms: true,
+  recall: true,
+} as const satisfies Partial<z.input<typeof warRulesSchema>>;
 
 /**
  * Longer holding times the host can pick besides the pace's default, by pace, in minutes. The
@@ -133,10 +184,11 @@ export function parseRules(input: unknown): CampaignRules {
 }
 
 /**
- * The settings a new campaign starts with: Objectives, its public missions generated on creation,
- * and a last round.
+ * The settings a new campaign starts with: the revised war answers, Objectives, its public
+ * missions generated on creation, and a last round.
  */
 export const DEFAULT_RULES: CampaignRules = parseRules({
+  war: REVISED_WAR_RULES,
   victory: { mode: 'objectives', lastRound: DEFAULT_LAST_ROUND },
 });
 

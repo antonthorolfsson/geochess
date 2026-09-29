@@ -19,6 +19,16 @@ import { baseConfig, type ConfigOverrides } from '../src/scenarios';
 
 export const idx = loadDataset();
 
+/** The original game's answers (a free raise, redirects anywhere, tribute), for tests of those rules. */
+export const ORIGINAL_ANSWERS = {
+  raise: 'free',
+  redirect: 'anywhere',
+  redirectToken: false,
+  fortify: false,
+  peaceTerms: false,
+  recall: false,
+} as const;
+
 /**
  * A campaign on the real map set up by hand: an auto-draft for the given number of players, then
  * countries moved as asked (counted as drafted), these public missions and secrets, at round 1.

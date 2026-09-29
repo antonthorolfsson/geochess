@@ -162,11 +162,47 @@ describe('war record', () => {
 
   it('counts wars by side and outcome', () => {
     const ann = warRecord(ANN, wars, resolutions);
-    expect(ann.attacking).toEqual({ won: 1, lost: 0, drawn: 1, tribute: 1, withdrawn: 1, cancelled: 0, underway: 0 });
-    expect(ann.defending).toEqual({ won: 1, lost: 0, drawn: 0, tribute: 0, withdrawn: 0, cancelled: 0, underway: 1 });
+    expect(ann.attacking).toEqual({
+      won: 1,
+      lost: 0,
+      drawn: 1,
+      tribute: 1,
+      settled: 0,
+      withdrawn: 1,
+      cancelled: 0,
+      underway: 0,
+    });
+    expect(ann.defending).toEqual({
+      won: 1,
+      lost: 0,
+      drawn: 0,
+      tribute: 0,
+      settled: 0,
+      withdrawn: 0,
+      cancelled: 0,
+      underway: 1,
+    });
     const bo = warRecord(BO, wars, resolutions);
-    expect(bo.attacking).toEqual({ won: 0, lost: 1, drawn: 0, tribute: 0, withdrawn: 0, cancelled: 0, underway: 1 });
-    expect(bo.defending).toEqual({ won: 0, lost: 1, drawn: 1, tribute: 1, withdrawn: 1, cancelled: 0, underway: 0 });
+    expect(bo.attacking).toEqual({
+      won: 0,
+      lost: 1,
+      drawn: 0,
+      tribute: 0,
+      settled: 0,
+      withdrawn: 0,
+      cancelled: 0,
+      underway: 1,
+    });
+    expect(bo.defending).toEqual({
+      won: 0,
+      lost: 1,
+      drawn: 1,
+      tribute: 1,
+      settled: 0,
+      withdrawn: 1,
+      cancelled: 0,
+      underway: 0,
+    });
   });
 
   it('lists countries won and lost, and tribute tokens', () => {
@@ -180,6 +216,34 @@ describe('war record', () => {
     const bo = warRecord(BO, wars, resolutions);
     expect(bo.lost.map((c) => c.territoryId)).toEqual(['C', 'F']);
     expect([bo.tokensTaken, bo.tokensPaid]).toEqual([0, 1]);
+  });
+
+  it('counts peace terms: settled wars, countries handed over and tokens either way', () => {
+    const terms = { toAttacker: [], toDefender: ['E'], tokensToAttacker: 0, tokensToDefender: 2, accordRounds: 3 };
+    const settled: Resolution = {
+      warId: 'w9',
+      round: 4,
+      attackerId: ANN,
+      defenderId: BO,
+      outcome: 'settled',
+      transfers: [{ territoryId: 'E', from: ANN, to: BO }],
+      tokens: 0,
+      terms,
+    };
+    const facts: WarFacts[] = [{ attackerId: ANN, defenderId: BO, status: 'resolved', outcome: 'settled' }];
+    const ann = warRecord(ANN, facts, [settled]);
+    expect(ann.attacking.settled).toBe(1);
+    expect(ann.lost).toEqual([{ territoryId: 'E', warId: 'w9', round: 4, via: 'peace', otherId: BO }]);
+    expect([ann.tokensTaken, ann.tokensPaid]).toEqual([0, 2]);
+    const bo = warRecord(BO, facts, [settled]);
+    expect(bo.defending.settled).toBe(1);
+    expect([bo.tokensTaken, bo.tokensPaid]).toEqual([2, 0]);
+    expect(acquisitions(new Map([['E', BO]]), new Map(), [settled]).E).toEqual({
+      via: 'peace',
+      warId: 'w9',
+      round: 4,
+      from: ANN,
+    });
   });
 });
 

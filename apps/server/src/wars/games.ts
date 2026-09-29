@@ -12,7 +12,8 @@ import {
 } from '@empire/rules';
 import { and, eq, lte } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import { games, members, wars } from '../db/schema';
+import type { Tx } from '../db/client';
+import { games, members, peaceOffers, wars } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import type { GameRow } from './board';
 import { settleGame } from './service';
@@ -24,6 +25,9 @@ export const MAX_LAG_CREDIT_MS = 750;
 export const FLAG_GRACE_MS = MAX_LAG_CREDIT_MS;
 
 export type GameAction = 'resign' | 'offer-draw' | 'accept-draw' | 'decline-draw';
+
+/** A game stopped because its war ended without it: peace terms, or the campaign's end. */
+const CALLED_OFF = 'The war ended without this game, so it was called off.';
 
 const playerOf = (game: GameRow, color: Color) => (color === 'white' ? game.whiteId : game.blackId);
 
@@ -61,14 +65,16 @@ function clocksAt(game: GameRow, at: Date): Clocks | null {
 
 /**
  * Changes one game: serialized per game, inside a transaction holding the game row. `change`
- * returns the columns to update, or null to leave the game alone. Afterwards every campaign
- * member gets the new state, and a finished game settles its war.
+ * returns the columns to update, or null to leave the game alone; `alongside` does more in the
+ * same transaction once the game has changed. Afterwards every campaign member gets the new
+ * state, and a finished game settles its war.
  */
 async function changeGame(
   ctx: AppContext,
   gameId: string,
   playerId: string | null,
   change: (game: GameRow, chess: ChessGame) => Partial<GameRow> | null,
+  alongside?: (tx: Tx, game: GameRow) => Promise<void>,
 ): Promise<GameView> {
   return ctx.gameLocks.run(gameId, async () => {
     const { row, changed } = await ctx.db.transaction(async (tx) => {
@@ -80,6 +86,7 @@ async function changeGame(
       const set = change(game, ChessGame.fromMoves(game.moves));
       if (!set) return { row: game, changed: false };
       const [updated] = await tx.update(games).set(set).where(eq(games.id, gameId)).returning();
+      if (alongside) await alongside(tx, updated!);
       return { row: updated!, changed: true };
     });
     if (changed) {
@@ -109,40 +116,62 @@ export async function playMove(
 ): Promise<GameView> {
   const receivedAt = ctx.now();
   const lag = Math.round(Math.min(ctx.hub.latency(userId), MAX_LAG_CREDIT_MS));
-  const view = await changeGame(ctx, gameId, userId, (game, chess) => {
-    if (game.status === 'waiting') throw conflict('This game has not started yet.', 'not-started');
-    if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
-    if (game.status === 'cancelled')
-      throw conflict('The campaign is over, so this game was called off.', 'game-cancelled');
-    const mover = chess.turn;
-    if (playerOf(game, mover) !== userId) throw conflict("It's not your move.", 'not-your-move');
-    if (input.ply !== chess.ply) throw conflict('The position has changed. Check the board.', 'stale-move');
-    if (game.startsAt && receivedAt < game.startsAt) throw conflict('The clocks have not started yet.', 'not-started');
+  let passedOver = false;
+  const view = await changeGame(
+    ctx,
+    gameId,
+    userId,
+    (game, chess) => {
+      if (game.status === 'waiting') throw conflict('This game has not started yet.', 'not-started');
+      if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
+      if (game.status === 'cancelled') throw conflict(CALLED_OFF, 'game-cancelled');
+      const mover = chess.turn;
+      if (playerOf(game, mover) !== userId) throw conflict("It's not your move.", 'not-your-move');
+      if (input.ply !== chess.ply) throw conflict('The position has changed. Check the board.', 'stale-move');
+      if (game.startsAt && receivedAt < game.startsAt)
+        throw conflict('The clocks have not started yet.', 'not-started');
 
-    const tc = game.timeControl;
-    let clocks = game.clocks;
-    if (tc.kind === 'live' && clocks && game.lastMoveAt) {
-      const thinking = receivedAt.getTime() - game.lastMoveAt.getTime() - lag;
-      const charged = chargeClock(tc, clocks, mover, thinking);
-      if (charged.flagged) return finish(chess.timeout(mover), receivedAt, { clocks: charged.clocks });
-      clocks = charged.clocks;
-    } else if (game.deadline && receivedAt > game.deadline) {
-      return finish(chess.timeout(mover), game.deadline);
-    }
+      const tc = game.timeControl;
+      let clocks = game.clocks;
+      if (tc.kind === 'live' && clocks && game.lastMoveAt) {
+        const thinking = receivedAt.getTime() - game.lastMoveAt.getTime() - lag;
+        const charged = chargeClock(tc, clocks, mover, thinking);
+        if (charged.flagged) return finish(chess.timeout(mover), receivedAt, { clocks: charged.clocks });
+        clocks = charged.clocks;
+      } else if (game.deadline && receivedAt > game.deadline) {
+        return finish(chess.timeout(mover), game.deadline);
+      }
 
-    if (chess.play(input.uci) === null) throw badRequest('That move is not legal.', 'illegal-move');
-    const played: Partial<GameRow> = {
-      moves: chess.moves,
-      fen: chess.fen,
-      clocks,
-      lastMoveAt: receivedAt,
-      // Moving declines the opponent's draw offer; your own offer stands.
-      drawOfferBy: game.drawOfferBy === userId ? userId : null,
-    };
-    const ending = chess.ending();
-    if (ending) return finish(ending, receivedAt, played);
-    return { ...played, deadline: new Date(turnDeadline(tc, clocks, chess.turn, receivedAt.getTime())) };
-  });
+      if (chess.play(input.uci) === null) throw badRequest('That move is not legal.', 'illegal-move');
+      const played: Partial<GameRow> = {
+        moves: chess.moves,
+        fen: chess.fen,
+        clocks,
+        lastMoveAt: receivedAt,
+        // Moving declines the opponent's draw offer; your own offer stands.
+        drawOfferBy: game.drawOfferBy === userId ? userId : null,
+      };
+      const ending = chess.ending();
+      if (ending) return finish(ending, receivedAt, played);
+      return { ...played, deadline: new Date(turnDeadline(tc, clocks, chess.turn, receivedAt.getTime())) };
+    },
+    // Moving passes over the peace terms offered to the player moving, as it declines a draw offer.
+    async (tx, game) => {
+      const passed = await tx
+        .update(peaceOffers)
+        .set({ status: 'declined', respondBy: null, endedAt: receivedAt })
+        .where(
+          and(
+            eq(peaceOffers.warId, game.warId),
+            eq(peaceOffers.recipientId, userId),
+            eq(peaceOffers.status, 'proposed'),
+          ),
+        )
+        .returning({ id: peaceOffers.id });
+      passedOver = passed.length > 0;
+    },
+  );
+  if (passedOver) ctx.hub.send([view.whiteId, view.blackId], { type: 'campaign.changed', campaignId: view.campaignId });
   if (view.status === 'playing' && view.timeControl.kind === 'correspondence') {
     const next = colorToMove(view.moves.length);
     await ctx.notifier
@@ -169,8 +198,7 @@ export async function gameAction(
   const at = ctx.now();
   return changeGame(ctx, gameId, userId, (game) => {
     if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
-    if (game.status === 'cancelled')
-      throw conflict('The campaign is over, so this game was called off.', 'game-cancelled');
+    if (game.status === 'cancelled') throw conflict(CALLED_OFF, 'game-cancelled');
     const color: Color = game.whiteId === userId ? 'white' : 'black';
     const opponentId = playerOf(game, opposite(color));
     const clocks = { clocks: clocksAt(game, at) };

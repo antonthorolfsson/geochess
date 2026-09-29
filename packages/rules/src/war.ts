@@ -1,7 +1,14 @@
 import type { Color, LiveClockSpec, TimeControl } from './chess';
 import type { CampaignRules, Pace } from './config';
 import type { TerritoryId } from './dataset';
-import { accordBetween, renunciationAgainst, type Accord, type Renunciation } from './diplomacy';
+import {
+  ACCORD_MAX_ROUNDS,
+  ACCORD_MIN_ROUNDS,
+  accordBetween,
+  renunciationAgainst,
+  type Accord,
+  type Renunciation,
+} from './diplomacy';
 import type { UserId } from './draft';
 import { bordersAny, getTerritory, reachableWithin, type DatasetIndex } from './graph';
 
@@ -9,6 +16,8 @@ import { bordersAny, getTerritory, reachableWithin, type DatasetIndex } from './
 export interface Holding {
   ownerId: UserId;
   acquiredRound: number;
+  /** Fortified until this round starts: until then a war on it needs a raised stake. */
+  fortifiedUntil?: number | null;
 }
 
 /** An unresolved war, as far as the rules are concerned. */
@@ -19,27 +28,40 @@ export interface ActiveWar {
   targetId: TerritoryId;
   /** The launching country first, then the countries added to it. */
   stake: readonly TerritoryId[];
-  /** A redirect target or tribute country the defender has offered, while the attacker decides. */
+  /** A country the defender has offered (a redirect, tribute or matched raise), while the attacker decides. */
   offered: TerritoryId | null;
+  /** The defender's country a matched raise put into the war, once the attacker met it: won with the target. */
+  added?: TerritoryId | null;
+  /** Countries the attacker set aside to meet a raise, tied up until the defender's answer is settled. */
+  reserves?: readonly TerritoryId[];
 }
 
 /**
  * The defender's counter-offer, which the attacker must answer:
- * - `raise`: stake at least `minValue`, or withdraw.
+ * - `raise`: stake at least `minValue`, or withdraw. A matched raise names the defender's `added`
+ *   country, which winning takes along with the target.
  * - `redirect`: fight for `targetId` instead, or withdraw.
  * - `tribute`: take `territoryId` or `tokens` instead of fighting, or refuse and fight.
+ *
+ * `tokens` on a raise or redirect is what the counter cost the defender: the attacker gets it if
+ * they fight on. On tribute it's the tokens offered, held back from the defender until the answer.
  */
 export type WarCounter =
-  | { kind: 'raise'; minValue: number }
-  | { kind: 'redirect'; targetId: TerritoryId }
+  | { kind: 'raise'; minValue: number; added?: TerritoryId; tokens?: number }
+  | { kind: 'redirect'; targetId: TerritoryId; tokens?: number }
   | { kind: 'tribute'; territoryId: TerritoryId | null; tokens: number };
 
 /** The country a counter-offer ties up while the attacker decides. */
 export function offeredCountry(counter: WarCounter | null): TerritoryId | null {
   if (counter?.kind === 'redirect') return counter.targetId;
   if (counter?.kind === 'tribute') return counter.territoryId;
+  if (counter?.kind === 'raise') return counter.added ?? null;
   return null;
 }
+
+/** The defender's country a matched raise put into the war (at stake once the attacker meets it). */
+export const addedCountry = (counter: WarCounter | null): TerritoryId | null =>
+  counter?.kind === 'raise' ? (counter.added ?? null) : null;
 
 /** A stored war (a server row or a client view) as the rules see it. */
 export function activeWar(war: {
@@ -50,6 +72,7 @@ export function activeWar(war: {
   stake: readonly TerritoryId[];
   status: string;
   counter: WarCounter | null;
+  reserves?: readonly TerritoryId[];
 }): ActiveWar {
   return {
     id: war.id,
@@ -59,6 +82,10 @@ export function activeWar(war: {
     stake: war.stake,
     // An offered country is tied up only while the attacker decides.
     offered: war.status === 'countered' ? offeredCountry(war.counter) : null,
+    // A met matched raise leaves the added country at stake until the war ends.
+    added: war.status === 'ready' || war.status === 'playing' ? addedCountry(war.counter) : null,
+    // Reserves wait for the defender's answer and the attacker's reply; after that they're free.
+    reserves: war.status === 'declared' || war.status === 'countered' ? (war.reserves ?? []) : [],
   };
 }
 
@@ -119,15 +146,66 @@ export function valueOf(idx: DatasetIndex, ids: Iterable<TerritoryId>): number {
   return sum;
 }
 
-/** Countries tied up in unresolved wars (targets, stakes and pending offers), with the war holding each. */
+/**
+ * Countries tied up in unresolved wars (targets, stakes, pending offers, countries added by a
+ * raise and reserves), with the war holding each.
+ */
 export function warLocks(wars: readonly ActiveWar[]): Map<TerritoryId, string> {
   const locks = new Map<TerritoryId, string>();
   for (const war of wars) {
     locks.set(war.targetId, war.id);
     for (const id of war.stake) locks.set(id, war.id);
     if (war.offered) locks.set(war.offered, war.id);
+    if (war.added) locks.set(war.added, war.id);
+    for (const id of war.reserves ?? []) locks.set(id, war.id);
   }
   return locks;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fortifying
+
+/** Rounds a fortification lasts: it holds until that many more rounds have started. */
+export const FORTIFY_ROUNDS = 2;
+/** War tokens it costs to fortify a country. */
+export const FORTIFY_COST = 1;
+
+/** The round at whose start a fortification made in `round` ends. */
+export const fortifyEnds = (round: number) => round + FORTIFY_ROUNDS;
+
+/** The round at whose start a country's fortification ends, or null if it isn't fortified now. */
+export function fortifiedUntil(board: WarBoard, territoryId: TerritoryId): number | null {
+  const until = board.holdings.get(territoryId)?.fortifiedUntil ?? null;
+  return until !== null && board.round < until ? until : null;
+}
+
+/**
+ * The least a stake against this target may be worth now: the stake floor, or what a raise to a
+ * percentage demands while the target is fortified.
+ */
+export function declarationFloor(board: WarBoard, targetId: TerritoryId): number {
+  const value = getTerritory(board.idx, targetId).value;
+  const floor = stakeFloor(board.rules, value);
+  return fortifiedUntil(board, targetId) === null ? floor : Math.max(floor, raiseFloor(board.rules, value));
+}
+
+export type FortifyRejection = 'off' | 'unknown-territory' | 'not-yours' | 'fortified';
+
+export const FORTIFY_REJECTION_MESSAGES: Record<FortifyRejection, string> = {
+  off: "Fortifying is not part of this campaign's rules.",
+  'unknown-territory': 'That country is not on this map.',
+  'not-yours': 'You can only fortify your own countries.',
+  fortified: 'That country is already fortified for as long as fortifying now would last.',
+};
+
+/** Why `userId` can't fortify `territoryId` now, or null if they can (tokens aside). */
+export function checkFortify(board: WarBoard, userId: UserId, territoryId: TerritoryId): FortifyRejection | null {
+  if (!board.rules.war.fortify) return 'off';
+  if (!board.idx.byId.has(territoryId)) return 'unknown-territory';
+  if (board.holdings.get(territoryId)?.ownerId !== userId) return 'not-yours';
+  const until = fortifiedUntil(board, territoryId);
+  if (until !== null && until >= fortifyEnds(board.round)) return 'fortified';
+  return null;
 }
 
 /** The round from which a country won in a war can be staked, or null if it can be staked now. */
@@ -209,7 +287,7 @@ function targetCheck(
   if (bordering.length === 0) return 'not-bordering';
   const launchable = bordering.filter((id) => stakeable.has(id));
   if (launchable.length === 0) return 'no-launcher';
-  const floor = stakeFloor(board.rules, target.value);
+  const floor = declarationFloor(board, targetId);
   if (!launchable.some((id) => valueOf(board.idx, reachableWithin(board.idx, id, stakeable)) >= floor)) {
     return 'stake-too-small';
   }
@@ -235,7 +313,7 @@ export function attackableTargets(board: WarBoard, attackerId: UserId): Set<Terr
 
 /**
  * The attacker's countries bordering `targetId` that can launch an attack on it: ones a stake
- * worth `minValue` (by default the stake floor) can be built from.
+ * worth `minValue` (by default what a declaration needs) can be built from.
  */
 export function launchersFor(
   board: WarBoard,
@@ -243,8 +321,7 @@ export function launchersFor(
   targetId: TerritoryId,
   opts: { minValue?: number; exceptWarId?: string } = {},
 ): TerritoryId[] {
-  const target = getTerritory(board.idx, targetId);
-  const minValue = opts.minValue ?? stakeFloor(board.rules, target.value);
+  const minValue = opts.minValue ?? declarationFloor(board, targetId);
   const stakeable = stakeableCountries(board, attackerId, opts.exceptWarId);
   return board.idx
     .neighbors(targetId)
@@ -279,7 +356,8 @@ export const STAKE_REJECTION_MESSAGES: Record<StakeRejection, string> = {
 
 /**
  * Why a stake is invalid, or null if it's fine. A stake is the launching country plus
- * connected countries of the attacker's, worth at least `minValue` (by default the stake floor).
+ * connected countries of the attacker's, worth at least `minValue` (by default what a
+ * declaration needs: the stake floor, or more against a fortified country).
  */
 export function checkStake(
   board: WarBoard,
@@ -304,7 +382,7 @@ export function checkStake(
   if (!set.has(launchId)) return 'launcher-missing';
   if (!board.idx.neighbors(targetId).includes(launchId)) return 'launcher-not-bordering';
   if (reachableWithin(board.idx, launchId, set).size !== set.size) return 'not-connected';
-  const minValue = opts.minValue ?? stakeFloor(board.rules, getTerritory(board.idx, targetId).value);
+  const minValue = opts.minValue ?? declarationFloor(board, targetId);
   if (valueOf(board.idx, stake) < minValue) return 'too-small';
   return null;
 }
@@ -319,7 +397,7 @@ export interface StakePlan {
 /**
  * The cheapest valid stake: from `launchId` if given, otherwise from whichever bordering country
  * needs the least. Cheapest means the lowest total value, then the fewest countries. Null when
- * no stake reaches `minValue` (by default the stake floor).
+ * no stake reaches `minValue` (by default what a declaration needs).
  */
 export function suggestStake(
   board: WarBoard,
@@ -327,8 +405,7 @@ export function suggestStake(
   targetId: TerritoryId,
   opts: { launchId?: TerritoryId; minValue?: number; exceptWarId?: string } = {},
 ): StakePlan | null {
-  const target = getTerritory(board.idx, targetId);
-  const minValue = opts.minValue ?? stakeFloor(board.rules, target.value);
+  const minValue = opts.minValue ?? declarationFloor(board, targetId);
   const stakeable = stakeableCountries(board, attackerId, opts.exceptWarId);
   const candidates = opts.launchId
     ? [opts.launchId]
@@ -465,33 +542,212 @@ class Heap<T> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Reserves
+
+/** Whether an attacker may set countries aside to meet a raise: when a raise asks for a bigger stake. */
+export const reservesAllowed = (rules: CampaignRules) => rules.war.raise === 'matched' || rules.war.raise === 'token';
+
+export type ReserveRejection =
+  'no-raise' | 'duplicate' | 'unknown-territory' | 'not-yours' | 'in-stake' | 'in-war' | 'newly-won' | 'not-connected';
+
+export const RESERVE_REJECTION_MESSAGES: Record<ReserveRejection, string> = {
+  'no-raise': 'Reserves only meet a raise, and this campaign has none that asks for more stake.',
+  duplicate: 'A country is listed twice in the reserves.',
+  'unknown-territory': 'The reserves include a country that is not on this map.',
+  'not-yours': 'You can only hold your own countries in reserve.',
+  'in-stake': 'A country in the stake cannot also be in reserve.',
+  'in-war': 'The reserves include a country already caught up in a war.',
+  'newly-won': 'The reserves include a newly won country that cannot be staked yet.',
+  'not-connected': 'Reserves must connect to the stake.',
+};
+
+/**
+ * Why countries can't be held in reserve for this stake, or null if they can: the attacker's own,
+ * free to stake, outside the stake, and joined to it (directly or through each other).
+ */
+export function checkReserves(
+  board: WarBoard,
+  attackerId: UserId,
+  launchId: TerritoryId,
+  stake: readonly TerritoryId[],
+  reserves: readonly TerritoryId[],
+  opts: { exceptWarId?: string } = {},
+): ReserveRejection | null {
+  if (reserves.length === 0) return null;
+  if (!reservesAllowed(board.rules)) return 'no-raise';
+  if (new Set(reserves).size !== reserves.length) return 'duplicate';
+  const inStake = new Set(stake);
+  const locks = warLocks(board.wars);
+  for (const id of reserves) {
+    if (!board.idx.byId.has(id)) return 'unknown-territory';
+    const holding = board.holdings.get(id);
+    if (holding?.ownerId !== attackerId) return 'not-yours';
+    if (inStake.has(id)) return 'in-stake';
+    const lock = locks.get(id);
+    if (lock !== undefined && lock !== opts.exceptWarId) return 'in-war';
+    if (stakeableFromRound(board, holding) !== null) return 'newly-won';
+  }
+  const all = new Set([...stake, ...reserves]);
+  return reachableWithin(board.idx, launchId, all).size === all.size ? null : 'not-connected';
+}
+
+/**
+ * The stake that meets a raise from the attacker's reserves: the stake as it is plus the reserves
+ * worth least (then the fewest) that bring it to `minValue` in one piece. Null when they can't.
+ */
+export function stakeFromReserves(
+  idx: DatasetIndex,
+  stake: readonly TerritoryId[],
+  reserves: readonly TerritoryId[],
+  minValue: number,
+): TerritoryId[] | null {
+  const base = valueOf(idx, stake);
+  if (base >= minValue) return [...stake];
+  if (base + valueOf(idx, reserves) < minValue) return null;
+  const pool = new Set(reserves);
+  const value = (id: TerritoryId) => idx.byId.get(id)?.value ?? 0;
+  interface Node {
+    ids: TerritoryId[];
+    value: number;
+    key: string;
+  }
+  const before = (a: Node, b: Node) =>
+    a.value !== b.value
+      ? a.value < b.value
+      : a.ids.length !== b.ids.length
+        ? a.ids.length < b.ids.length
+        : a.key < b.key;
+  const heap = new Heap<Node>(before);
+  const seen = new Set<string>();
+  heap.push({ ids: [], value: base, key: '' });
+  for (let expanded = 0; heap.size > 0 && expanded < SEARCH_LIMIT; expanded++) {
+    const node = heap.pop()!;
+    if (node.value >= minValue) return [...stake, ...node.ids];
+    const inSet = new Set([...stake, ...node.ids]);
+    for (const id of inSet) {
+      for (const n of idx.neighbors(id)) {
+        if (!pool.has(n) || inSet.has(n)) continue;
+        const ids = [...node.ids, n].sort();
+        const key = ids.join(',');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        heap.push({ ids, value: node.value + value(n), key });
+      }
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Defender responses
 
-/** Whether the defender may raise: only while the stake is worth less than a raise demands. */
+/**
+ * War tokens a counter-offer costs the defender: a raise in the `token` style, a redirect when
+ * redirects cost one. The attacker gets them if they fight on.
+ */
+export function counterCost(rules: CampaignRules, kind: 'raise' | 'redirect'): number {
+  if (kind === 'raise') return rules.war.raise === 'token' ? 1 : 0;
+  return rules.war.redirectToken ? 1 : 0;
+}
+
+/** The most the attacker could stake from this war's launching country: its stake, reserves and what else is free. */
+function stakeReach(board: WarBoard, war: ActiveWar): number {
+  const launchId = war.stake[0]!;
+  return valueOf(board.idx, reachableWithin(board.idx, launchId, stakeableCountries(board, war.attackerId, war.id)));
+}
+
+/**
+ * The least a country put in by a matched raise may be worth, as a percentage of the target's
+ * value (rounded up). The attacker matches with whole countries and often has to add more than
+ * the country is worth, so a small one would make raising a cheap win again.
+ */
+export const MATCHED_RAISE_MIN_PCT = 50;
+
+/** The values a country put in by a matched raise may have against this target: at least half, at most all of it. */
+export function matchedRaiseRange(targetValue: number): { min: number; max: number } {
+  return { min: percentUp(targetValue, MATCHED_RAISE_MIN_PCT), max: targetValue };
+}
+
+/**
+ * Countries the defender could put into the war with a matched raise: theirs, free to stake, worth
+ * between half the target and all of it, and no more than the attacker could still add from the
+ * launching country (so a raise can't force a withdrawal the attacker had no way to avoid).
+ */
+export function raiseOptions(board: WarBoard, war: ActiveWar): TerritoryId[] {
+  if (board.rules.war.raise !== 'matched') return [];
+  const range = matchedRaiseRange(getTerritory(board.idx, war.targetId).value);
+  const cap = Math.min(range.max, stakeReach(board, war) - valueOf(board.idx, war.stake));
+  const out: TerritoryId[] = [];
+  for (const id of stakeableCountries(board, war.defenderId)) {
+    const value = board.idx.byId.get(id)?.value ?? Infinity;
+    if (id !== war.targetId && value >= range.min && value <= cap) out.push(id);
+  }
+  return out.sort();
+}
+
+/**
+ * Whether the defender may raise (tokens aside): with a matched raise, while some country can be
+ * put in; with a raise to a percentage, while the stake is worth less than it demands.
+ */
 export function canRaise(board: WarBoard, war: ActiveWar): boolean {
-  const target = getTerritory(board.idx, war.targetId);
-  return valueOf(board.idx, war.stake) < raiseFloor(board.rules, target.value);
+  switch (board.rules.war.raise) {
+    case 'off':
+      return false;
+    case 'matched':
+      return raiseOptions(board, war).length > 0;
+    case 'token':
+    case 'free':
+      return valueOf(board.idx, war.stake) < raiseFloor(board.rules, getTerritory(board.idx, war.targetId).value);
+  }
+}
+
+/**
+ * What a raise asks the attacker's stake to reach: the stake plus the added country with a matched
+ * raise, otherwise the target's raise floor.
+ */
+export function raiseDemand(
+  board: Pick<WarBoard, 'idx' | 'rules'>,
+  war: Pick<ActiveWar, 'targetId' | 'stake'>,
+  added?: TerritoryId | null,
+): number {
+  if (board.rules.war.raise === 'matched') {
+    return valueOf(board.idx, war.stake) + (added ? getTerritory(board.idx, added).value : 0);
+  }
+  return raiseFloor(board.rules, getTerritory(board.idx, war.targetId).value);
 }
 
 /**
  * Countries the defender may offer instead of the target: theirs, worth the same, bordering the
- * attacker's empire, and not caught up in a war.
+ * attacker's empire, and not caught up in a war; with nearby redirects, bordering the target too.
  */
 export function redirectOptions(board: WarBoard, war: ActiveWar): TerritoryId[] {
   const value = getTerritory(board.idx, war.targetId).value;
   const locks = warLocks(board.wars);
+  const nearby = board.rules.war.redirect === 'nearby' ? new Set(board.idx.neighbors(war.targetId)) : null;
   const attackers = new Set<TerritoryId>();
   for (const [id, h] of board.holdings) if (h.ownerId === war.attackerId) attackers.add(id);
   const out: TerritoryId[] = [];
   for (const [id, h] of board.holdings) {
     if (h.ownerId !== war.defenderId || id === war.targetId || locks.has(id)) continue;
+    if (nearby && !nearby.has(id)) continue;
     if (board.idx.byId.get(id)?.value === value && bordersAny(board.idx, id, attackers)) out.push(id);
   }
   return out.sort();
 }
 
-/** Countries the defender may offer as tribute: theirs, worth less than the target, not caught up in a war. */
-export function tributeOptions(board: WarBoard, war: ActiveWar): TerritoryId[] {
+/**
+ * The country whose terrain and supply lines set a war's clock: the target, or the original one
+ * after a redirect when redirects are nearby (so a redirect can't go looking for better ground).
+ */
+export function clockTarget(
+  rules: CampaignRules,
+  war: { targetId: TerritoryId; redirectedFrom: TerritoryId | null },
+): TerritoryId {
+  return rules.war.redirect === 'nearby' && war.redirectedFrom ? war.redirectedFrom : war.targetId;
+}
+
+/** The defender's countries worth less than the target and not caught up in a war: what tribute can be. */
+export function tributeCountries(board: WarBoard, war: ActiveWar): TerritoryId[] {
   const value = getTerritory(board.idx, war.targetId).value;
   const locks = warLocks(board.wars);
   const out: TerritoryId[] = [];
@@ -501,6 +757,17 @@ export function tributeOptions(board: WarBoard, war: ActiveWar): TerritoryId[] {
   }
   return out.sort();
 }
+
+/**
+ * Countries the defender may offer as tribute: theirs, worth less than the target, not caught up
+ * in a war. None when peace terms replace tribute.
+ */
+export function tributeOptions(board: WarBoard, war: ActiveWar): TerritoryId[] {
+  return board.rules.war.peaceTerms ? [] : tributeCountries(board, war);
+}
+
+/** Whether the attacker can still call off a declaration: before the defender has answered. */
+export const canRecall = (rules: CampaignRules, status: string) => rules.war.recall && status === 'declared';
 
 // ---------------------------------------------------------------------------------------------
 // The game
@@ -575,15 +842,18 @@ export function warTimeControl(rules: CampaignRules, modifiers: ClockModifiers, 
 // Resolution
 
 /**
- * - `attacker`: the attacker won and takes the target.
+ * - `attacker`: the attacker won and takes the target (and a country a matched raise added).
  * - `defender`: the defender won and takes the stake.
  * - `held`: a draw; nothing changes hands.
  * - `tribute`: the attacker accepted the defender's tribute instead of fighting.
- * - `withdrawn`: the attacker backed down (or ran out of time to answer a counter).
+ * - `settled`: the two agreed peace terms; the terms changed hands, and it counts as neither a win
+ *   nor a loss.
+ * - `withdrawn`: the attacker backed down (called the declaration off, or refused a counter, or
+ *   ran out of time to answer one).
  * - `cancelled`: the campaign ended before the war was settled; nothing changed hands, and it
  *   counts as neither a win nor a loss.
  */
-export type WarOutcome = 'attacker' | 'defender' | 'held' | 'tribute' | 'withdrawn' | 'cancelled';
+export type WarOutcome = 'attacker' | 'defender' | 'held' | 'tribute' | 'settled' | 'withdrawn' | 'cancelled';
 
 /** What a finished game means for its war, including whether a drawn first game goes to Armageddon. */
 export function afterGame(
@@ -605,15 +875,171 @@ export interface Transfer {
   to: UserId;
 }
 
-/** The countries that change hands when a fought war ends. */
+/**
+ * The countries that change hands when a fought war ends: the target (and a country a met matched
+ * raise put in, from `added` or the war's counter) to a winning attacker, the stake to a winning
+ * defender.
+ */
 export function warTransfers(
-  war: Pick<ActiveWar, 'attackerId' | 'defenderId' | 'targetId' | 'stake'>,
+  war: Pick<ActiveWar, 'attackerId' | 'defenderId' | 'targetId' | 'stake'> & {
+    added?: TerritoryId | null;
+    counter?: WarCounter | null;
+  },
   outcome: WarOutcome,
 ): Transfer[] {
-  if (outcome === 'attacker') return [{ territoryId: war.targetId, from: war.defenderId, to: war.attackerId }];
+  if (outcome === 'attacker') {
+    const added = war.added ?? addedCountry(war.counter ?? null);
+    return [war.targetId, ...(added ? [added] : [])].map((id) => ({
+      territoryId: id,
+      from: war.defenderId,
+      to: war.attackerId,
+    }));
+  }
   if (outcome === 'defender')
     return war.stake.map((id) => ({ territoryId: id, from: war.attackerId, to: war.defenderId }));
   return [];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Peace terms
+
+/**
+ * Terms to end a war without finishing it, which either player may offer until its game is over.
+ * The attacker can hand over staked countries; the defender the target (and a country a raise put
+ * in), or instead one country worth less than the target, like tribute. Tokens can go either way,
+ * and an accord can come with the peace. Nothing at all is a white peace.
+ */
+export interface PeaceTerms {
+  /** Countries the defender hands to the attacker. */
+  toAttacker: TerritoryId[];
+  /** Staked countries the attacker hands to the defender. */
+  toDefender: TerritoryId[];
+  /** War tokens the defender pays the attacker. */
+  tokensToAttacker: number;
+  /** War tokens the attacker pays the defender. */
+  tokensToDefender: number;
+  /** An accord signed with the peace, for this many rounds; null for none. */
+  accordRounds: number | null;
+}
+
+/** The most tokens peace terms can move. */
+export const PEACE_MAX_TOKENS = 10;
+
+export const WHITE_PEACE: PeaceTerms = {
+  toAttacker: [],
+  toDefender: [],
+  tokensToAttacker: 0,
+  tokensToDefender: 0,
+  accordRounds: null,
+};
+
+/** Terms that hand nothing over (an accord may still come with them). */
+export const isWhitePeace = (terms: PeaceTerms) =>
+  terms.toAttacker.length === 0 &&
+  terms.toDefender.length === 0 &&
+  terms.tokensToAttacker === 0 &&
+  terms.tokensToDefender === 0;
+
+export type PeaceRejection =
+  | 'off'
+  | 'duplicate'
+  | 'bad-country'
+  | 'bad-tribute'
+  | 'tokens-both-ways'
+  | 'bad-tokens'
+  | 'short-of-tokens'
+  | 'bad-accord';
+
+export const PEACE_REJECTION_MESSAGES: Record<PeaceRejection, string> = {
+  off: "Peace terms are not part of this campaign's rules.",
+  duplicate: 'A country is listed twice in the terms.',
+  'bad-country':
+    'The attacker can hand over staked countries, and the defender the target, a country a raise added, or one country worth less than the target.',
+  'bad-tribute':
+    'A country worth less than the target goes on its own, instead of the target: not alongside other countries.',
+  'tokens-both-ways': 'Tokens can go one way only.',
+  'bad-tokens': `Terms can move between 0 and ${PEACE_MAX_TOKENS} war tokens.`,
+  'short-of-tokens': 'Whoever pays the tokens must have them.',
+  'bad-accord': `An accord lasts ${ACCORD_MIN_ROUNDS} to ${ACCORD_MAX_ROUNDS} rounds.`,
+};
+
+/** What each side may hand over in peace terms for this war. */
+export function peaceCountries(
+  board: WarBoard,
+  war: ActiveWar,
+): { fromAttacker: TerritoryId[]; fromDefender: TerritoryId[]; tribute: TerritoryId[] } {
+  const holds = (id: TerritoryId, ownerId: UserId) => board.holdings.get(id)?.ownerId === ownerId;
+  const fromDefender = [war.targetId, ...(war.added ? [war.added] : [])].filter((id) => holds(id, war.defenderId));
+  return {
+    fromAttacker: war.stake.filter((id) => holds(id, war.attackerId)),
+    fromDefender,
+    tribute: tributeCountries(board, war).filter((id) => !fromDefender.includes(id)),
+  };
+}
+
+/**
+ * Why these terms can't end this war now, or null if they can. `tokens` are what each side holds:
+ * whoever pays must have them.
+ */
+export function peaceIssue(
+  board: WarBoard,
+  war: ActiveWar,
+  terms: PeaceTerms,
+  tokens: { attacker: number; defender: number },
+): PeaceRejection | null {
+  if (!board.rules.war.peaceTerms) return 'off';
+  const all = [...terms.toAttacker, ...terms.toDefender];
+  if (new Set(all).size !== all.length) return 'duplicate';
+  const allowed = peaceCountries(board, war);
+  if (!terms.toDefender.every((id) => allowed.fromAttacker.includes(id))) return 'bad-country';
+  const tribute = terms.toAttacker.filter((id) => !allowed.fromDefender.includes(id));
+  if (tribute.some((id) => !allowed.tribute.includes(id))) return 'bad-country';
+  if (tribute.length > 0 && terms.toAttacker.length > 1) return 'bad-tribute';
+  for (const n of [terms.tokensToAttacker, terms.tokensToDefender]) {
+    if (!Number.isInteger(n) || n < 0 || n > PEACE_MAX_TOKENS) return 'bad-tokens';
+  }
+  if (terms.tokensToAttacker > 0 && terms.tokensToDefender > 0) return 'tokens-both-ways';
+  if (terms.tokensToAttacker > tokens.defender || terms.tokensToDefender > tokens.attacker) return 'short-of-tokens';
+  const rounds = terms.accordRounds;
+  if (rounds !== null && (!Number.isInteger(rounds) || rounds < ACCORD_MIN_ROUNDS || rounds > ACCORD_MAX_ROUNDS)) {
+    return 'bad-accord';
+  }
+  return null;
+}
+
+/** "A", "A and B", "A, B and C". */
+const listOf = (items: readonly string[]) =>
+  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+
+/**
+ * Peace terms in words, with the players and countries named by the caller (a player may be
+ * "you"): "Libya goes to Ann; 2 war tokens go to Bo; with an accord for 3 rounds", or "A white
+ * peace: nothing changes hands".
+ */
+export function peaceTermsText(
+  terms: PeaceTerms,
+  names: { attacker: string; defender: string; country(id: TerritoryId): string },
+): string {
+  const parts: string[] = [];
+  const countries = (ids: readonly TerritoryId[], to: string) =>
+    `${listOf(ids.map(names.country))} ${ids.length === 1 ? 'goes' : 'go'} to ${to}`;
+  const tokens = (n: number, to: string) => `${n} war ${n === 1 ? 'token goes' : 'tokens go'} to ${to}`;
+  if (terms.toAttacker.length > 0) parts.push(countries(terms.toAttacker, names.attacker));
+  if (terms.toDefender.length > 0) parts.push(countries(terms.toDefender, names.defender));
+  if (terms.tokensToAttacker > 0) parts.push(tokens(terms.tokensToAttacker, names.attacker));
+  if (terms.tokensToDefender > 0) parts.push(tokens(terms.tokensToDefender, names.defender));
+  const rounds = terms.accordRounds;
+  const accord = rounds ? `an accord for ${rounds} ${rounds === 1 ? 'round' : 'rounds'}` : null;
+  if (parts.length === 0) return accord ? `A white peace, with ${accord}` : 'A white peace: nothing changes hands';
+  return accord ? `${parts.join('; ')}; with ${accord}` : parts.join('; ');
+}
+
+/** The countries peace terms hand over. */
+export function peaceTransfers(war: Pick<ActiveWar, 'attackerId' | 'defenderId'>, terms: PeaceTerms): Transfer[] {
+  return [
+    ...terms.toAttacker.map((id) => ({ territoryId: id, from: war.defenderId, to: war.attackerId })),
+    ...terms.toDefender.map((id) => ({ territoryId: id, from: war.attackerId, to: war.defenderId })),
+  ];
 }
 
 /** A player's tokens when a new round starts: the allowance is added up to the cap; tokens above it are kept. */
@@ -628,7 +1054,10 @@ export interface ResolvedWar {
   resolvedRound: number;
 }
 
-/** The truces in force in `round`: one per pair whose war was fought out or settled by tribute recently. */
+/**
+ * The truces in force in `round`: one per pair whose war was fought out, or ended by tribute or
+ * peace terms, recently.
+ */
 export function activeTruces(rules: CampaignRules, round: number, resolved: readonly ResolvedWar[]): Truce[] {
   const byPair = new Map<string, Truce>();
   for (const war of resolved) {

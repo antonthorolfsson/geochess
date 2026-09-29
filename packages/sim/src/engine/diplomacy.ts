@@ -49,6 +49,35 @@ export function answer(s: SimState, accord: SimAccord, accept: boolean): void {
     accord.status = 'declined';
     return;
   }
+  sign(s, accord);
+  settle(s, new Set([accord.proposerId, accord.recipientId]));
+}
+
+/**
+ * An accord both players agreed to with peace terms, signed at once (the server signs it inside
+ * the change that accepts the terms, which settles the missions once, after both).
+ */
+export function signAgreedAccord(s: SimState, proposerId: UserId, recipientId: UserId, rounds: number): SimAccord {
+  const accord: SimAccord = {
+    id: newId(s, 'a'),
+    proposerId,
+    recipientId,
+    status: 'proposed',
+    endsRound: null,
+    endedRound: null,
+    brokenBy: null,
+    rounds,
+    signedRound: null,
+    renews: null,
+  };
+  s.accords.push(accord);
+  s.accordStats.proposed++;
+  sign(s, accord);
+  return accord;
+}
+
+/** A proposal comes into force, renewing any accord between the two. */
+function sign(s: SimState, accord: SimAccord): void {
   const renewed = accordInForce(s, accord.proposerId, accord.recipientId);
   if (renewed) {
     renewed.status = 'renewed';
@@ -77,7 +106,6 @@ export function answer(s: SimState, accord: SimAccord, accept: boolean): void {
     () =>
       `${accord.proposerId} and ${accord.recipientId} sign an accord until round ${accord.endsRound}${renewed ? ' (renewal)' : ''}`,
   );
-  settle(s, new Set([accord.proposerId, accord.recipientId]));
 }
 
 /** A partner breaks an accord in force: it ends at once, and the breaker loses reputation. */

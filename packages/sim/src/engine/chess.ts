@@ -8,6 +8,7 @@ import {
   ARMAGEDDON_BLACK_TIME,
   attackerColor,
   clockModifiers,
+  clockTarget,
   type Color,
   type GameEndReason,
   type WarBoard,
@@ -109,7 +110,7 @@ export interface PlayedGame {
 /** Plays one game of a war (the first, or its Armageddon tiebreak). */
 export function playGame(s: SimState, war: SimWar, armageddon: boolean): PlayedGame {
   const model = s.cfg.chess;
-  const net = clockModifiers(warBoard(s), war.attackerId, war.targetId).net;
+  const net = clockModifiers(warBoard(s), war.attackerId, clockTarget(s.rules, war)).net;
   const edge = whiteEdge(model, s.byId.get(war.attackerId)!.elo, s.byId.get(war.defenderId)!.elo, net, armageddon);
   const odds = oddsFromEdge(model, edge);
   const r = s.rng.chess();

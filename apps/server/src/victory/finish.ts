@@ -10,7 +10,17 @@ import {
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
-import { accords, campaignResults, campaigns, games, holdings, members, missionClaims, wars } from '../db/schema';
+import {
+  accords,
+  campaignResults,
+  campaigns,
+  games,
+  holdings,
+  members,
+  missionClaims,
+  peaceOffers,
+  wars,
+} from '../db/schema';
 import { publishGame } from '../wars/games';
 import { settleFinishedGames } from '../wars/service';
 import { memberNames, missionsUrl, notifyAfter, revealSecret, settleVictory } from './settle';
@@ -64,8 +74,9 @@ const listNames = (names: string[]) =>
 /**
  * Someone reached the points to win: the campaign ends, read-only from here on. Every secret
  * mission is revealed; unfinished wars are cancelled (nothing changes hands, and they count as
- * neither won nor lost) and their games stopped, moves kept; tokens held back as tribute go back;
- * pending claims and accord proposals lapse. The results are written once: a second call is a no-op.
+ * neither won nor lost) and their games stopped, moves kept; tokens held back as tribute, or paid
+ * for a counter the attacker hadn't answered, go back; pending claims, accord proposals and peace
+ * offers lapse. The results are written once: a second call is a no-op.
  */
 export async function finishCampaign(
   ctx: AppContext,
@@ -218,11 +229,13 @@ async function cancelUnfinishedWars(ctx: AppContext, scope: MutationScope): Prom
     .from(wars)
     .where(and(eq(wars.campaignId, campaign.id), ne(wars.status, 'resolved')));
   for (const war of open) {
-    // Tokens offered as tribute were held back from the defender until the attacker answered.
-    if (war.status === 'countered' && war.counter?.kind === 'tribute' && war.counter.tokens > 0) {
+    // Tokens offered as tribute were held back from the defender until the attacker answered, and
+    // a raise or redirect paid for goes unanswered: either way they go back.
+    const held = war.status === 'countered' ? (war.counter?.tokens ?? 0) : 0;
+    if (held > 0) {
       await tx
         .update(members)
-        .set({ tokens: sql`${members.tokens} + ${war.counter.tokens}` })
+        .set({ tokens: sql`${members.tokens} + ${held}` })
         .where(and(eq(members.campaignId, campaign.id), eq(members.userId, war.defenderId)));
     }
     await tx
@@ -235,4 +248,8 @@ async function cancelUnfinishedWars(ctx: AppContext, scope: MutationScope): Prom
       round,
     );
   }
+  await tx
+    .update(peaceOffers)
+    .set({ status: 'lapsed', respondBy: null, endedAt: now })
+    .where(and(eq(peaceOffers.campaignId, campaign.id), eq(peaceOffers.status, 'proposed')));
 }

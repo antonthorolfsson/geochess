@@ -5,6 +5,8 @@ import {
   type CampaignRules,
   type Clocks,
   type GameEndReason,
+  type PeaceOfferStatus,
+  type PeaceTerms,
   type SecretMissionSpec,
   type SecretOption,
   type TimeControl,
@@ -149,12 +151,14 @@ export const holdings = pgTable(
     acquiredRound: integer('acquired_round').notNull(),
     /** Draft pick number (zero-based), for territories claimed in the draft. */
     pickNumber: integer('pick_number'),
+    /** Fortified by its owner until this round starts; cleared when the country changes hands. */
+    fortifiedUntil: integer('fortified_until'),
   },
   (t) => [primaryKey({ columns: [t.campaignId, t.territoryId] }), index('holdings_owner').on(t.campaignId, t.ownerId)],
 );
 
 export const WAR_STATUSES = ['declared', 'countered', 'ready', 'playing', 'resolved'] as const;
-export const WAR_OUTCOMES = ['attacker', 'defender', 'held', 'tribute', 'withdrawn', 'cancelled'] as const;
+export const WAR_OUTCOMES = ['attacker', 'defender', 'held', 'tribute', 'settled', 'withdrawn', 'cancelled'] as const;
 
 export const wars = pgTable(
   'wars',
@@ -173,6 +177,8 @@ export const wars = pgTable(
     launchId: text('launch_id').notNull(),
     /** The launching country first. */
     stake: jsonb('stake').$type<string[]>().notNull(),
+    /** Countries the attacker set aside at the declaration to meet a raise. */
+    reserves: jsonb('reserves').$type<string[]>().notNull().default([]),
     /** The original target, if the attacker accepted a redirect. */
     redirectedFrom: text('redirected_from'),
     status: text('status', { enum: WAR_STATUSES }).notNull(),
@@ -266,6 +272,48 @@ export const accords = pgTable(
     renews: text('renews'),
   },
   (t) => [index('accords_campaign').on(t.campaignId, t.status), index('accords_respond_by').on(t.respondBy)],
+);
+
+export const PEACE_OFFER_STATUSES = [
+  'proposed',
+  'accepted',
+  'declined',
+  'withdrawn',
+  'lapsed',
+] as const satisfies readonly PeaceOfferStatus[];
+
+/**
+ * Terms offered to end a war, from proposal to answer. Private to the war's two players until
+ * accepted, when the war's resolution makes the terms public.
+ */
+export const peaceOffers = pgTable(
+  'peace_offers',
+  {
+    id: text('id').primaryKey(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    warId: text('war_id')
+      .notNull()
+      .references(() => wars.id, { onDelete: 'cascade' }),
+    proposerId: text('proposer_id')
+      .notNull()
+      .references(() => users.id),
+    recipientId: text('recipient_id')
+      .notNull()
+      .references(() => users.id),
+    terms: jsonb('terms').$type<PeaceTerms>().notNull(),
+    status: text('status', { enum: PEACE_OFFER_STATUSES }).notNull(),
+    createdAt: createdAt(),
+    /** While proposed: when the offer lapses without an answer. */
+    respondBy: timestamp('respond_by', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('peace_offers_war').on(t.warId, t.status),
+    index('peace_offers_campaign').on(t.campaignId, t.status),
+    index('peace_offers_respond_by').on(t.respondBy),
+  ],
 );
 
 /** Chat: the campaign channel and private conversations between two players. */

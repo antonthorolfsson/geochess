@@ -50,4 +50,5 @@ export const openWarViews = (s: SimState): OpenWar[] =>
     stake: w.stake,
     status: w.status,
     counter: w.counter,
+    reserves: w.reserves,
   }));

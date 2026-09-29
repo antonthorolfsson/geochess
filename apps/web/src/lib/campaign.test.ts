@@ -36,6 +36,7 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     wars: [],
     truces: [],
     acquired: {},
+    fortified: {},
     accords: [],
     victory: null,
     mySecret: null,
@@ -133,6 +134,8 @@ describe('wars in the model', () => {
     declaredAt: '2026-01-01T00:00:00.000Z',
     resolvedAt: null,
     games: [],
+    reserves: [],
+    peace: [],
     ...overrides,
   });
 

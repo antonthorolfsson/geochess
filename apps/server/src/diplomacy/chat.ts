@@ -31,7 +31,9 @@ const CHANNEL = conversationKey('', null);
 
 /** Which dispatches each feed filter shows. `chat` shows none. */
 function eventFilter(filter: FeedFilter): SQL | undefined {
-  if (filter === 'wars') return or(like(events.type, 'war.%'), eq(events.type, 'round.started'));
+  if (filter === 'wars') {
+    return or(like(events.type, 'war.%'), eq(events.type, 'round.started'), eq(events.type, 'country.fortified'));
+  }
   if (filter === 'accords') return or(like(events.type, 'accord.%'), like(events.type, 'reputation.%'));
   return undefined;
 }

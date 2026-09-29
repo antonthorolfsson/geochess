@@ -8,7 +8,8 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (482 tests as of 2026-09-29).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (537 tests as of 2026-09-29, after
+   the revised war answers).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -417,6 +418,69 @@ host sets one in the lobby. What the simulator says about the result is in the r
 
 Tests since: rules 229, web 40, sim 20, server 127 (482 in all).
 
+**Revised war answers** (2026-09-29, at the user's request, from the balance report's finding that
+a defender gains by raising whatever happens, and that nothing lets anyone out of a war; not
+committed yet). All of it is host settings in `rules.war`. Rules stored before read as the original
+game (a free raise, redirects anywhere and free, tribute, no fortifying or calling off), so no
+campaign underway changes, production's included; new campaigns start from `REVISED_WAR_RULES`
+through `DEFAULT_RULES`.
+
+- **Raising** (`raise`): `matched` (the default) has the defender put one of their own countries
+  into the war, worth 50–100% of the target (`MATCHED_RAISE_MIN_PCT`, `matchedRaiseRange`), free to
+  stake and no more than the attacker could still add from the launching country
+  (`raiseOptions`). The attacker adds at least as much or withdraws; winning takes both
+  (`WarCounter.added`, `ActiveWar.added`, `warTransfers`). `token` is the old raise to `raisePct`
+  paid for with a war token, which goes to the attacker if they meet it. `free` is the original.
+  `off` has none. The 50% floor came from the simulator: with no floor, defenders put in a country
+  worth 1, attackers matching with whole countries overshot by about 2, and raising stayed a cheap
+  win.
+- **Redirects**: `redirect: 'nearby'` needs the offered country to border the target, and the war
+  keeps the first target's clock (`clockTarget`); `redirectToken` makes a redirect cost a token,
+  paid to the attacker if they fight on. Counter tokens sit in `WarCounter.tokens`; unanswered at
+  the campaign's end, they go back (`finishCampaign`).
+- **Reserves**: with a matched or token raise, a declaration can set countries aside
+  (`DeclareWarInput.reserves`, `wars.reserves`, `checkReserves`). They're public and locked while
+  the answer is pending; a raise they cover is met at once with the cheapest subset
+  (`stakeFromReserves`), logged as a `war.reply` with `fromReserves`.
+- **Fortifying** (`fortify`): a war token makes war on a country need `raisePct` until the round
+  after next starts (`holdings.fortified_until`, `fortifiedUntil`, `declarationFloor`, used by
+  `checkTarget`, `checkStake`, `suggestStake` and `launchersFor`). Public (`CampaignView.fortified`,
+  a `country.fortified` event, a rampart on the map); cleared when the country changes hands;
+  fortifying again in a later round extends it.
+- **Calling off** (`recall`): the attacker ends a declaration before the answer
+  (`POST …/wars/:warId/recall`): `war.recalled`, then resolved as `withdrawn`.
+- **Peace terms** (`peaceTerms`, which takes tribute's place as an answer): either player offers
+  terms until the game is over (`apps/server/src/wars/peace.ts`, table `peace_offers`). Terms move
+  staked countries from the attacker; the target (and an added country), or instead one country
+  worth less than the target, from the defender; up to 10 tokens one way; and an optional accord
+  (`PeaceTerms`, `peaceIssue`, `peaceCountries`). Offers are private like accord proposals: no
+  events, `scope.notifyOnly`, and `WarView.peace` holds only the viewer's own. They lapse after the
+  answer window, a newer one from the same player replaces them, and the recipient's move in the
+  war's game declines them (inside the move's transaction, `playMove`). Accepting stops the game
+  (`stopWarGames`: game row first, then the offer, so a move can't deadlock with it; a game that
+  finished first keeps its result), hands over the terms, resolves the war as `settled` (a truce,
+  neither a win nor a loss; `war.resolved` carries the terms), and signs any accord
+  (`signAgreedAccord`, shared with `answerAccord`). Claim blockers ignore peace terms, since the
+  claimant must agree to them.
+- **Lobby**: the Wars settings gained Raising the stakes, four toggles, and the least and raised
+  stake in More war settings. The rules guide and settings list describe each campaign's own
+  choices (`raiseText`, `raisedRowLabel`).
+- **Simulator**: mirrors all of it (fortifying, calling off, peace offers answered at once, reserves
+  and auto-met raises, counter tokens) and plays the revised answers by default; bots fortify what
+  a claimed mission leans on, set reserves for token raises, and offer tribute-like peace with a
+  2-round accord. `whatif:original-answers`, `whatif:raise-token` and `whatif:raise-off` compare
+  (results in the balance report's
+  [War answers, revised](balance-report.md#war-answers-revised)). The parity test replays three
+  more campaigns: two on the original answers, one with token raises, reserves, fortifying, peace
+  and declarations called off (`recallRate`, a test-only bot knob).
+- `answerWindow` (unused since Phase 2) went with the rewrite of `war-detail.tsx`.
+- **Dev database:** Field Marshal's "Peace Check" (with Bo, round 7: two wars settled by peace,
+  Iran fortified, a matched raise with Argentina waiting on Field Marshal) and "Answers Lobby" (a
+  lobby, raise set to cost a token).
+
+Tests since: rules 254, data 66, web 41, sim 25, server 151 (537 in all; the new server file is
+`test/war-answers.test.ts`).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -615,6 +679,12 @@ All at the proposed defaults.
   Encirclement, Unification) are almost never done by the bots, since a chain or a ring can't be
   made shorter. Retire them, redesign them, or wait for the playtest? The slower war tokens the
   report also suggested were left out at the user's request.
+- **The revised war answers' defaults** (see the report's
+  [War answers, revised](balance-report.md#war-answers-revised)): new campaigns raise `matched`
+  (the report's alternative was the token raise); the simulated defenders still raise about a
+  quarter of declarations, mostly with countries near the 50% floor. Redirects nearly vanish with
+  both `nearby` and a token (0–1% of declarations, from 16–39%). Both are host settings; the
+  playtest should say whether the floor needs raising and whether redirects should stay nearby.
 
 ## Running and testing
 
@@ -833,8 +903,8 @@ Smaller follow-ups, none blocking:
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                  |
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                        |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`)                                                                                                                                   |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                  |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications)                                                                      |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
 | `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
 
@@ -842,7 +912,8 @@ API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
 `/api/campaigns/:id/{invite/reset,me,leave,kick}`,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
-`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply}`,
+`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
+`…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,
 `/api/campaigns/:id/round/next`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
 `/api/campaigns/:id/stats`, `/api/campaigns/:id/secret` (choose), `/api/campaigns/:id/victory/missions` (the host's four) and

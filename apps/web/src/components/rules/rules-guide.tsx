@@ -6,8 +6,12 @@ import {
   ARMAGEDDON_BLACK_TIME,
   CORRESPONDENCE_HOURS,
   DEFAULT_RULES,
+  FORTIFY_COST,
+  FORTIFY_ROUNDS,
   HOME_TURF_PCT,
   LIVE_CLOCKS,
+  MATCHED_RAISE_MIN_PCT,
+  PEACE_MAX_TOKENS,
   MIN_PLAYERS,
   MISSIONS,
   MODIFIER_CAP_PCT,
@@ -29,6 +33,7 @@ import {
   missionRules,
   missionSummary,
   refillTokens,
+  reservesAllowed,
   selectionMs,
   stakeFloor,
   type CampaignRules,
@@ -41,10 +46,15 @@ import {
   inWords,
   liveClockText,
   perMoveText,
+  raisedRowLabel,
   settingsList,
   stakeTable,
   warTokens,
 } from '@/lib/rules-text';
+
+/** "a, b or c". */
+const orWords = (items: readonly string[]) =>
+  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} or ${items.at(-1)}`;
 
 /**
  * - `standard`: the game with the standard settings (the landing page and /rules). Where the two
@@ -159,9 +169,9 @@ function SubHeading({ className = 'text-lg font-bold', children }: { className?:
   return <H className={className}>{children}</H>;
 }
 
-function Part({ title, children }: { title: string; children: ReactNode }) {
+function Part({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
   return (
-    <div className="space-y-2">
+    <div id={id} className="scroll-mt-4 space-y-2">
       <SubHeading>{title}</SubHeading>
       {children}
     </div>
@@ -348,8 +358,10 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       text: (
         <>
           Turn on <UI>Targets</UI> to light up every country you can attack. Select one, press <UI>Declare war</UI>,
-          choose the country you attack from and build your stake. It costs a war token, and a dashed arrow goes up on
-          the map.
+          choose the country you attack from and build your stake
+          {reservesAllowed(rules) ? ', with any countries you want to set aside in reserve to meet a raise' : ''}. It
+          costs a war token, and a dashed arrow goes up on the map.
+          {war.recall && ' Until the defender answers, you can still call it off, though the token stays spent.'}
         </>
       ),
     },
@@ -358,8 +370,16 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       who: 'Defender',
       text: (
         <>
-          Within {answer}: accept, raise the stake, redirect the attack or pay tribute. With no answer in time, the war
-          goes ahead as declared.
+          Within {answer}:{' '}
+          {orWords([
+            'accept',
+            ...(war.raise === 'off' ? [] : ['raise the stakes']),
+            'redirect the attack',
+            ...(war.peaceTerms ? [] : ['pay tribute']),
+          ])}
+          . With no answer in time, the war goes ahead as declared.
+          {war.peaceTerms &&
+            ' Either player can also offer peace terms, now or at any time until the game ends: accepted, they end the war.'}
         </>
       ),
     },
@@ -368,9 +388,18 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       who: 'Attacker',
       text: (
         <>
-          Only after a raise, redirect or tribute offer. Within {RESPONSE_WINDOW_TEXT[war.pace]}, the attacker agrees or
-          refuses: refusing a raise or redirect calls the war off, and refusing tribute means fighting as declared. With
-          no reply, a raise or redirect is refused and a tribute taken.
+          Only after{' '}
+          {orWords([
+            ...(war.raise === 'off' ? [] : ['a raise']),
+            'a redirect',
+            ...(war.peaceTerms ? [] : ['a tribute offer']),
+          ])}
+          . Within {RESPONSE_WINDOW_TEXT[war.pace]}, the attacker agrees or refuses: refusing{' '}
+          {war.raise === 'off' ? 'a redirect' : 'a raise or redirect'} calls the war off
+          {war.peaceTerms ? '' : ', and refusing tribute means fighting as declared'}. With no reply,{' '}
+          {war.raise === 'off' ? 'a redirect is' : 'a raise or redirect is'} refused
+          {war.peaceTerms ? '' : ' and a tribute taken'}.
+          {reservesAllowed(rules) && ' A raise the attacker’s reserves cover is met at once, without waiting.'}
         </>
       ),
     },
@@ -384,8 +413,10 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       who: 'Automatic',
       text: (
         <>
-          If the attacker wins, they take the target. If the defender wins, they take the whole stake.{' '}
-          {war.draws === 'armageddon' ? 'A draw goes to an Armageddon game.' : 'A draw changes nothing.'}
+          If the attacker wins, they take the target
+          {war.raise === 'matched' ? ', and any country a raise put in' : ''}. If the defender wins, they take the whole
+          stake. {war.draws === 'armageddon' ? 'A draw goes to an Armageddon game.' : 'A draw changes nothing.'}
+          {war.peaceTerms && ' Peace terms, once accepted, stop the game and hand over what they name instead.'}
           {war.truceRounds > 0 && <> The two players then have a truce {forRounds(war.truceRounds)}.</>}
         </>
       ),
@@ -432,6 +463,13 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       <p className="border-l-2 border-amber/60 pl-3">
         <strong>All round long:</strong> talk in the Diplo tab, sign accords so a neighbor can't attack you, or break
         one to strike first, at a cost to your reputation. See <InlineLink href="#diplomacy">Diplomacy</InlineLink>.
+        {war.fortify && (
+          <>
+            {' '}
+            Spend a war token to fortify a country a neighbor might want: see{' '}
+            <InlineLink href="#fortifying">Fortifying</InlineLink>.
+          </>
+        )}
       </p>
     </Section>
   );
@@ -456,7 +494,10 @@ function DeclaringWar({ rules }: { rules: CampaignRules }) {
           <li>it borders one of your countries, by land or across a sea lane (the dotted lines on the water);</li>
           <li>it isn't already caught up in a war;</li>
           <li>you have no truce or accord with its owner, and haven't broken an accord with them this round;</li>
-          <li>one of your countries bordering it can launch the attack with a big enough stake.</li>
+          <li>
+            one of your countries bordering it can launch the attack with a big enough stake
+            {war.fortify ? ' (a bigger one if it’s fortified)' : ''}.
+          </li>
         </Bullets>
         <p className="text-muted">
           <UI>Targets</UI> lights up every country that qualifies; you also need a war token to declare. Select any
@@ -489,6 +530,37 @@ function DeclaringWar({ rules }: { rules: CampaignRules }) {
           countries before you declare.
         </p>
       </Part>
+      {reservesAllowed(rules) && (
+        <Part title="Reserves">
+          <p>
+            When you declare, you can also set countries aside to meet a raise: your own, joined to the stake. If the
+            defender raises and your reserves can bring the stake up to what the raise demands, they&apos;re added at
+            once (the cheapest that will do) and the war goes ahead without waiting for you. If they can&apos;t, you
+            answer the raise as usual. Everyone can see your reserves, and they&apos;re tied up until the answer is
+            settled; whatever the raise doesn&apos;t need is free again.
+          </p>
+        </Part>
+      )}
+      {war.recall && (
+        <Part title="Calling it off">
+          <p>
+            Changed your mind? Until the defender answers, <UI>Call off</UI> ends the war at once: nothing changes hands
+            and no truce follows, but the war token stays spent. Once the defender has answered, the declaration stands.
+          </p>
+        </Part>
+      )}
+      {war.fortify && (
+        <Part title="Fortifying" id="fortifying">
+          <p>
+            Any player can spend {warTokens(FORTIFY_COST)} to fortify one of their countries, from its panel. Until{' '}
+            {FORTIFY_ROUNDS === 2 ? 'the round after next' : `${FORTIFY_ROUNDS} more rounds`} starts, a war on it needs
+            a stake of at least {war.raisePct}% of its value instead of {war.stakeFloorPct}% (the table&apos;s second
+            row). Fortified countries carry a rampart on the map, so everyone knows before declaring. Fortifying again
+            in a later round extends it. It ends early if the country changes hands, and a war declared before it keeps
+            its stake.
+          </p>
+        </Part>
+      )}
     </Section>
   );
 }
@@ -523,16 +595,18 @@ function StakeTable({ rules }: { rules: CampaignRules }) {
               </td>
             ))}
           </tr>
-          <tr>
-            <th scope="row" className="label py-1.5 pr-2 text-left">
-              After a raise
-            </th>
-            {rows.map((r) => (
-              <td key={r.value} className={`${cell} text-muted`}>
-                {r.raised}
-              </td>
-            ))}
-          </tr>
+          {raisedRowLabel(rules) && (
+            <tr>
+              <th scope="row" className="label py-1.5 pr-2 text-left">
+                {raisedRowLabel(rules)}
+              </th>
+              {rows.map((r) => (
+                <td key={r.value} className={`${cell} text-muted`}>
+                  {r.raised}
+                </td>
+              ))}
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -541,27 +615,63 @@ function StakeTable({ rules }: { rules: CampaignRules }) {
 
 function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
+  const raise = ((): { label: string; text: string } | null => {
+    switch (war.raise) {
+      case 'matched':
+        return {
+          label: 'Raise',
+          text:
+            `Put one of your own countries into the war, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target's value ` +
+            'and free of other wars. The attacker must add at least as much to the stake, or withdraw; if they win, ' +
+            "they take it along with the target. It's a bet on the game: worth making when you expect to win.",
+        };
+      case 'token':
+        return {
+          label: 'Raise',
+          text:
+            `Pay a war token to demand a stake of at least ${war.raisePct}% of the target's value (the table above ` +
+            'has the numbers), while the stake is worth less than that. The attacker raises the stake, and takes your ' +
+            'token for it, or withdraws, and both tokens are spent.',
+        };
+      case 'free':
+        return {
+          label: 'Raise',
+          text:
+            `Demand a bigger stake: at least ${war.raisePct}% of the target's value (the table above has the numbers). ` +
+            'Only possible while the stake is worth less than that. The attacker raises the stake or withdraws.',
+        };
+      case 'off':
+        return null;
+    }
+  })();
+  const nearby = war.redirect === 'nearby';
   const answers: { label: string; text: string }[] = [
     { label: 'Accept', text: 'The game is on, for the target and the stake as declared.' },
-    {
-      label: 'Raise',
-      text:
-        `Demand a bigger stake: at least ${war.raisePct}% of the target's value (the table above has the numbers). ` +
-        'Only possible while the stake is worth less than that. The attacker raises the stake or withdraws.',
-    },
+    ...(raise ? [raise] : []),
     {
       label: 'Redirect',
       text:
-        'Offer another of your countries, worth the same and also bordering the attacker, to fight over instead. ' +
-        'The stake stays as declared. The attacker fights for it or withdraws.',
+        `Offer another of your countries${nearby ? ' next to the target' : ''}, worth the same and also bordering the ` +
+        `attacker, to fight over instead. The stake stays as declared${nearby ? ", and so does the clock: the war keeps the first target's clock modifiers" : ''}. ` +
+        (war.redirectToken ? 'It costs you a war token, which the attacker gets for fighting on. ' : '') +
+        'The attacker fights for it or withdraws.',
     },
-    {
-      label: 'Pay tribute',
-      text:
-        'Offer one of your countries worth less than the target, or some of your war tokens. The attacker takes it ' +
-        'and the war is over, or refuses and fights as declared, with no more counter-offers.',
-    },
+    war.peaceTerms
+      ? {
+          label: 'Peace terms',
+          text:
+            'Not an answer, and open to both sides until the game ends: offer terms to end the war, from handing over ' +
+            'a country to a white peace. See Peace terms below.',
+        }
+      : {
+          label: 'Pay tribute',
+          text:
+            'Offer one of your countries worth less than the target, or some of your war tokens. The attacker takes it ' +
+            'and the war is over, or refuses and fights as declared, with no more counter-offers.',
+        },
   ];
+  const counters = [...(war.raise === 'off' ? [] : ['raise']), 'redirect'];
+  const paidCounter = war.raise === 'token' || war.redirectToken;
   return (
     <Section id="answers" title="Answering a declaration">
       <p>
@@ -576,31 +686,77 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
           </li>
         ))}
       </ul>
+      {standard && (
+        <p className="text-muted">
+          Hosts can choose how raising works (matched, for a token, free as in the original rules, or not at all), let
+          redirects reach anywhere along the border or cost nothing, and switch fortifying, peace terms and calling off
+          on or off. With peace terms off, tribute is an answer again.
+        </p>
+      )}
       <Part title="The attacker's reply">
         <p>A counter-offer goes back to the attacker, who has {RESPONSE_WINDOW_TEXT[war.pace]} to reply:</p>
         <Bullets>
+          {war.raise !== 'off' && (
+            <li>
+              to a raise: <UI>Raise the stake</UI> to at least the amount demanded
+              {war.raise === 'matched' ? ' (the stake as it was, plus the value of the country put in)' : ''}, or{' '}
+              <UI>Withdraw</UI>;
+            </li>
+          )}
           <li>
-            to a raise: <UI>Raise the stake</UI> to at least the amount demanded, or <UI>Withdraw</UI>;
+            to a redirect: <UI>Fight for</UI> the offered country, or <UI>Withdraw</UI>
+            {war.peaceTerms ? '.' : ';'}
           </li>
-          <li>
-            to a redirect: <UI>Fight for</UI> the offered country, or <UI>Withdraw</UI>;
-          </li>
-          <li>
-            to a tribute offer: <UI>Accept tribute</UI>, or <UI>Refuse and fight</UI> as declared.
-          </li>
+          {!war.peaceTerms && (
+            <li>
+              to a tribute offer: <UI>Accept tribute</UI>, or <UI>Refuse and fight</UI> as declared.
+            </li>
+          )}
         </Bullets>
         <p>
-          With no reply, a raise or redirect is withdrawn and a tribute is accepted. Withdrawing calls the war off:
-          nothing changes hands, no truce follows, and the war token is spent.
+          With no reply, a {counters.join(' or ')} is withdrawn{war.peaceTerms ? '' : ' and a tribute is accepted'}.
+          Withdrawing calls the war off: nothing changes hands, no truce follows, and the war token is spent
+          {paidCounter ? ', along with any token the defender paid for the counter' : ''}.
         </p>
       </Part>
       <Part title="Countries caught up in a war">
         <p>
-          From the declaration until the war ends, the target, the stake and any country offered as a redirect or
-          tribute are tied up: nobody can attack them, stake them or offer them in another war. Tokens offered as
-          tribute are set aside until the attacker replies.
+          From the declaration until the war ends, the target, the stake
+          {war.raise === 'matched' ? ', a country a raise puts in' : ''} and any country offered as a redirect
+          {war.peaceTerms ? '' : ' or tribute'} are tied up: nobody can attack them, stake them or offer them in another
+          war.{reservesAllowed(rules) ? ' Reserves are tied up until the answer is settled.' : ''}
+          {war.peaceTerms ? '' : ' Tokens offered as tribute are set aside until the attacker replies.'}
         </p>
       </Part>
+      {war.peaceTerms && (
+        <Part title="Peace terms" id="peace">
+          <p>
+            Either player can offer terms to end the war, from the declaration until its game is over, under Peace terms
+            in the war&apos;s panel. Terms can hand over:
+          </p>
+          <Bullets>
+            <li>from the attacker, any of the staked countries;</li>
+            <li>
+              from the defender, the target{war.raise === 'matched' ? ' (and a country a raise put in)' : ''}, or
+              instead one country worth less than the target;
+            </li>
+            <li>up to {PEACE_MAX_TOKENS} war tokens, one way or the other;</li>
+            <li>
+              and an accord for {ACCORD_MIN_ROUNDS} to {ACCORD_MAX_ROUNDS} rounds, signed with the peace.
+            </li>
+          </Bullets>
+          <p>
+            Or nothing at all: a white peace. Only the two players ever see an offer. The other player accepts or turns
+            it down within {answerTime(rules, standard)}, or it lapses; once the game is on, their next move turns it
+            down, as a move does a draw offer. A new offer replaces your last one.
+          </p>
+          <p>
+            Accepted, the war ends at once: the game stops (its moves are kept, with no result), the terms change hands,
+            any accord comes into force, and a truce follows as after a war fought out. The terms become public then.
+            Peace is neither a win nor a loss.
+          </p>
+        </Part>
+      )}
     </Section>
   );
 }
@@ -700,12 +856,20 @@ function AfterWar({ rules, standard }: { rules: CampaignRules; standard: boolean
         ? `The defender holds: nothing changes hands. Hosts can choose Armageddon instead, one more game in which ${armageddon}.`
         : 'The defender holds: nothing changes hands.';
   const outcomes: [string, string][] = [
-    ['Attacker wins', 'The attacker takes the target.'],
+    [
+      'Attacker wins',
+      war.raise === 'matched'
+        ? 'The attacker takes the target, and any country a raise put in.'
+        : 'The attacker takes the target.',
+    ],
     ['Defender wins', 'The defender takes the whole stake.'],
     ['Draw', draw],
-    ['Tribute accepted', 'The country or tokens offered go to the attacker.'],
+    war.peaceTerms
+      ? ['Peace', 'Whatever the terms name changes hands, and any accord they include comes into force.']
+      : ['Tribute accepted', 'The country or tokens offered go to the attacker.'],
     ['Withdrawn', "Nothing changes hands, and the attacker's war token is spent."],
   ];
+  const settled = war.peaceTerms ? 'peace terms' : 'tribute';
   return (
     <Section id="after" title="After a war">
       <dl className="divide-y divide-line rounded-[3px] border border-line">
@@ -719,15 +883,15 @@ function AfterWar({ rules, standard }: { rules: CampaignRules; standard: boolean
       <Part title="Truce">
         <p>
           {war.truceRounds > 0
-            ? `Once a war is fought or settled by tribute, its two players can't declare war on each other ${forRounds(war.truceRounds)}. A withdrawn war brings no truce.`
+            ? `Once a war is fought, or ended by ${settled}, its two players can't declare war on each other ${forRounds(war.truceRounds)}. A withdrawn war brings no truce.`
             : 'There are no truces: the two players may declare war on each other again at once.'}
         </p>
       </Part>
       <Part title="Newly won countries">
         <p>
           {war.lockRounds > 0
-            ? `A country won in a war or taken as tribute can't be staked, or attacked from, ${forRounds(war.lockRounds)}. It can still be attacked.`
-            : 'Countries won in a war or taken as tribute can be staked straight away.'}
+            ? `A country won in a war or handed over by ${settled} can't be staked, or attacked from, ${forRounds(war.lockRounds)}. It can still be attacked.`
+            : `Countries won in a war or handed over by ${settled} can be staked straight away.`}
         </p>
       </Part>
     </Section>
@@ -753,6 +917,13 @@ function Diplomacy({ rules, standard }: { rules: CampaignRules; standard: boolea
         <p>
           Terms are optional: everyone can read them, but the game doesn't enforce them. To extend an accord, sign a new
           one with the same partner. Accords can be signed from the start of the draft.
+          {rules.war.peaceTerms && (
+            <>
+              {' '}
+              An accord can also come with <InlineLink href="#peace">peace terms</InlineLink>, signed the moment
+              they&apos;re accepted.
+            </>
+          )}
         </p>
       </Part>
       <Part title="Breaking an accord">
@@ -899,7 +1070,8 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         </p>
         <p>
           The campaign then ends and can no longer change: wars still underway are cancelled without a winner (their
-          moves are kept), tokens offered as tribute go back, and every secret mission is revealed in the final results.
+          moves are kept), tokens held back as tribute or paid for a counter still unanswered go back, offers of peace
+          lapse, and every secret mission is revealed in the final results.
         </p>
       </Part>
       <Part title="The last round">
@@ -968,8 +1140,14 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
   const answer = RESPONSE_WINDOW_TEXT[war.pace];
   const rows: [who: string, time: string, silence: string][] = [
     ['The defender answers a declaration', answer, 'The war goes ahead as declared.'],
-    ['The attacker replies to a raise or redirect', answer, 'The war is called off, and the token is spent.'],
-    ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],
+    [
+      war.raise === 'off' ? 'The attacker replies to a redirect' : 'The attacker replies to a raise or redirect',
+      answer,
+      'The war is called off, and the token is spent.',
+    ],
+    war.peaceTerms
+      ? ['A player answers peace terms', `${answer}, or before their next move in the game`, 'The offer lapses.']
+      : ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],
     ['A player answers an accord proposal', answer, 'The proposal lapses.'],
     ['A player moves', war.pace === 'live' ? 'Their clock' : perMoveText(war.hoursPerMove), 'They lose the game.'],
     ...(rules.victory.mode === 'objectives'

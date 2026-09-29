@@ -1,4 +1,5 @@
 import {
+  REVISED_WAR_RULES,
   missionRules,
   parseRules,
   type CampaignRules,
@@ -10,12 +11,12 @@ import {
 import { normal, shuffledIndexes, streams } from '../random';
 import type { SimConfig, SimPlayer, SimState, WarStats } from './types';
 
-const OUTCOMES: WarOutcome[] = ['attacker', 'defender', 'held', 'tribute', 'withdrawn', 'cancelled'];
+const OUTCOMES: WarOutcome[] = ['attacker', 'defender', 'held', 'tribute', 'settled', 'withdrawn', 'cancelled'];
 
 function emptyStats(): WarStats {
   return {
     declared: 0,
-    responses: { accept: 0, raise: 0, redirect: 0, 'tribute-country': 0, 'tribute-tokens': 0 },
+    responses: { accept: 0, raise: 0, redirect: 0, 'tribute-country': 0, 'tribute-tokens': 0, peace: 0 },
     replies: { accept: 0, withdraw: 0, refuse: 0 },
     outcomes: Object.fromEntries(OUTCOMES.map((o) => [o, 0])) as Record<WarOutcome, number>,
     games: 0,
@@ -24,19 +25,25 @@ function emptyStats(): WarStats {
     valueTaken: 0,
     valueRepelled: 0,
     valueTribute: 0,
+    valueSettled: 0,
+    fromReserves: 0,
+    recalled: 0,
+    fortified: 0,
+    peaceOffered: 0,
+    peaceAccepted: 0,
   };
 }
 
 /**
  * The campaign's rules: Objectives at the configured mission rules version and last round, the
- * scenario's draft mode and war settings, the variant's too.
+ * scenario's draft mode and war settings (over a new campaign's answers), the variant's too.
  */
 export function simRules(cfg: SimConfig): CampaignRules {
   const lastRound = cfg.variant?.lastRound !== undefined ? cfg.variant.lastRound : cfg.lastRound;
   return parseRules({
     maxPlayers: 8,
     draft: { mode: cfg.draftMode },
-    war: { pace: cfg.pace, ...cfg.war, ...cfg.variant?.war },
+    war: { ...REVISED_WAR_RULES, pace: cfg.pace, ...cfg.war, ...cfg.variant?.war },
     victory: { mode: 'objectives', version: cfg.missionVersion, lastRound },
   });
 }
@@ -89,6 +96,7 @@ export function createState(cfg: SimConfig, idx: DatasetIndex, seed: number): Si
     status: 'lobby',
     holdings: new Map(),
     wars: [],
+    peaceOffers: [],
     accords: [],
     history: { wars: [], accords: [], roundStarts: [], awards: [] },
     seq: 0,

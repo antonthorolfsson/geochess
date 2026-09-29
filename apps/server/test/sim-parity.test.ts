@@ -4,12 +4,12 @@
  * both agree on everything the balance report depends on: which missions scored for whom and in
  * which round, reveals, the winners, and the map at the end.
  */
-import { valueOfSet, type SecretOption, type WarView } from '@empire/rules';
+import { valueOfSet, type AccordView, type CampaignView, type SecretOption, type WarView } from '@empire/rules';
 import { loadDataset, runScenarioCampaign, scenarioConfig, type SimAction, type SimState } from '@empire/sim';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaignResults, campaigns, holdings, missionAwards, missionPlayers, wars } from '../src/db/schema';
-import { signIn, startTestServer, type Client, type TestServer } from './helpers';
+import { ORIGINAL_ANSWERS, signIn, startTestServer, type Client, type TestServer } from './helpers';
 
 const HOUR = 3_600_000;
 const SCHOLARS_MATE = 'e2e4 e7e5 f1c4 b8c6 d1h5 g8f6 h5f7'.split(' ');
@@ -72,6 +72,7 @@ async function replay(s: SimState, label: string) {
 
   const warIds = new Map<string, string>();
   const accordIds = new Map<string, string>();
+  const offerIds = new Map<string, string>();
   const warView = async (simWar: string) =>
     (await host.get<WarView>(`/api/campaigns/${campaignId}/wars/${warIds.get(simWar)}`)).body;
   const ok = (res: { status: number; body: unknown }, what: string) =>
@@ -115,6 +116,7 @@ async function replay(s: SimState, label: string) {
           targetId: action.targetId,
           launchId: action.launchId,
           stake: action.stake,
+          ...(action.reserves ? { reserves: action.reserves } : {}),
         });
         ok(res, `declare ${action.targetId}`);
         warIds.set(action.war, res.body.id);
@@ -128,7 +130,9 @@ async function replay(s: SimState, label: string) {
             ? { response: 'redirect', targetId: r.targetId }
             : r.kind === 'tribute'
               ? { response: 'tribute', ...('territoryId' in r ? { territoryId: r.territoryId } : { tokens: r.tokens }) }
-              : { response: r.kind };
+              : r.kind === 'raise' && r.territoryId
+                ? { response: 'raise', territoryId: r.territoryId }
+                : { response: r.kind };
         ok(
           await as(war.defenderId).post(`/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/respond`, body),
           'respond',
@@ -149,6 +153,50 @@ async function replay(s: SimState, label: string) {
       case 'game':
         await play(action);
         break;
+      case 'recall': {
+        const war = s.wars.find((w) => w.id === action.war)!;
+        ok(
+          await as(war.attackerId).post(`/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/recall`),
+          'recall',
+        );
+        break;
+      }
+      case 'fortify':
+        ok(
+          await as(action.by).post(`/api/campaigns/${campaignId}/fortify`, { territoryId: action.territoryId }),
+          'fortify',
+        );
+        break;
+      case 'peace': {
+        const res = await as(action.by).post<{ id: string }>(
+          `/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/peace`,
+          { terms: action.terms },
+        );
+        ok(res, 'offer peace');
+        offerIds.set(action.offer, res.body.id);
+        break;
+      }
+      case 'peace-answer': {
+        const offer = s.peaceOffers.find((o) => o.id === action.offer)!;
+        ok(
+          await as(offer.recipientId).post(
+            `/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/peace/${offerIds.get(action.offer)}/answer`,
+            { answer: action.accept ? 'accept' : 'decline' },
+          ),
+          'answer peace',
+        );
+        if (action.accord) {
+          // The accord the terms signed, for anything that later renews or breaks it.
+          const { accords } = (await host.get<CampaignView>(`/api/campaigns/${campaignId}`)).body;
+          const pair = [idOf.get(offer.proposerId)!, idOf.get(offer.recipientId)!].sort().join();
+          const signed = accords.find(
+            (a: AccordView) => a.status === 'active' && [a.proposerId, a.recipientId].sort().join() === pair,
+          );
+          expect(signed, 'the accord signed with the peace').toBeDefined();
+          accordIds.set(action.accord, signed!.id);
+        }
+        break;
+      }
       case 'propose': {
         const res = await as(action.by).post<{ id: string }>(`/api/campaigns/${campaignId}/accords`, {
           partnerId: idOf.get(action.to),
@@ -223,7 +271,17 @@ function expected(s: SimState) {
 // hold games back to later rounds), and short campaigns so the replay stays quick.
 // `free` draws the public missions at random (and drafts freely), for missions the default set lacks.
 // A short season ends some on points; mission rules version 2 still plays as it did.
-const CASES: { scenario: string; players: number; seed: number; lastRound?: number; version?: number }[] = [
+const CASES: {
+  scenario: string;
+  players: number;
+  seed: number;
+  lastRound?: number;
+  version?: number;
+  /** The original answers (a free raise, redirects anywhere, tribute), which older campaigns keep. */
+  original?: boolean;
+  /** Raises that cost a token (with reserves to meet them), and attackers who call declarations off. */
+  tokens?: boolean;
+}[] = [
   { scenario: 'baseline', players: 2, seed: 5 },
   { scenario: 'baseline', players: 3, seed: 1 },
   { scenario: 'baseline', players: 4, seed: 2 },
@@ -235,12 +293,16 @@ const CASES: { scenario: string; players: number; seed: number; lastRound?: numb
   { scenario: 'baseline', players: 3, seed: 9, lastRound: 4 },
   { scenario: 'free', players: 4, seed: 10, lastRound: 5 },
   { scenario: 'baseline', players: 4, seed: 2, version: 2 },
+  { scenario: 'baseline', players: 3, seed: 11, original: true },
+  { scenario: 'free', players: 4, seed: 12, original: true },
+  // Reserves meeting token raises at once, a fortified country, declarations called off and peace.
+  { scenario: 'baseline', players: 4, seed: 56, tokens: true },
 ];
 
 describe('the simulator replayed through the server', () => {
   it.each(CASES)(
     'agrees on scores, reveals, winners and the map ($scenario, $players players, seed $seed)',
-    async ({ scenario, players, seed, lastRound, version }) => {
+    async ({ scenario, players, seed, lastRound, version, original, tokens }) => {
       const cfg = scenarioConfig(scenario, {
         players,
         pace: 'correspondence',
@@ -249,10 +311,15 @@ describe('the simulator replayed through the server', () => {
         debug: true,
         lastRound: lastRound ?? null,
         ...(version !== undefined && { missionVersion: version }),
+        ...(original && { war: ORIGINAL_ANSWERS }),
+        ...(tokens && { war: { raise: 'token' }, bots: { recallRate: 0.05 } }),
       });
       const s = runScenarioCampaign(cfg, seed, idx);
       if (lastRound !== undefined) expect(s.endedByLimit, 'the season should end on points').toBe(true);
-      const got = await replay(s, `${scenario[0]}${seed}${version ? `v${version}` : ''}`);
+      const got = await replay(
+        s,
+        `${scenario[0]}${seed}${version ? `v${version}` : ''}${original ? 'o' : ''}${tokens ? 't' : ''}`,
+      );
       expect(got).toEqual(expected(s));
     },
   );

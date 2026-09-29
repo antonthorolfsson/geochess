@@ -22,14 +22,18 @@ export function WarsPanel({
   onOpenWar(warId: string): void;
   onOpenGame(gameId: string): void;
 }) {
-  const others = model.activeWars.filter((w) => !model.awaitingMe.includes(w));
+  // Declarations and counters to answer, and peace terms offered to me.
+  const waiting = model.activeWars.filter(
+    (w) => model.awaitingMe.includes(w) || model.peaceToMe.some(({ war }) => war.id === w.id),
+  );
+  const others = model.activeWars.filter((w) => !waiting.includes(w));
   return (
     <div className="space-y-6">
       <RoundStatus model={model} />
-      {model.awaitingMe.length > 0 && (
+      {waiting.length > 0 && (
         <section>
           <h2 className="label mb-2 text-amber">Waiting for your answer</h2>
-          <WarList model={model} wars={model.awaitingMe} onOpenWar={onOpenWar} highlight />
+          <WarList model={model} wars={waiting} onOpenWar={onOpenWar} highlight />
         </section>
       )}
       <YourGames model={model} onOpenGame={onOpenGame} />

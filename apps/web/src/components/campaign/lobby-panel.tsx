@@ -6,9 +6,11 @@ import {
   LIVE_CLOCKS,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  MATCHED_RAISE_MIN_PCT,
   type DraftMode,
   type DrawRule,
   type Pace,
+  type RaiseStyle,
   type TerritoryId,
   type WarRules,
 } from '@empire/rules';
@@ -313,6 +315,32 @@ const DRAW_OPTIONS: { value: DrawRule; title: string; body: string }[] = [
 
 const hoursLabel = (h: number) => (h % 24 === 0 ? `${h / 24} ${h === 24 ? 'day' : 'days'}` : `${h} hours`);
 
+/** How a defender raises the stakes, in the lobby's words. */
+export function raiseStyleOptions(rules: WarRules): { value: RaiseStyle; title: string; body: string }[] {
+  return [
+    {
+      value: 'matched',
+      title: 'Matched',
+      body: `The defender puts one of their countries, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target, into the war. The attacker adds at least as much to the stake or withdraws; winning takes both.`,
+    },
+    {
+      value: 'token',
+      title: 'Costs a token',
+      body: `The defender pays a war token to demand a stake of ${rules.raisePct}% of the target. The attacker gets the token for meeting it.`,
+    },
+    {
+      value: 'free',
+      title: 'Free (original)',
+      body: `The defender demands a stake of ${rules.raisePct}% of the target at no cost.`,
+    },
+    {
+      value: 'off',
+      title: 'No raising',
+      body: 'Defenders accept, redirect or talk peace. Try it with a higher stake floor.',
+    },
+  ];
+}
+
 /** The host's war settings: pace, clocks, draws, and the numbers the playtest will tune. */
 function WarRulesFields({
   rules,
@@ -325,6 +353,7 @@ function WarRulesFields({
 }) {
   const paceName = useId();
   const drawName = useId();
+  const raiseName = useId();
   const numbers: {
     key: 'tokensPerRound' | 'tokenCap' | 'truceRounds' | 'lockRounds';
     label: string;
@@ -412,9 +441,91 @@ function WarRulesFields({
         label="Clock modifiers"
         description="Home turf, mountains and islands give the defender extra time; supply lines give the attacker extra time. Capped at 25%."
       />
+      <div className="space-y-1">
+        <span className="block text-sm font-semibold text-muted">Raising the stakes</span>
+        {raiseStyleOptions(rules).map((r) => (
+          <label key={r.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
+            <input
+              type="radio"
+              name={raiseName}
+              className="mt-1 size-4 accent-amber"
+              checked={rules.raise === r.value}
+              disabled={disabled}
+              onChange={() => onSave({ raise: r.value })}
+            />
+            <span>
+              <span className="block font-semibold">{r.title}</span>
+              <span className="block text-sm text-muted">{r.body}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <Toggle
+        checked={rules.redirect === 'nearby'}
+        disabled={disabled}
+        onChange={(nearby) => onSave({ redirect: nearby ? 'nearby' : 'anywhere' })}
+        label="Redirects stay nearby"
+        description="A redirect must border the country attacked, and the war keeps that country's clock. Off: any same-value country bordering the attacker (the original rule)."
+      />
+      <Toggle
+        checked={rules.redirectToken}
+        disabled={disabled}
+        onChange={(redirectToken) => onSave({ redirectToken })}
+        label="Redirects cost a token"
+        description="The defender pays a war token to redirect; the attacker gets it for fighting on."
+      />
+      <Toggle
+        checked={rules.fortify}
+        disabled={disabled}
+        onChange={(fortify) => onSave({ fortify })}
+        label="Fortifying"
+        description={`A war token fortifies a country until the round after next: a war on it needs a stake of ${rules.raisePct}% of its value.`}
+      />
+      <Toggle
+        checked={rules.peaceTerms}
+        disabled={disabled}
+        onChange={(peaceTerms) => onSave({ peaceTerms })}
+        label="Peace terms"
+        description="Either player can offer terms to end a war until its game is over: countries or tokens either way, or nothing, and an accord. Takes the place of tribute."
+      />
+      <Toggle
+        checked={rules.recall}
+        disabled={disabled}
+        onChange={(recall) => onSave({ recall })}
+        label="Calling off"
+        description="The attacker can call a declaration off until the defender answers. The token stays spent."
+      />
       <details className="rounded-[3px] border border-line px-3 py-2">
         <summary className="min-h-9 cursor-pointer content-center font-semibold">More war settings</summary>
         <div className="space-y-2 pt-2">
+          {(
+            [
+              { key: 'stakeFloorPct', label: 'Least stake, as a share of the target', range: [80, 90, 100, 110, 125] },
+              {
+                key: 'raisePct',
+                label: 'Stake a raise or a fortified country demands',
+                range: [110, 125, 150, 175, 200],
+              },
+            ] as const
+          ).map(({ key, label, range }) => (
+            <label key={key} className="flex min-h-11 items-center justify-between gap-3">
+              <span className="text-[0.95rem]">{label}</span>
+              <select
+                className="input w-24"
+                value={rules[key]}
+                disabled={disabled}
+                onChange={(e) => onSave({ [key]: Number(e.target.value) })}
+              >
+                {[...new Set([...range, rules[key]])]
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ))}
           {numbers.map(({ key, label, range }) => (
             <label key={key} className="flex min-h-11 items-center justify-between gap-3">
               <span className="text-[0.95rem]">{label}</span>

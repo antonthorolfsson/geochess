@@ -7,7 +7,9 @@ Written from campaigns played by bots on the real rules. Read
 
 _Update, the same day: the recommendations below, all but the slower war tokens, are now mission
 rules version 3 and a season length. What the same bots make of them is in
-[Version 3, as built](#version-3-as-built); the rest of the report describes version 2._
+[Version 3, as built](#version-3-as-built); the rest of the report describes version 2. The war
+answers it found wanting (finding 6) are revised too: see
+[War answers, revised](#war-answers-revised)._
 
 ## The short version
 
@@ -784,6 +786,43 @@ mission marked Long campaign; 92% of draws take exactly one:
 
 Limiting the draw doesn't end the stalls at small tables by itself: without a last round a random
 draw still leaves 14–24% of 2- and 3-player campaigns without a winner. The last round does.
+
+## War answers, revised
+
+_Added 29 September 2026. The report found that a defender gains by raising whatever happens (the
+attacker withdraws, or fights for a bigger stake), that the free raise crowds out tribute, and that
+nothing lets either side out of a war. New campaigns now play revised answers, all host settings:
+a matched raise (the defender puts in a country worth 50–100% of the target, which the attacker
+must match), redirects only next to the target that cost a token and keep the first target's
+clock, reserves that meet a raise at once, fortifying for a token, calling a declaration off, and
+peace terms in place of tribute. Campaigns stored before keep the original answers._
+
+The same bots on the same seeds: live, mission rules version 3 with a last round of 25, 200
+campaigns per cell, players 2 / 4 / 6.
+
+| War answers                    | Raised        | Redirected    | Tribute or peace | Withdrawn    | Net value to the attacker per declaration | Median win round | Won on points |
+| ------------------------------ | ------------- | ------------- | ---------------- | ------------ | ----------------------------------------- | ---------------- | ------------- |
+| Original (free raise, tribute) | 39 / 40 / 42% | 39 / 24 / 16% | 1 / 3 / 4%       | 13 / 10 / 8% | 0.16 / 0.12 / 0.07                        | 11 / 12 / 10     | 24 / 17 / 9%  |
+| Revised (matched raise)        | 22 / 22 / 25% | 0 / 0 / 0%    | 1 / 1 / 1%       | 3 / 3 / 4%   | 1.17 / 0.84 / 0.67                        | 11 / 11 / 9      | 25 / 19 / 6%  |
+| Revised, raise for a token     | 9 / 8 / 7%    | 0 / 0 / 0%    | 1 / 1 / 2%       | 0 / 0 / 0%   | 0.87 / 0.65 / 0.61                        | 12 / 12 / 10     | 29 / 23 / 14% |
+| Revised, no raise, 100% floor  | 0 / 0 / 0%    | 1 / 0 / 0%    | 1 / 2 / 2%       | 0 / 0 / 0%   | 0.77 / 0.50 / 0.45                        | 11 / 11 / 9      | 29 / 14 / 7%  |
+
+- **Attacking pays again.** Land per declaration rises five- to tenfold, and far fewer declarations
+  are wasted on a withdrawal.
+- **A matched raise is a bet, not a veto.** It still answers about a quarter of declarations, mostly
+  with a country near the 50% floor: the attacker matches with whole countries and overshoots by
+  about 1.4 on average, which leaves the defender a small edge. With no floor the bots put in
+  countries worth 1 and raised 38% of declarations (in a check across every table size); the
+  floor is the lever if the playtest finds raising still too attractive.
+- **Redirects nearly vanish.** Few countries worth the same as the target also border it and the
+  attacker; with a token on top, the bots all but stop redirecting. Letting redirects reach anywhere
+  (a host setting) brings them back.
+- **Pace doesn't move**, and nobody is eliminated in any setting: the missions set the length of a
+  campaign. The bots hardly ever fortify (at most once in ten campaigns), and settle about one war
+  in a hundred by peace terms, as tribute-like offers with a two-round accord.
+
+To rerun: `pnpm sim --scenario baseline,whatif:original-answers --players 2-8 --paces live --seeds 200`
+(also `whatif:raise-token` and `whatif:raise-off`).
 
 ## Limitations
 

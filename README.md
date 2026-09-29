@@ -75,7 +75,8 @@ campaign to open-ended in the lobby; campaigns created before missions existed s
 - Four **public missions**, worth 2 victory points each, chosen and shown with their exact targets
   in the lobby and locked when the draft starts. The default set is Expansion, Strategic
   Positions, The Great Connection and Campaign Veteran; the host can pick any four of sixteen
-  (among them Mare Nostrum, One Billion, Seven Wonders and Kingslayer) and draw new targets.
+  (among them Mare Nostrum, One Billion, Seven Wonders and Kingslayer), or have four drawn at
+  random, and draw new targets.
   Every player can score each public mission once: one player scoring it takes nothing from the
   others.
 - One **secret mission** per player, worth 3. When the draft ends, each player is dealt up to three

@@ -1,5 +1,6 @@
 import {
   PUBLIC_MISSION_KINDS,
+  drawPublicKinds,
   generatePublicMission,
   generatePublicMissions,
   missionName,
@@ -99,6 +100,25 @@ export async function setPublicMissions(
     const result = generatePublicMissions(kinds, idx, scope.campaign.rules, () => ctx.random());
     if ('error' in result) throw badRequest(result.error, 'bad-missions');
     await saveMissions(scope, result.missions);
+  });
+}
+
+/**
+ * The host has the public missions drawn at random, each with fresh targets. A few draws, in case
+ * one set's targets can't all be kept apart on this map.
+ */
+export async function randomPublicMissions(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'choose the public missions');
+    requireObjectives(scope);
+    const { rules, datasetVersion } = scope.campaign;
+    const idx = ctx.datasets.get(datasetVersion);
+    const random = () => ctx.random();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const result = generatePublicMissions(drawPublicKinds(idx, rules, random), idx, rules, random);
+      if ('missions' in result) return saveMissions(scope, result.missions);
+    }
+    throw conflict('No set of public missions fits this map.', 'no-missions');
   });
 }
 

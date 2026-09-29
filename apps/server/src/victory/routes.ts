@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { requireUser } from '../auth/session';
 import type { AppContext } from '../context';
 import { parse } from '../lib/http';
-import { rerollPublicMission, setPublicMissions } from './lobby';
+import { randomPublicMissions, rerollPublicMission, setPublicMissions } from './lobby';
 import { chooseSecret, proceedWithoutSecrets } from './selection';
 
 const id = z.string().min(1).max(40);
@@ -27,6 +27,13 @@ export function registerVictoryRoutes(app: FastifyInstance, ctx: AppContext): vo
     const params = parse(campaignParams, req.params);
     const { kinds } = parse(z.object({ kinds: z.array(z.enum(PUBLIC_MISSION_KINDS)).min(1).max(8) }), req.body);
     await setPublicMissions(ctx, params.id, user.id, kinds);
+    return { ok: true };
+  });
+
+  /** The host has the public missions drawn at random (with fresh targets), in the lobby. */
+  app.post('/api/campaigns/:id/victory/missions/random', async (req) => {
+    const user = requireUser(req);
+    await randomPublicMissions(ctx, parse(campaignParams, req.params).id, user.id);
     return { ok: true };
   });
 

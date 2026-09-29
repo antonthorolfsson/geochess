@@ -8,7 +8,7 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (428 tests as of 2026-09-29).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (430 tests as of 2026-09-29).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -246,8 +246,8 @@ not committed yet):
 - **Web.** A Missions tab (phones; a column tab on desktop): the race, your secret, claims with
   what must be held, the earliest round, the holding time and any war in the way, public missions
   with everyone's progress, revealed secrets, and the results. The lobby has a Victory section
-  (mode, the four cards with New targets, Change missions, timings). Selection happens in the
-  Missions tab. "Show on map" draws a mission's targets, what counts and routes
+  (mode, the four cards with New targets, Change missions, Random missions, timings). Selection
+  happens in the Missions tab. "Show on map" draws a mission's targets, what counts and routes
   (`WorldMap`'s `mission` and `fit` props). Victory points lead the standings.
 - **Draft order** now comes from `ctx.random` (crypto in production), so tests can seed it.
 
@@ -307,8 +307,13 @@ the rules guide list the campaign's version).
 - **Wording.** Figures in progress parts can carry a unit (`people`, `km2`, `percent`), shown by
   `partAmount`: "1.46 billion", "7.5 million km²". A Nemesis's rival is named through
   `missionRequirement`'s `playerName` option.
+- **Random missions** (the user's call, 2026-09-29): the host can have the four public missions
+  drawn at random in the lobby (`POST …/victory/missions/random`). The server draws four
+  different ones from those the campaign's version offers and this map and draft mode can play
+  (`drawPublicKinds`), uniformly, with no limit on long-campaign missions, and gives them fresh
+  targets; a draw whose targets can't be kept apart is drawn again (up to six times).
 
-Tests since: rules 210, data 66, web 40, server 112.
+Tests since: rules 211, data 66, web 40, server 113.
 
 ### Victory defaults taken while building (not asked; easy to change)
 

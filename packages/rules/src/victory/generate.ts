@@ -292,6 +292,17 @@ const GENERATION_ORDER: readonly PublicMissionKind[] = [
   'strategic_positions',
 ];
 
+/**
+ * Public missions drawn at random, all different, from those the campaign can play: its version's,
+ * and fit for this map and these rules. In catalog order; fewer only if fewer fit.
+ */
+export function drawPublicKinds(idx: DatasetIndex, rules: CampaignRules, random: Random): PublicMissionKind[] {
+  const cfg = missionRules(rules.victory.version);
+  const playable = cfg.publicKinds.filter((kind) => publicMissionIssue(kind, idx, rules) === null);
+  const drawn = shuffled(playable, random).slice(0, cfg.publicCount);
+  return playable.filter((kind) => drawn.includes(kind));
+}
+
 export type PublicMissionsResult = { missions: PublicMissionSpec[] } | { error: string };
 
 /** Four distinct, playable public missions with targets that don't overlap. */

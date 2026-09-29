@@ -4,6 +4,7 @@ import type { TerritoryId } from '../dataset';
 import { MISSION_RULES_V1, PUBLIC_MISSION_KINDS, missionInfo, type PublicMissionSpec } from './catalog';
 import { evaluateMission } from './evaluate';
 import {
+  drawPublicKinds,
   generatePublicMission,
   generatePublicMissions,
   publicMissionIssue,
@@ -182,6 +183,30 @@ describe('public missions', () => {
         { kind: 'campaign_veteran', wins: 3, opponents: 2, attackWins: 1 },
       ],
     });
+  });
+
+  it('draw four different playable missions at random, in catalog order', () => {
+    const v1 = parseRules({ victory: { mode: 'objectives', version: 1 } });
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      const kinds = drawPublicKinds(idx, DEFAULT_RULES, seededRandom(seed));
+      expect(kinds).toHaveLength(4);
+      expect(new Set(kinds).size).toBe(4);
+      for (const kind of kinds) expect(publicMissionIssue(kind, idx, DEFAULT_RULES), kind).toBeNull();
+      expect(kinds).toEqual(
+        [...kinds].sort((a, b) => PUBLIC_MISSION_KINDS.indexOf(a) - PUBLIC_MISSION_KINDS.indexOf(b)),
+      );
+      kinds.forEach((k) => seen.add(k));
+      for (const kind of drawPublicKinds(idx, v1, seededRandom(seed)))
+        expect(MISSION_RULES_V1.publicKinds).toContain(kind);
+    }
+    // Every mission this map and a contiguous draft can play comes up, and nothing else.
+    const playable = PUBLIC_MISSION_KINDS.filter((k) => publicMissionIssue(k, idx, DEFAULT_RULES) === null);
+    expect([...seen].sort()).toEqual([...playable].sort());
+    expect(seen).not.toContain('consolidation');
+    const free = parseRules({ victory: { mode: 'objectives' }, draft: { mode: 'free' } });
+    const inFree = Array.from({ length: 20 }, (_, i) => drawPublicKinds(idx, free, seededRandom(i + 1))).flat();
+    expect(inFree).toContain('consolidation');
   });
 
   it('explain which of the new missions this map cannot hold', () => {

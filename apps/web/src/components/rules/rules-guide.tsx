@@ -802,7 +802,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           <>
             <p>
               New campaigns play Expansion, Strategic Positions, The Great Connection and Campaign Veteran. The host can
-              pick any other four before the draft, and draw new targets for them:
+              pick any other four before the draft, or have four drawn at random, and draw new targets for them:
             </p>
             <MissionList kinds={cfg.publicKinds} />
           </>

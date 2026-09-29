@@ -101,6 +101,24 @@ describe('the lobby', () => {
     expect((await view()).victory!.publicMissions[0]!.spec).toEqual({ kind: 'expansion', gain: 15 });
   });
 
+  it('lets the host have four public missions drawn at random, until the draft starts', async () => {
+    const { ann, bo, id, view } = await table();
+    const random = (c: Client) => c.post(`/api/campaigns/${id}/victory/missions/random`);
+    expect((await random(bo)).status).toBe(403);
+    const draws = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      expect((await random(ann)).status).toBe(200);
+      const kinds = (await view(bo)).victory!.publicMissions.map((m) => m.spec.kind);
+      expect(new Set(kinds).size).toBe(4);
+      // Only what a contiguous draft can play.
+      expect(kinds).not.toContain('consolidation');
+      draws.add(kinds.join());
+    }
+    expect(draws.size).toBeGreaterThan(1);
+    expect((await ann.post(`/api/campaigns/${id}/draft/start`)).status).toBe(200);
+    expect((await random(ann)).body).toMatchObject({ error: { message: expect.stringMatching(/locked/) } });
+  });
+
   it('refuses a rules change that would leave a chosen mission unplayable', async () => {
     const { ann, id } = await table();
     await ann.patch(`/api/campaigns/${id}`, { rules: { draft: { mode: 'free' } } });

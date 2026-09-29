@@ -69,9 +69,10 @@ export function LobbyMissions({
     onSuccess: () => setPicking(null),
     onSettled: refresh,
   });
+  const random = useMutation({ mutationFn: () => api.randomMissions(campaign.id), onSettled: refresh });
   const missions = victory?.publicMissions ?? [];
   const pace = rules.war.pace;
-  const error = reroll.error ?? choose.error;
+  const error = reroll.error ?? choose.error ?? random.error;
 
   return (
     <section aria-labelledby="victory-heading">
@@ -144,13 +145,23 @@ export function LobbyMissions({
             </div>
 
             {isHost && picking === null && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setPicking(missions.map((m) => m.spec.kind as PublicMissionKind))}
-              >
-                Change missions
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setPicking(missions.map((m) => m.spec.kind as PublicMissionKind))}
+                >
+                  Change missions
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={random.isPending}
+                  onClick={() => random.mutate()}
+                >
+                  Random missions
+                </button>
+              </div>
             )}
             {isHost && picking !== null && (
               <fieldset className="space-y-2 rounded-[3px] border border-line-strong p-3">

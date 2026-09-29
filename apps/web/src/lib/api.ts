@@ -136,6 +136,7 @@ export const api = {
   chooseSecret: (id: string, optionId: string) => request('POST', `/campaigns/${id}/secret`, { optionId }),
   setPublicMissions: (id: string, kinds: PublicMissionKind[]) =>
     request('PUT', `/campaigns/${id}/victory/missions`, { kinds }),
+  randomMissions: (id: string) => request('POST', `/campaigns/${id}/victory/missions/random`),
   rerollMission: (id: string, slot: number) => request('POST', `/campaigns/${id}/victory/missions/${slot}/reroll`),
   proceedWithoutSecrets: (id: string) => request('POST', `/campaigns/${id}/victory/proceed`),
 

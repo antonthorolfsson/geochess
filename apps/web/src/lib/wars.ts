@@ -1,8 +1,10 @@
 import {
+  peaceTermsText,
   winnerOf,
   type GameEndReason,
   type GameResult,
   type GameSummary,
+  type PeaceTerms,
   type PlayerResult,
   type TimeControl,
   type WarView,
@@ -41,8 +43,14 @@ export function resultText(result: GameResult, reason: GameEndReason | null): st
   return winner ? `${winner === 'white' ? 'White' : 'Black'} wins${how}` : `Draw${how}`;
 }
 
-/** Where a war stands, in a line. */
+/** Where a war stands, in a line, and any peace terms waiting for the viewer's answer. */
 export function warStatusText(model: CampaignModel, war: WarView): string {
+  const offer = war.peace.find((o) => o.status === 'proposed' && o.recipientId === model.me.userId);
+  const status = warStanding(model, war);
+  return offer ? `${status}; ${playerName(model, offer.proposerId)} offers peace` : status;
+}
+
+function warStanding(model: CampaignModel, war: WarView): string {
   const me = model.me.userId;
   const attacker = playerName(model, war.attackerId);
   const defender = war.defenderId === me ? 'your' : `${playerName(model, war.defenderId)}'s`;
@@ -78,6 +86,8 @@ export function outcomeText(model: CampaignModel, war: WarView): string {
       return `${target} held: a draw`;
     case 'tribute':
       return `${defender} paid tribute`;
+    case 'settled':
+      return `${attacker} and ${defender} made peace`;
     case 'withdrawn':
       return `${attacker} called off the attack`;
     case 'cancelled':
@@ -94,12 +104,21 @@ export function counterText(model: CampaignModel, war: WarView): string {
   const s = mine ? '' : 's';
   const counter = war.counter;
   if (!counter) return '';
+  const paid = counter.kind !== 'tribute' && counter.tokens ? ` (paying ${tokensText(counter.tokens)})` : '';
   switch (counter.kind) {
-    case 'raise':
-      return `${defender} demand${s} a stake worth at least ${counter.minValue}.`;
+    case 'raise': {
+      if (counter.added) {
+        const t = model.idx.byId.get(counter.added);
+        return (
+          `${defender} put${s} ${t?.name ?? counter.added} (${t?.value ?? '?'}) into the war: the stake must reach ` +
+          `${counter.minValue}, and winning takes it too.`
+        );
+      }
+      return `${defender} demand${s} a stake worth at least ${counter.minValue}${paid}.`;
+    }
     case 'redirect': {
       const t = model.idx.byId.get(counter.targetId);
-      return `${defender} offer${s} ${t?.name ?? counter.targetId} (${t?.value ?? '?'}) as the target instead.`;
+      return `${defender} offer${s} ${t?.name ?? counter.targetId} (${t?.value ?? '?'}) as the target instead${paid}.`;
     }
     case 'tribute': {
       if (counter.territoryId) {
@@ -109,6 +128,29 @@ export function counterText(model: CampaignModel, war: WarView): string {
       return `${defender} offer${s} ${counter.tokens} war ${counter.tokens === 1 ? 'token' : 'tokens'} as tribute.`;
     }
   }
+}
+
+/** "1 war token", "3 war tokens". */
+export const tokensText = (n: number) => `${n} war ${n === 1 ? 'token' : 'tokens'}`;
+
+/** Peace terms in words from the viewer's side: "Libya goes to you; 2 war tokens go to Bo". */
+export function termsText(model: CampaignModel, war: Pick<WarView, 'attackerId' | 'defenderId'>, terms: PeaceTerms) {
+  const name = (userId: string) => (userId === model.me.userId ? 'you' : playerName(model, userId));
+  return peaceTermsText(terms, {
+    attacker: name(war.attackerId),
+    defender: name(war.defenderId),
+    country: (id) => countryName(model, id),
+  });
+}
+
+/**
+ * The defender's country a matched raise put at stake alongside the target: once the attacker met
+ * the raise, for as long as the war was fought over.
+ */
+export function stakedByRaise(war: WarView): string | null {
+  if (war.counter?.kind !== 'raise' || !war.counter.added) return null;
+  const fought = war.outcome === 'attacker' || war.outcome === 'defender' || war.outcome === 'held';
+  return war.status === 'ready' || war.status === 'playing' || fought ? war.counter.added : null;
 }
 
 /** A countdown to a deadline: "23h 12m", "4m 10s", "12s". */

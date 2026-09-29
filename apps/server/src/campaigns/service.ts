@@ -119,7 +119,8 @@ export async function updateCampaign(
         throw badRequest(`${scope.members.length} players have already joined.`, 'too-few-seats');
       }
       // A change that rules out a chosen public mission (a contiguous draft with Consolidation)
-      // has to wait until the mission is swapped.
+      // has to wait until the mission is swapped. The size of the table isn't the change's doing:
+      // the draft checks that.
       const problem = checkPublicMissions(ctx, scope.campaign.datasetVersion, rules, { complete: false });
       if (problem) throw conflict(problem, 'mission-unplayable');
       set.rules = rules;
@@ -338,7 +339,10 @@ export async function startDraft(ctx: AppContext, campaignId: string, userId: st
     if (scope.members.length < MIN_PLAYERS) {
       throw conflict(`You need at least ${MIN_PLAYERS} players to start the draft.`, 'too-few-players');
     }
-    const problem = checkPublicMissions(ctx, scope.campaign.datasetVersion, scope.campaign.rules, { complete: true });
+    const problem = checkPublicMissions(ctx, scope.campaign.datasetVersion, scope.campaign.rules, {
+      complete: true,
+      players: scope.members.length,
+    });
     if (problem) throw conflict(problem, 'missions-not-ready');
     const order = shuffled(
       scope.members.map((m) => m.userId),

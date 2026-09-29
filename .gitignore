@@ -20,3 +20,6 @@ apps/web/public/datasets/
 
 # Vercel CLI project link
 .vercel/
+
+# Balance simulator output
+packages/sim/out/

@@ -3,7 +3,7 @@ import { warDataset } from '@empire/rules/testing';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaigns, holdings, members } from '../src/db/schema';
-import { signIn, startTestServer, type Client, type TestServer } from './helpers';
+import { signIn, startTestServer, type Client, type TestServer, ORIGINAL_ANSWERS } from './helpers';
 
 /**
  * Empire statistics on the war test map. Ann holds A1 A2 A3 A4 A6 (16); Bo holds B1 B2 B5 B7 B10
@@ -83,7 +83,9 @@ async function setup(rules: CampaignRulesInput = {}) {
 
 describe('empire statistics', () => {
   it('are worked out from the campaign’s wars, games and accords', async () => {
-    const { ann, bo, id, stats, declare, respond, fight } = await setup({ war: { truceRounds: 0 } });
+    const { ann, bo, id, stats, declare, respond, fight } = await setup({
+      war: { ...ORIGINAL_ANSWERS, truceRounds: 0 },
+    });
 
     // Round 1: Ann takes B5 with Scholar's mate.
     const first = await declare(ann, 'B5', 'A4', ['A4']);

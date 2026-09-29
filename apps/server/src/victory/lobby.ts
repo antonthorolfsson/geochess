@@ -50,20 +50,21 @@ export function withDefaultMissions(ctx: AppContext, datasetVersion: string, rul
 }
 
 /**
- * What stops the public missions being played under these rules, in words, or null. With
- * `complete`, the full set must be there too (before the draft starts).
+ * What stops the public missions being played under these rules (and at a table of `players`, if
+ * given), in words, or null. With `complete`, the full set must be there too (before the draft
+ * starts).
  */
 export function checkPublicMissions(
   ctx: AppContext,
   datasetVersion: string,
   rules: CampaignRules,
-  { complete }: { complete: boolean },
+  { complete, players }: { complete: boolean; players?: number },
 ): string | null {
   if (rules.victory.mode !== 'objectives') return null;
   const cfg = missionRules(rules.victory.version);
   const idx = ctx.datasets.get(datasetVersion);
   for (const spec of rules.victory.publicMissions) {
-    const issue = publicMissionIssue(spec.kind, idx, rules);
+    const issue = publicMissionIssue(spec.kind, idx, rules, players);
     if (issue) return `${missionName(spec)}: ${issue} Swap it for another public mission first.`;
   }
   const count = rules.victory.publicMissions.length;
@@ -97,7 +98,8 @@ export async function setPublicMissions(
     requireHost(scope, userId, 'choose the public missions');
     requireObjectives(scope);
     const idx = ctx.datasets.get(scope.campaign.datasetVersion);
-    const result = generatePublicMissions(kinds, idx, scope.campaign.rules, () => ctx.random());
+    const players = scope.members.length;
+    const result = generatePublicMissions(kinds, idx, scope.campaign.rules, () => ctx.random(), players);
     if ('error' in result) throw badRequest(result.error, 'bad-missions');
     await saveMissions(scope, result.missions);
   });
@@ -114,8 +116,10 @@ export async function randomPublicMissions(ctx: AppContext, campaignId: string, 
     const { rules, datasetVersion } = scope.campaign;
     const idx = ctx.datasets.get(datasetVersion);
     const random = () => ctx.random();
+    const players = scope.members.length;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const result = generatePublicMissions(drawPublicKinds(idx, rules, random), idx, rules, random);
+      const kinds = drawPublicKinds(idx, rules, random, players);
+      const result = generatePublicMissions(kinds, idx, rules, random, players);
       if ('missions' in result) return saveMissions(scope, result.missions);
     }
     throw conflict('No set of public missions fits this map.', 'no-missions');

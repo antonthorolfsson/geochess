@@ -8,7 +8,8 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (430 tests as of 2026-09-29).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (537 tests as of 2026-09-29, after
+   the revised war answers).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -315,6 +316,171 @@ the rules guide list the campaign's version).
 
 Tests since: rules 211, data 66, web 40, server 113.
 
+**Balance simulation** (2026-09-29, at the user's request): whole campaigns played by bots, to
+find missions that are too easy or too hard. Findings and recommendations are in
+[balance-report.md](balance-report.md). Not committed yet.
+
+- **`packages/sim` (`@empire/sim`)** plays campaigns headlessly.
+  - It uses the rules package for every rule and mirrors only the server's orchestration
+    (`src/engine/`): round starts, the war lifecycle and `settleVictory`.
+  - The bots (`src/bots/`) chase their missions, block visible claims, answer wars and make and
+    break accords.
+  - Run it with `pnpm sim` and summarise with `pnpm sim:report`; `trace` tells one campaign round
+    by round. The README explains the scenarios, the knobs and how to add a what-if.
+  - Output goes to `packages/sim/out/` (git-ignored).
+- **`apps/server/test/sim-parity.test.ts`** replays eight simulated campaigns through the real
+  server. Awards, reveals, winners and the final map must match exactly. If the server's lifecycle
+  changes, mirror it in `packages/sim/src/engine/`, or this test fails.
+- **What the runs found** (44,284 campaigns):
+  - **Pace.** Campaigns are won around round 6–9, not 15–25. At 2–3 players a sixth to a quarter
+    never finish.
+  - **Near-free public missions.** Campaign Veteran and Kingslayer are scored by 70–98% of
+    players.
+  - **Secrets.** The battle secrets double their holder's chance of winning, while most region and
+    route secrets are almost never done.
+  - **The draft.** At 2–3 players it hands out Strategic Positions and similar positions.
+  - **Dead missions.** Great Connection and Mare Nostrum are dead at 5 or more players.
+  - **What was ruled out.** No single number fixes the pace, and more points to win makes half of
+    all campaigns stall.
+  - **Recommendations** for mission rules version 3, and two new host settings (a season length
+    and a slower token rate), are in the report. All but the slower token rate are now applied:
+    see the next section.
+
+Tests since: sim 17, server 121 (the parity test).
+
+**Mission rules version 3 and seasons** (2026-09-29, the report's recommendations at the user's
+request, all but the slower war tokens; not committed yet). New campaigns play version 3 with a
+last round of 25. Campaigns stored before keep their version, and have no last round unless the
+host sets one in the lobby. What the simulator says about the result is in the report's
+[Version 3, as built](balance-report.md#version-3-as-built).
+
+- **Records are harder.**
+  - Campaign Veteran counts only wars won as the attacker, opponents included: four of them,
+    against three different opponents, or all there are (`attackOnly`).
+  - Kingslayer counts only a war declared on the leader on points while they were four or more
+    points ahead (`lead`; value no longer decides who leads, so nobody leads before points exist).
+  - Checkmate Artist needs three mates, Iron Wall three wins (and is dealt only from four players),
+    Nemesis four countries (revealed at three).
+  - Backstab needs two countries from the betrayed partner in wars declared within the next two
+    rounds (`count`). The report said "in the round after the break"; simulated, that left it
+    completed 5% of the time and its holder with 0.4 of a fair chance, so it was eased.
+- **Giants are bigger:** Great Expanse 20 million km², One Billion two billion people (it's named
+  for its figure, so version 3 shows "Two Billion": `missionName`, `kindName`), Great Powers all
+  three won since the draft.
+- **Across the Seas** needs two attacks.
+- **Positions need a conquest** (`needsConquest`): Strategic Positions, Regional Power and Mare
+  Nostrum count only with one of the countries held won since the draft, Continental Bridge with
+  one in the block, and The Great Connection through a chain that passes through one
+  (`pathThrough` in `world.ts`: a country lies on such a chain when two routes from it, one to
+  each end, share nothing else, found as a two-unit flow).
+- **Table size:** The Great Connection and Mare Nostrum are only for four players or fewer
+  (`MissionRules.maxPlayers`, `publicMissionIssue(…, players)`). The lobby card says so once a fifth
+  player joins, the draft can't start with them, and random draws leave them out. **Great Powers
+  replaces The Great Connection in the default set** (the user's call).
+- **Long campaigns:** `MissionRules.long` lists the missions that make for a long campaign (the
+  "Long campaign" tag in the lobby, on mission cards and in the rules, version by version), and a
+  random draw takes at most one of them (`longDrawn`); version 2 draws with no limit, as before.
+  Version 3's list is the public missions a fifth of players or fewer scored in the simulator
+  (Continental Bridge at 5 or more players), and the five secrets done least: Silk Road, Cape to
+  Cairo, Pan-American Highway, Encirclement and Unification.
+- **Region and route secrets** (the user's call: fewer targets, tuned in the simulator):
+  - Named seas and regions need half their countries, at least two (Black Sea three of six, Baltic
+    League five of nine, the sets of four two of them). Mountain Kingdom and Hidden Triangle need
+    two of three (Hidden Triangle's targets one or two conquests away), Strait Keeper one strait,
+    Island Empire three islands.
+  - These are revealed only once complete (`reveal` = `need`), not one short: rivals saw the last
+    step coming and blocked it.
+  - Tried and dropped: holding region and route secrets to fewer conquests when dealing, and
+    Encirclement to rings of three. Completion didn't move, and chains and rings looked cheap, so
+    players chose them and rarely finished them.
+- **Summaries follow the version:** `missionSummary(kind, cfg)` words each mission with its
+  version's numbers; `MissionInfo` no longer has `summary` or `long`.
+- **The season** (`rules.victory.lastRound`, 2 to 100 or null; `lastRoundOf(rules)` is null for
+  open-ended campaigns). The lobby offers rounds 15, 20, 25 or 30, or none. In the last round the
+  war room says so and the host's button reads **End the campaign**: `nextRound` then calls
+  `endSeason` (`victory/finish.ts`), which brings missions up to date (something just done could
+  still take someone to 7), then gives the win to the most points, then the most valuable empire
+  (`seasonWinners`), players level on both sharing it. The result and the `campaign.won` event carry
+  `seasonEnd`; the missions panel and the dispatches say how it ended. Claims still waiting don't
+  count.
+- **Simulator:** campaigns play the current version with a last round of 25; `--mission-rules 2`
+  and `--last-round none` replay the report's setup. `endSeason` is mirrored in `engine.ts` (a
+  `{ t: 'end' }` action), records carry the version and last round, and the bots value the version
+  3 rules. The what-ifs in `variants-catalog.ts` before "Tuning mission rules version 3" patch
+  version 2. The parity test gained two campaigns that end on points and one on version 2.
+
+- **Web:** the lobby's Victory section has a Last round setting and flags a mission the table has
+  outgrown; the campaign header and war room read "Round 12 of 25"; the missions panel and final
+  results say when the season ended it; `rules-text.ts` lists the last round.
+- **Dev database:** Field Marshal's test campaigns "Season Check" (a lobby) and "Last Round Check"
+  (with Bo, ended on points after round 2) come from this work, plus a stray lobby also named
+  "Last Round Check".
+
+Tests since: rules 229, web 40, sim 20, server 127 (482 in all).
+
+**Revised war answers** (2026-09-29, at the user's request, from the balance report's finding that
+a defender gains by raising whatever happens, and that nothing lets anyone out of a war; not
+committed yet). All of it is host settings in `rules.war`. Rules stored before read as the original
+game (a free raise, redirects anywhere and free, tribute, no fortifying or calling off), so no
+campaign underway changes, production's included; new campaigns start from `REVISED_WAR_RULES`
+through `DEFAULT_RULES`.
+
+- **Raising** (`raise`): `matched` (the default) has the defender put one of their own countries
+  into the war, worth 50–100% of the target (`MATCHED_RAISE_MIN_PCT`, `matchedRaiseRange`), free to
+  stake and no more than the attacker could still add from the launching country
+  (`raiseOptions`). The attacker adds at least as much or withdraws; winning takes both
+  (`WarCounter.added`, `ActiveWar.added`, `warTransfers`). `token` is the old raise to `raisePct`
+  paid for with a war token, which goes to the attacker if they meet it. `free` is the original.
+  `off` has none. The 50% floor came from the simulator: with no floor, defenders put in a country
+  worth 1, attackers matching with whole countries overshot by about 2, and raising stayed a cheap
+  win.
+- **Redirects**: `redirect: 'nearby'` needs the offered country to border the target, and the war
+  keeps the first target's clock (`clockTarget`); `redirectToken` makes a redirect cost a token,
+  paid to the attacker if they fight on. Counter tokens sit in `WarCounter.tokens`; unanswered at
+  the campaign's end, they go back (`finishCampaign`).
+- **Reserves**: with a matched or token raise, a declaration can set countries aside
+  (`DeclareWarInput.reserves`, `wars.reserves`, `checkReserves`). They're public and locked while
+  the answer is pending; a raise they cover is met at once with the cheapest subset
+  (`stakeFromReserves`), logged as a `war.reply` with `fromReserves`.
+- **Fortifying** (`fortify`): a war token makes war on a country need `raisePct` until the round
+  after next starts (`holdings.fortified_until`, `fortifiedUntil`, `declarationFloor`, used by
+  `checkTarget`, `checkStake`, `suggestStake` and `launchersFor`). Public (`CampaignView.fortified`,
+  a `country.fortified` event, a rampart on the map); cleared when the country changes hands;
+  fortifying again in a later round extends it.
+- **Calling off** (`recall`): the attacker ends a declaration before the answer
+  (`POST …/wars/:warId/recall`): `war.recalled`, then resolved as `withdrawn`.
+- **Peace terms** (`peaceTerms`, which takes tribute's place as an answer): either player offers
+  terms until the game is over (`apps/server/src/wars/peace.ts`, table `peace_offers`). Terms move
+  staked countries from the attacker; the target (and an added country), or instead one country
+  worth less than the target, from the defender; up to 10 tokens one way; and an optional accord
+  (`PeaceTerms`, `peaceIssue`, `peaceCountries`). Offers are private like accord proposals: no
+  events, `scope.notifyOnly`, and `WarView.peace` holds only the viewer's own. They lapse after the
+  answer window, a newer one from the same player replaces them, and the recipient's move in the
+  war's game declines them (inside the move's transaction, `playMove`). Accepting stops the game
+  (`stopWarGames`: game row first, then the offer, so a move can't deadlock with it; a game that
+  finished first keeps its result), hands over the terms, resolves the war as `settled` (a truce,
+  neither a win nor a loss; `war.resolved` carries the terms), and signs any accord
+  (`signAgreedAccord`, shared with `answerAccord`). Claim blockers ignore peace terms, since the
+  claimant must agree to them.
+- **Lobby**: the Wars settings gained Raising the stakes, four toggles, and the least and raised
+  stake in More war settings. The rules guide and settings list describe each campaign's own
+  choices (`raiseText`, `raisedRowLabel`).
+- **Simulator**: mirrors all of it (fortifying, calling off, peace offers answered at once, reserves
+  and auto-met raises, counter tokens) and plays the revised answers by default; bots fortify what
+  a claimed mission leans on, set reserves for token raises, and offer tribute-like peace with a
+  2-round accord. `whatif:original-answers`, `whatif:raise-token` and `whatif:raise-off` compare
+  (results in the balance report's
+  [War answers, revised](balance-report.md#war-answers-revised)). The parity test replays three
+  more campaigns: two on the original answers, one with token raises, reserves, fortifying, peace
+  and declarations called off (`recallRate`, a test-only bot knob).
+- `answerWindow` (unused since Phase 2) went with the rewrite of `war-detail.tsx`.
+- **Dev database:** Field Marshal's "Peace Check" (with Bo, round 7: two wars settled by peace,
+  Iran fortified, a matched raise with Argentina waiting on Field Marshal) and "Answers Lobby" (a
+  lobby, raise set to cost a token).
+
+Tests since: rules 254, data 66, web 41, sim 25, server 151 (537 in all; the new server file is
+`test/war-answers.test.ts`).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -507,6 +673,18 @@ All at the proposed defaults.
   Germany (9) and Western Sahara (2). The friend group should review `REPORT.md`.
 - **Web push on real devices** is untested end to end: it needs VAPID keys, a production build
   served over HTTPS, and (on iOS) the app on the home screen.
+- **Secret missions still uneven after version 3** (see the report's
+  [Version 3, as built](balance-report.md#version-3-as-built)): battle secrets still give their
+  holder more than a fair chance, and a few route secrets (Pan-American Highway, Cape to Cairo,
+  Encirclement, Unification) are almost never done by the bots, since a chain or a ring can't be
+  made shorter. Retire them, redesign them, or wait for the playtest? The slower war tokens the
+  report also suggested were left out at the user's request.
+- **The revised war answers' defaults** (see the report's
+  [War answers, revised](balance-report.md#war-answers-revised)): new campaigns raise `matched`
+  (the report's alternative was the token raise); the simulated defenders still raise about a
+  quarter of declarations, mostly with countries near the 50% floor. Redirects nearly vanish with
+  both `nearby` and a token (0–1% of declarations, from 16–39%). Both are host settings; the
+  playtest should say whether the floor needs raising and whether redirects should stay nearby.
 
 ## Running and testing
 
@@ -725,8 +903,8 @@ Smaller follow-ups, none blocking:
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                  |
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                        |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`)                                                                                                                                   |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                  |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications)                                                                      |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
 | `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
 
@@ -734,7 +912,8 @@ API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
 `/api/campaigns/:id/{invite/reset,me,leave,kick}`,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
-`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply}`,
+`/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
+`…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,
 `/api/campaigns/:id/round/next`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
 `/api/campaigns/:id/stats`, `/api/campaigns/:id/secret` (choose), `/api/campaigns/:id/victory/missions` (the host's four) and

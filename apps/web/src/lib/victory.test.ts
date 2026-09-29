@@ -62,6 +62,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
     wars: [],
     truces: [],
     acquired: {},
+    fortified: {},
     accords: [],
     victory: {
       version: 1,
@@ -69,6 +70,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       publicPoints: 2,
       secretPoints: 3,
       holdMs: 24 * 3_600_000,
+      lastRound: null,
       publicMissions: [positions],
       players: [
         { userId: 'ann', points: 4, awards: [], ready: true, secret: null, progress: { p0: evaluation(2) } },
@@ -203,6 +205,8 @@ describe('claims', () => {
       declaredAt: '2026-01-01T00:00:00.000Z',
       resolvedAt: null,
       games: [],
+      reserves: [],
+      peace: [],
     };
     const blocked = { ...claim, blockedBy: ['w1'] };
     const model = buildModel(view({ claims: [blocked] }, { wars: [war] }), user('ann'), idx)!;

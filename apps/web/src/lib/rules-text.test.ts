@@ -1,6 +1,14 @@
 import { DEFAULT_RULES, parseRules } from '@empire/rules';
 import { describe, expect, it } from 'vitest';
-import { forRounds, liveClockText, perMoveText, settingsList, stakeTable, timeControlText } from './rules-text';
+import {
+  forRounds,
+  liveClockText,
+  perMoveText,
+  raisedRowLabel,
+  settingsList,
+  stakeTable,
+  timeControlText,
+} from './rules-text';
 
 describe('rules in words', () => {
   it('counts rounds from the round something begins in', () => {
@@ -29,6 +37,7 @@ describe('rules in words', () => {
     const standard = Object.fromEntries(settingsList(DEFAULT_RULES).map((s) => [s.label, s.value]));
     expect(standard).toMatchObject({
       Victory: 'First to 7 points',
+      'Last round': 'Round 25, then the most points win',
       'Claims are held': '24 hours after the next round starts',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
@@ -36,12 +45,19 @@ describe('rules in words', () => {
       'War tokens': '1 a round, up to 3',
       'Truce after a war': '1 round',
       'Lock on won countries': '2 rounds',
+      'Raising the stakes': 'Matched: a country worth 50–100% of the target',
+      'Raised stake': '125% of the target',
+      Redirects: 'Near the target, for a token',
+      Fortifying: 'A token, until the round after next',
+      'Peace terms': 'Until the game ends',
+      'Calling off a declaration': 'Until the defender answers',
     });
     const live = parseRules({ war: { pace: 'live', draws: 'armageddon', truceRounds: 0, clockModifiers: false } });
     const liveSettings = Object.fromEntries(settingsList(live).map((s) => [s.label, s.value]));
     // Rules stored without a victory setting are an open-ended campaign.
     expect(liveSettings.Victory).toBe('Open-ended');
     expect(liveSettings['Claims are held']).toBeUndefined();
+    expect(liveSettings['Last round']).toBeUndefined();
     expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',
@@ -49,6 +65,18 @@ describe('rules in words', () => {
       Draws: 'Armageddon',
       'Clock modifiers': 'Off',
       'Truce after a war': 'None',
+      // Rules stored before the revised answers keep the original ones.
+      'Raising the stakes': 'Free, to 125% of the target',
+      Redirects: 'Anywhere on the border, free',
+      Fortifying: 'Off',
+      'Peace terms': 'Off: tribute instead',
     });
+  });
+
+  it('labels the raised row of the stake table by what it’s for', () => {
+    expect(raisedRowLabel(DEFAULT_RULES)).toBe('Fortified');
+    expect(raisedRowLabel(parseRules({}))).toBe('After a raise');
+    expect(raisedRowLabel(parseRules({ war: { raise: 'token', fortify: true } }))).toBe('After a raise, or fortified');
+    expect(raisedRowLabel(parseRules({ war: { raise: 'matched' } }))).toBeNull();
   });
 });

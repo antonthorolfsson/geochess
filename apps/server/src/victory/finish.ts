@@ -1,12 +1,30 @@
-import { SECRET_MISSION_KEY, missionRules, valueOfSet, type MissionWorld, type VictoryResultView } from '@empire/rules';
+import {
+  SECRET_MISSION_KEY,
+  heldBy,
+  missionRules,
+  seasonWinners,
+  valueOfSet,
+  type MissionWorld,
+  type VictoryResultView,
+} from '@empire/rules';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
-import { accords, campaignResults, campaigns, games, holdings, members, missionClaims, wars } from '../db/schema';
+import {
+  accords,
+  campaignResults,
+  campaigns,
+  games,
+  holdings,
+  members,
+  missionClaims,
+  peaceOffers,
+  wars,
+} from '../db/schema';
 import { publishGame } from '../wars/games';
 import { settleFinishedGames } from '../wars/service';
-import { memberNames, missionsUrl, notifyAfter, revealSecret } from './settle';
-import { loadAwards, type MissionPlayerRow } from './state';
+import { memberNames, missionsUrl, notifyAfter, revealSecret, settleVictory } from './settle';
+import { loadAwards, loadPlayers, loadWorld, pointsOf, type MissionPlayerRow } from './state';
 import { toAwardView } from './views';
 
 export interface Finish {
@@ -15,6 +33,39 @@ export interface Finish {
   /** Everyone's points after the awards that ended it. */
   points: ReadonlyMap<string, number>;
   winners: string[];
+  /** Nobody reached the points to win: the last round is over and the most points won. */
+  seasonEnd?: boolean;
+}
+
+/**
+ * The host moves on from the season's last round: the campaign ends instead of starting another.
+ * Missions are brought up to date first, in case something done at the last moment (a game just
+ * ended, a claim's time just up) scores, which could still take someone to the points to win. Then
+ * the most points win, then the most valuable empire; players level on both share it.
+ */
+export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<void> {
+  const mark = { campaign: scope.campaign, events: scope.log.events.length };
+  try {
+    // A savepoint, as for every change (see `mutate()`): a fault in scoring still lets the season end.
+    await scope.tx.transaction(() => settleVictory(ctx, scope));
+  } catch (err) {
+    scope.campaign = mark.campaign;
+    scope.log.events.length = mark.events;
+    ctx.log.error({ err, campaignId: scope.campaign.id }, 'could not bring the victory missions up to date');
+  }
+  if (scope.campaign.status !== 'active') return;
+  const { tx, campaign } = scope;
+  const memberIds = scope.members.map((m) => m.userId);
+  const players = await loadPlayers(tx, campaign.id);
+  const world = await loadWorld(ctx, tx, campaign, memberIds, players);
+  const points = pointsOf(await loadAwards(tx, campaign.id), memberIds);
+  const standings = new Map(
+    memberIds.map((id) => [
+      id,
+      { points: points.get(id) ?? 0, value: valueOfSet(world.idx, heldBy(world.owners, id)) },
+    ]),
+  );
+  await finishCampaign(ctx, scope, { players, world, points, winners: seasonWinners(standings), seasonEnd: true });
 }
 
 const listNames = (names: string[]) =>
@@ -23,8 +74,9 @@ const listNames = (names: string[]) =>
 /**
  * Someone reached the points to win: the campaign ends, read-only from here on. Every secret
  * mission is revealed; unfinished wars are cancelled (nothing changes hands, and they count as
- * neither won nor lost) and their games stopped, moves kept; tokens held back as tribute go back;
- * pending claims and accord proposals lapse. The results are written once: a second call is a no-op.
+ * neither won nor lost) and their games stopped, moves kept; tokens held back as tribute, or paid
+ * for a counter the attacker hadn't answered, go back; pending claims, accord proposals and peace
+ * offers lapse. The results are written once: a second call is a no-op.
  */
 export async function finishCampaign(
   ctx: AppContext,
@@ -35,10 +87,12 @@ export async function finishCampaign(
   const campaign = scope.campaign;
   const now = ctx.now();
   const round = campaign.round;
+  const seasonEnd = finish.seasonEnd ?? false;
   const placeholder: VictoryResultView = {
     winners: finish.winners,
     round,
     finishedAt: now.toISOString(),
+    seasonEnd,
     standings: [],
     holdings: {},
   };
@@ -102,6 +156,7 @@ export async function finishCampaign(
     winners: finish.winners,
     round,
     finishedAt: now.toISOString(),
+    seasonEnd,
     standings,
     holdings: Object.fromEntries(owners),
   };
@@ -109,7 +164,10 @@ export async function finishCampaign(
   await tx.update(campaigns).set({ status: 'finished', finishedAt: now }).where(eq(campaigns.id, campaign.id));
   scope.campaign = { ...campaign, status: 'finished', finishedAt: now };
   await scope.log.add(
-    { type: 'campaign.won', payload: { winners: finish.winners, points: Object.fromEntries(finish.points) } },
+    {
+      type: 'campaign.won',
+      payload: { winners: finish.winners, points: Object.fromEntries(finish.points), ...(seasonEnd && { seasonEnd }) },
+    },
     null,
     round,
   );
@@ -129,7 +187,9 @@ export async function finishCampaign(
             ? 'You share the victory'
             : 'Victory'
           : `${winnerNames} ${shared ? 'share the victory' : 'won'}`,
-        body: `${campaign.name} is over after round ${round}. Every secret mission is now revealed.`,
+        body: seasonEnd
+          ? `${campaign.name} is over: round ${round} was its last, and the most points won. Every secret mission is now revealed.`
+          : `${campaign.name} is over after round ${round}. Every secret mission is now revealed.`,
         url: missionsUrl(campaign.id),
         tag: `victory:${campaign.id}`,
       },
@@ -169,11 +229,13 @@ async function cancelUnfinishedWars(ctx: AppContext, scope: MutationScope): Prom
     .from(wars)
     .where(and(eq(wars.campaignId, campaign.id), ne(wars.status, 'resolved')));
   for (const war of open) {
-    // Tokens offered as tribute were held back from the defender until the attacker answered.
-    if (war.status === 'countered' && war.counter?.kind === 'tribute' && war.counter.tokens > 0) {
+    // Tokens offered as tribute were held back from the defender until the attacker answered, and
+    // a raise or redirect paid for goes unanswered: either way they go back.
+    const held = war.status === 'countered' ? (war.counter?.tokens ?? 0) : 0;
+    if (held > 0) {
       await tx
         .update(members)
-        .set({ tokens: sql`${members.tokens} + ${war.counter.tokens}` })
+        .set({ tokens: sql`${members.tokens} + ${held}` })
         .where(and(eq(members.campaignId, campaign.id), eq(members.userId, war.defenderId)));
     }
     await tx
@@ -186,4 +248,8 @@ async function cancelUnfinishedWars(ctx: AppContext, scope: MutationScope): Prom
       round,
     );
   }
+  await tx
+    .update(peaceOffers)
+    .set({ status: 'lapsed', respondBy: null, endedAt: now })
+    .where(and(eq(peaceOffers.campaignId, campaign.id), eq(peaceOffers.status, 'proposed')));
 }

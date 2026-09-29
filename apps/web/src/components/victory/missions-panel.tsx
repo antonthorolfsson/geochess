@@ -3,7 +3,7 @@
 import {
   durationText,
   effortText,
-  missionInfo,
+  missionName,
   partAmount,
   revealRule,
   type ClaimView,
@@ -86,6 +86,7 @@ export function PointsRace({ model }: { model: CampaignModel }) {
     <section aria-labelledby="race-heading">
       <h2 id="race-heading" className="label mb-2">
         Victory points · first to {victory.pointsToWin}
+        {victory.lastRound !== null && ` · last round ${victory.lastRound}`}
       </h2>
       <ol className="space-y-2">
         {pointsRace(model).map(({ userId, points }) => {
@@ -176,7 +177,7 @@ function SecretSelection({ model, onSelectCountry, onShowOnMap }: PanelProps) {
                 className="btn btn-amber btn-sm mr-2"
                 disabled={choose.isPending}
                 onClick={() => {
-                  const name = missionInfo(option.spec.kind).name;
+                  const name = missionName(option.spec);
                   if (confirm(`Choose ${name} as your secret mission? You can’t change it later.`))
                     choose.mutate(option.id);
                 }}
@@ -505,6 +506,8 @@ function ScoringNote({ model }: { model: CampaignModel }) {
         A position scores only after it has been held through the next full round and at least {durationText(v.holdMs)}{' '}
         after that round starts. Players who cross the line together are ranked by points; equal points share the
         victory.
+        {v.lastRound !== null &&
+          ` If nobody has ${v.pointsToWin} when round ${v.lastRound} ends, the most points win, then the most valuable empire.`}
       </p>
     </section>
   );
@@ -514,20 +517,34 @@ function ScoringNote({ model }: { model: CampaignModel }) {
 // The end
 
 function FinalResults({ model, result, onSelectCountry }: PanelProps & { result: VictoryResultView }) {
+  const victory = model.campaign.victory!;
   const names = result.winners.map((id) => playerName(model, id));
   const headline =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)} share the victory` : `${names[0]} wins`;
   const iWon = result.winners.includes(model.me.userId);
   const [open, setOpen] = useState<string | null>(null);
+  const [first, second] = result.standings;
+  // At the end of the season, level on points means the most valuable empire won.
+  const onValue = result.seasonEnd && first && second && first.points === second.points;
+  const how = result.seasonEnd
+    ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${
+        onValue ? ', then the most valuable empire' : ''
+      }. `
+    : iWon && names.length === 1
+      ? `You reached ${first?.points ?? 0} points. `
+      : '';
   return (
     <section aria-labelledby="results-heading" className="space-y-4">
       <div className="rounded-[3px] border border-amber/70 bg-amber/10 p-4">
-        <div className="label text-amber">Campaign over · round {result.round}</div>
+        <div className="label text-amber">
+          Campaign over · round {result.round}
+          {result.seasonEnd && ', the last'}
+        </div>
         <h2 id="results-heading" className="font-stencil text-3xl leading-tight tracking-wide">
           {iWon && names.length === 1 ? 'Victory' : headline}
         </h2>
         <p className="text-[0.95rem]">
-          {iWon && names.length === 1 ? `You reached ${result.standings[0]?.points ?? 0} points. ` : ''}
+          {how}
           The map shows the empires as they ended. Every secret mission is now revealed.
         </p>
       </div>
@@ -581,7 +598,7 @@ function FinalResults({ model, result, onSelectCountry }: PanelProps & { result:
                     <ul className="space-y-1 text-sm">
                       {s.awards.map((a) => (
                         <li key={a.missionKey} className="flex gap-2">
-                          <span className="flex-1">{missionInfo(a.kind).name}</span>
+                          <span className="flex-1">{missionName({ kind: a.kind }, victory.version)}</span>
                           <span className="tabular-nums">
                             +{a.points} · round {a.round}
                           </span>

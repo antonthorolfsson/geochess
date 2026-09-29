@@ -1,5 +1,8 @@
 import {
+  FORTIFY_COST,
+  FORTIFY_REJECTION_MESSAGES,
   INITIAL_FEN,
+  RESERVE_REJECTION_MESSAGES,
   RESPONSE_WINDOW_MS,
   RESPONSE_WINDOW_TEXT,
   STAKE_REJECTION_MESSAGES,
@@ -7,14 +10,23 @@ import {
   afterGame,
   attackerColor,
   canRaise,
+  canRecall,
+  checkFortify,
+  checkReserves,
   checkStake,
   checkTarget,
   clockModifiers,
+  clockTarget,
+  counterCost,
+  fortifyEnds,
   getTerritory,
   initialClocks,
-  raiseFloor,
+  lastRoundOf,
+  raiseDemand,
+  raiseOptions,
   redirectOptions,
   refillTokens,
+  stakeFromReserves,
   tributeOptions,
   turnDeadline,
   valueOf,
@@ -24,27 +36,29 @@ import {
   type DeclareWarInput,
   type GameEndReason,
   type GameResult,
+  type PeaceTerms,
   type Transfer,
   type WarCounter,
   type WarOutcome,
   type WarReply,
   type WarResponse,
 } from '@empire/rules';
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { mutate, requireActive, requireHost, requireMember, userName, type MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
-import { campaigns, games, holdings, members, wars } from '../db/schema';
+import { campaigns, games, holdings, members, peaceOffers, wars } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { Notice } from '../notifications/notifier';
+import { endSeason } from '../victory/finish';
 import { loadBoard, type WarRow } from './board';
-import { armFlag } from './games';
+import { armFlag, publishGame } from './games';
 
 /** Live games open with a countdown, so both players can get to the board. */
 export const LIVE_COUNTDOWN_MS = 15_000;
 
-const warUrl = (war: WarRow) => `/c/${war.campaignId}?war=${war.id}`;
+export const warUrl = (war: WarRow) => `/c/${war.campaignId}?war=${war.id}`;
 const gameUrl = (campaignId: string, gameId: string) => `/c/${campaignId}?game=${gameId}`;
 
 function notify(_ctx: AppContext, scope: MutationScope, notice: Notice): void {
@@ -59,7 +73,7 @@ function responseDeadline(ctx: AppContext, scope: MutationScope): Date {
   return new Date(ctx.now().getTime() + RESPONSE_WINDOW_MS[scope.campaign.rules.war.pace]);
 }
 
-async function addTokens(scope: MutationScope, userId: string, delta: number): Promise<void> {
+export async function addTokens(scope: MutationScope, userId: string, delta: number): Promise<void> {
   await scope.tx
     .update(members)
     .set({ tokens: sql`${members.tokens} + ${delta}` })
@@ -68,7 +82,7 @@ async function addTokens(scope: MutationScope, userId: string, delta: number): P
   if (member) member.tokens += delta;
 }
 
-async function findWar(scope: MutationScope, warId: string): Promise<WarRow> {
+export async function findWar(scope: MutationScope, warId: string): Promise<WarRow> {
   const [war] = await scope.tx
     .select()
     .from(wars)
@@ -100,6 +114,9 @@ export async function declareWar(
     if (targetRejection) throw conflict(TARGET_REJECTION_MESSAGES[targetRejection], targetRejection);
     const stakeRejection = checkStake(board, userId, input.targetId, input.launchId, input.stake);
     if (stakeRejection) throw badRequest(STAKE_REJECTION_MESSAGES[stakeRejection], stakeRejection);
+    const reserves = input.reserves ?? [];
+    const reserveRejection = checkReserves(board, userId, input.launchId, input.stake, reserves);
+    if (reserveRejection) throw badRequest(RESERVE_REJECTION_MESSAGES[reserveRejection], reserveRejection);
 
     const defenderId = board.holdings.get(input.targetId)!.ownerId;
     const stake = [input.launchId, ...input.stake.filter((id) => id !== input.launchId)];
@@ -113,6 +130,7 @@ export async function declareWar(
         targetId: input.targetId,
         launchId: input.launchId,
         stake,
+        reserves,
         status: 'declared',
         declaredRound: scope.campaign.round,
         respondBy: responseDeadline(ctx, scope),
@@ -130,6 +148,7 @@ export async function declareWar(
           targetId: input.targetId,
           launchId: input.launchId,
           stake,
+          ...(reserves.length > 0 ? { reserves } : {}),
         },
       },
       userId,
@@ -142,7 +161,8 @@ export async function declareWar(
       title: `War declared on ${target.name}`,
       body:
         `${await userName(scope.tx, userId)} attacks ${target.name} (${target.value}), staking ` +
-        `${valueOf(board.idx, stake)}. Answer within ${windowText(scope)} or the war goes ahead as declared.`,
+        `${valueOf(board.idx, stake)}${reserves.length > 0 ? `, with ${valueOf(board.idx, reserves)} in reserve` : ''}. ` +
+        `Answer within ${windowText(scope)} or the war goes ahead as declared.`,
       url: warUrl(war!),
       tag: `war:${war!.id}`,
       email: true,
@@ -178,25 +198,45 @@ async function applyResponse(
   const board = await loadBoard(ctx, scope.tx, scope.campaign);
   const target = getTerritory(board.idx, war.targetId);
   const active = board.wars.find((w) => w.id === war.id)!;
+  const rules = scope.campaign.rules.war;
   let counter: WarCounter | null = null;
   switch (input.response) {
     case 'accept':
       break;
-    case 'raise':
+    case 'raise': {
+      if (rules.raise === 'off') throw conflict("Raising is not part of this campaign's rules.", 'no-raise');
+      if (rules.raise === 'matched') {
+        if (!input.territoryId) throw badRequest('Choose the country to put into the war.', 'raise-country');
+        if (!raiseOptions(board, active).includes(input.territoryId)) {
+          throw badRequest(
+            'Put in one of your countries that is free to stake, worth between half the target and all of it, and no more than the attacker could still add.',
+            'bad-raise',
+          );
+        }
+        counter = { kind: 'raise', minValue: raiseDemand(board, active, input.territoryId), added: input.territoryId };
+        break;
+      }
       if (!canRaise(board, active))
         throw conflict('The stake already meets what a raise would demand.', 'cannot-raise');
-      counter = { kind: 'raise', minValue: raiseFloor(board.rules, target.value) };
+      const cost = await payForCounter(scope, war.defenderId, counterCost(scope.campaign.rules, 'raise'));
+      counter = { kind: 'raise', minValue: raiseDemand(board, active), ...(cost > 0 ? { tokens: cost } : {}) };
       break;
-    case 'redirect':
+    }
+    case 'redirect': {
       if (!redirectOptions(board, active).includes(input.targetId)) {
         throw badRequest(
-          'Redirect to another of your countries worth the same, bordering the attacker and not caught up in a war.',
+          rules.redirect === 'nearby'
+            ? 'Redirect to another of your countries worth the same, bordering both the target and the attacker, and not caught up in a war.'
+            : 'Redirect to another of your countries worth the same, bordering the attacker and not caught up in a war.',
           'bad-redirect',
         );
       }
-      counter = { kind: 'redirect', targetId: input.targetId };
+      const cost = await payForCounter(scope, war.defenderId, counterCost(scope.campaign.rules, 'redirect'));
+      counter = { kind: 'redirect', targetId: input.targetId, ...(cost > 0 ? { tokens: cost } : {}) };
       break;
+    }
     case 'tribute': {
+      if (rules.peaceTerms) throw conflict('In this campaign, peace terms take the place of tribute.', 'no-tribute');
       const tokens = input.tokens ?? 0;
       if ((input.territoryId === undefined) === (tokens === 0)) {
         throw badRequest('Offer either one country or some tokens.', 'bad-tribute');
@@ -229,20 +269,45 @@ async function applyResponse(
     counter,
     respondBy: responseDeadline(ctx, scope),
   });
+  // Reserves set aside at the declaration meet a raise at once, when they can.
+  if (counter.kind === 'raise' && countered.reserves.length > 0) {
+    const stake = stakeFromReserves(board.idx, countered.stake, countered.reserves, counter.minValue);
+    if (stake) {
+      await applyReply(ctx, scope, countered, { reply: 'accept', stake }, false, true);
+      return;
+    }
+  }
   const defender = await userName(scope.tx, war.defenderId);
   const title = {
     raise: `${defender} raised the stakes`,
     redirect: `${defender} redirects your attack`,
     tribute: `${defender} offers tribute`,
   }[counter.kind];
+  const added = counter.kind === 'raise' && counter.added ? getTerritory(board.idx, counter.added) : null;
   notify(ctx, scope, {
     userId: war.attackerId,
     title,
-    body: `Your war on ${target.name} needs an answer within ${windowText(scope)}.`,
+    body:
+      (added ? `${defender} puts ${added.name} (${added.value}) into the war: winning takes it too. ` : '') +
+      `Your war on ${target.name} needs an answer within ${windowText(scope)}.`,
     url: warUrl(countered),
     tag: `war:${war.id}`,
     email: true,
   });
+}
+
+/** Takes what a counter-offer costs from the defender's tokens, refusing it if they're short. Returns the cost. */
+async function payForCounter(scope: MutationScope, defenderId: string, cost: number): Promise<number> {
+  if (cost === 0) return 0;
+  const defender = requireMember(scope, defenderId);
+  if (defender.tokens < cost) {
+    throw conflict(
+      `That costs ${cost} war ${cost === 1 ? 'token' : 'tokens'}, and you have ${defender.tokens}.`,
+      'no-tokens',
+    );
+  }
+  await addTokens(scope, defenderId, -cost);
+  return cost;
 }
 
 /** The attacker answers a counter-offer. */
@@ -268,6 +333,7 @@ async function applyReply(
   war: WarRow,
   input: WarReply,
   auto: boolean,
+  fromReserves = false,
 ): Promise<void> {
   const counter = war.counter!;
   const allowed: Record<WarCounter['kind'], WarReply['reply'][]> = {
@@ -291,7 +357,16 @@ async function applyReply(
     stake = [war.launchId, ...stake.filter((id) => id !== war.launchId)];
   }
   await scope.log.add(
-    { type: 'war.reply', payload: { warId: war.id, reply: input.reply, ...(stake ? { stake } : {}), auto } },
+    {
+      type: 'war.reply',
+      payload: {
+        warId: war.id,
+        reply: input.reply,
+        ...(stake ? { stake } : {}),
+        auto,
+        ...(fromReserves ? { fromReserves } : {}),
+      },
+    },
     auto ? null : war.attackerId,
     scope.campaign.round,
   );
@@ -313,11 +388,72 @@ async function applyReply(
     await resolveWar(ctx, scope, war, 'tribute', { transfers, tokens: counter.tokens });
     return;
   }
+  // A counter the defender paid for: the attacker gets the tokens for fighting on.
+  if (counter.tokens) await addTokens(scope, war.attackerId, counter.tokens);
   const next =
     counter.kind === 'raise'
       ? await updateWar(scope, war, { stake })
       : await updateWar(scope, war, { targetId: counter.targetId, redirectedFrom: war.targetId });
   await beginFighting(ctx, scope, next);
+}
+
+/**
+ * The attacker calls off a declaration before the defender has answered, where the rules allow
+ * it: the token is spent, nothing changes hands, and no truce follows.
+ */
+export async function recallWar(ctx: AppContext, campaignId: string, warId: string, userId: string): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireMember(scope, userId);
+    const war = await findWar(scope, warId);
+    if (war.attackerId !== userId) throw forbidden('Only the attacker can call off a declaration.');
+    if (!scope.campaign.rules.war.recall) {
+      throw conflict("Calling off a declaration is not part of this campaign's rules.", 'no-recall');
+    }
+    if (!canRecall(scope.campaign.rules, war.status)) {
+      throw conflict('The defender has already answered, so the declaration stands.', 'already-answered');
+    }
+    await scope.log.add({ type: 'war.recalled', payload: { warId: war.id } }, userId, scope.campaign.round);
+    await resolveWar(ctx, scope, war, 'withdrawn');
+  });
+}
+
+/**
+ * A player spends a war token fortifying one of their countries: until the round after next
+ * starts, war on it needs a stake of the raise's percentage. Public, like the map.
+ */
+export async function fortifyCountry(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  territoryId: string,
+): Promise<{ untilRound: number }> {
+  return mutate(ctx, campaignId, async (scope) => {
+    const me = requireMember(scope, userId);
+    requireActive(scope);
+    const board = await loadBoard(ctx, scope.tx, scope.campaign);
+    const rejection = checkFortify(board, userId, territoryId);
+    if (rejection) {
+      const message = FORTIFY_REJECTION_MESSAGES[rejection];
+      throw rejection === 'off' || rejection === 'fortified'
+        ? conflict(message, rejection)
+        : badRequest(message, rejection);
+    }
+    if (me.tokens < FORTIFY_COST) {
+      throw conflict('Fortifying costs a war token, and you have none. The next round brings one.', 'no-tokens');
+    }
+    await addTokens(scope, userId, -FORTIFY_COST);
+    const untilRound = fortifyEnds(scope.campaign.round);
+    await scope.tx
+      .update(holdings)
+      .set({ fortifiedUntil: untilRound })
+      .where(and(eq(holdings.campaignId, campaignId), eq(holdings.territoryId, territoryId)));
+    await scope.log.add(
+      { type: 'country.fortified', payload: { userId, territoryId, untilRound } },
+      userId,
+      scope.campaign.round,
+    );
+    return { untilRound };
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -338,7 +474,8 @@ async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
  */
 async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow, armageddon = false): Promise<void> {
   const board = await loadBoard(ctx, scope.tx, scope.campaign);
-  const tc = warTimeControl(scope.campaign.rules, clockModifiers(board, war.attackerId, war.targetId), armageddon);
+  const modifiers = clockModifiers(board, war.attackerId, clockTarget(scope.campaign.rules, war));
+  const tc = warTimeControl(scope.campaign.rules, modifiers, armageddon);
   const attackerWhite = attackerColor(armageddon) === 'white';
   const whiteId = attackerWhite ? war.attackerId : war.defenderId;
   const blackId = attackerWhite ? war.defenderId : war.attackerId;
@@ -416,7 +553,7 @@ async function startGame(ctx: AppContext, scope: MutationScope, gameId: string):
 }
 
 /** Starts queued live games, oldest first, whose players are both free. */
-async function startQueuedGames(ctx: AppContext, scope: MutationScope): Promise<void> {
+export async function startQueuedGames(ctx: AppContext, scope: MutationScope): Promise<void> {
   const queued = await scope.tx
     .select({ id: games.id, whiteId: games.whiteId, blackId: games.blackId })
     .from(games)
@@ -429,6 +566,32 @@ async function startQueuedGames(ctx: AppContext, scope: MutationScope): Promise<
     await startGame(ctx, scope, game.id);
     busy.add(game.whiteId).add(game.blackId);
   }
+}
+
+/**
+ * Stops a war's games because the war is ending without them (peace terms): a live game waiting
+ * its turn, or the one underway, whose moves stand. Waits for a move still being saved, and
+ * refuses if the game ended in that moment, since its result stands.
+ */
+export async function stopWarGames(ctx: AppContext, scope: MutationScope, warId: string): Promise<void> {
+  const stopped = await scope.tx
+    .update(games)
+    .set({ status: 'cancelled', deadline: null, drawOfferBy: null })
+    .where(and(eq(games.warId, warId), inArray(games.status, ['waiting', 'playing'])))
+    .returning();
+  const [last] = await scope.tx
+    .select({ status: games.status })
+    .from(games)
+    .where(eq(games.warId, warId))
+    .orderBy(desc(games.createdAt))
+    .limit(1);
+  if (last?.status === 'finished') throw conflict('The game has just ended, and its result stands.', 'game-over');
+  scope.afterCommit(async () => {
+    for (const game of stopped) {
+      ctx.timers.clear(`flag:${game.id}`);
+      await publishGame(ctx, game);
+    }
+  });
 }
 
 /**
@@ -475,19 +638,29 @@ export async function settleFinishedGames(ctx: AppContext, scope: MutationScope)
 // ---------------------------------------------------------------------------------------------
 // Resolution
 
-async function resolveWar(
+/**
+ * A war ends: countries change hands (a fortification doesn't pass with them), offers of peace
+ * still open lapse, and both players hear how it ended.
+ */
+export async function resolveWar(
   ctx: AppContext,
   scope: MutationScope,
   war: WarRow,
   outcome: WarOutcome,
-  detail: { result?: GameResult; reason?: GameEndReason; transfers?: Transfer[]; tokens?: number } = {},
+  detail: {
+    result?: GameResult;
+    reason?: GameEndReason;
+    transfers?: Transfer[];
+    tokens?: number;
+    terms?: PeaceTerms;
+  } = {},
 ): Promise<void> {
   const round = scope.campaign.round;
   const transfers = detail.transfers ?? warTransfers(war, outcome);
   for (const t of transfers) {
     await scope.tx
       .update(holdings)
-      .set({ ownerId: t.to, acquiredRound: round })
+      .set({ ownerId: t.to, acquiredRound: round, fortifiedUntil: null })
       .where(and(eq(holdings.campaignId, war.campaignId), eq(holdings.territoryId, t.territoryId)));
   }
   await updateWar(scope, war, {
@@ -497,6 +670,10 @@ async function resolveWar(
     resolvedAt: ctx.now(),
     respondBy: null,
   });
+  await scope.tx
+    .update(peaceOffers)
+    .set({ status: 'lapsed', respondBy: null, endedAt: ctx.now() })
+    .where(and(eq(peaceOffers.warId, war.id), eq(peaceOffers.status, 'proposed')));
   await scope.log.add(
     {
       type: 'war.resolved',
@@ -507,6 +684,7 @@ async function resolveWar(
         ...(detail.reason ? { reason: detail.reason } : {}),
         transfers,
         ...(detail.tokens ? { tokens: detail.tokens } : {}),
+        ...(detail.terms ? { terms: detail.terms } : {}),
       },
     },
     null,
@@ -520,6 +698,7 @@ async function resolveWar(
     defender: ['Your attack was repelled', `${target} held; the stake is yours`],
     held: [`${target} held`, `${target} held`],
     tribute: ['Tribute accepted', 'Tribute accepted'],
+    settled: [`Peace over ${target}`, `Peace over ${target}`],
     withdrawn: ['War called off', 'War called off'],
     cancelled: ['War cancelled', 'War cancelled'],
   };
@@ -543,12 +722,18 @@ async function resolveWar(
 
 /**
  * The host starts the next round: everyone's tokens refill, locks and truces count down, and
- * accords whose time is up run their course.
+ * accords whose time is up run their course. After the season's last round, the campaign ends
+ * instead (see `endSeason`).
  */
 export async function nextRound(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'start the next round');
     requireActive(scope);
+    const last = lastRoundOf(scope.campaign.rules);
+    if (last !== null && scope.campaign.round >= last) {
+      await endSeason(ctx, scope);
+      return;
+    }
     const round = scope.campaign.round + 1;
     const roundStartedAt = ctx.now();
     await scope.tx.update(campaigns).set({ round, roundStartedAt }).where(eq(campaigns.id, campaignId));

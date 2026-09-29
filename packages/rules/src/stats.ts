@@ -26,7 +26,7 @@ import type {
   WarStatus,
   WarTally,
 } from './protocol';
-import type { Transfer, WarOutcome } from './war';
+import type { PeaceTerms, Transfer, WarOutcome } from './war';
 
 /** A war that ended, from its `war.resolved` event and the war it settled. */
 export interface Resolution {
@@ -38,7 +38,13 @@ export interface Resolution {
   transfers: readonly Transfer[];
   /** Tokens paid as tribute. */
   tokens: number;
+  /** The terms of a war the two settled. */
+  terms?: PeaceTerms | null;
 }
+
+/** How a resolution moved countries, for the record: in a war, as tribute, or by peace terms. */
+const viaOf = (outcome: WarOutcome): CountryChange['via'] =>
+  outcome === 'tribute' ? 'tribute' : outcome === 'settled' ? 'peace' : 'war';
 
 /** A war as the record counts it. */
 export interface WarFacts {
@@ -145,7 +151,7 @@ export function empireHistory(
   };
 }
 
-/** How every held country came to its owner: its last war or tribute, or else the draft. */
+/** How every held country came to its owner: its last war, tribute or peace, or else the draft. */
 export function acquisitions(
   holdings: ReadonlyMap<TerritoryId, UserId>,
   picks: ReadonlyMap<TerritoryId, number>,
@@ -161,7 +167,7 @@ export function acquisitions(
     out[territoryId] =
       change && change.transfer.to === ownerId
         ? {
-            via: change.resolution.outcome === 'tribute' ? 'tribute' : 'war',
+            via: viaOf(change.resolution.outcome),
             warId: change.resolution.warId,
             round: change.resolution.round,
             from: change.transfer.from,
@@ -179,6 +185,7 @@ const emptyWarTally = (): WarTally => ({
   lost: 0,
   drawn: 0,
   tribute: 0,
+  settled: 0,
   withdrawn: 0,
   cancelled: 0,
   underway: 0,
@@ -190,6 +197,7 @@ const OUTCOME_COUNTS: Record<WarOutcome, readonly [attacker: keyof WarTally, def
   defender: ['lost', 'won'],
   held: ['drawn', 'drawn'],
   tribute: ['tribute', 'tribute'],
+  settled: ['settled', 'settled'],
   withdrawn: ['withdrawn', 'withdrawn'],
   cancelled: ['cancelled', 'cancelled'],
 };
@@ -214,7 +222,17 @@ export function warRecord(userId: UserId, wars: readonly WarFacts[], resolutions
       if (r.attackerId === userId) tokensTaken += r.tokens;
       if (r.defenderId === userId) tokensPaid += r.tokens;
     }
-    const via = r.outcome === 'tribute' ? 'tribute' : 'war';
+    if (r.outcome === 'settled' && r.terms) {
+      const [taken, paid] =
+        r.attackerId === userId
+          ? [r.terms.tokensToAttacker, r.terms.tokensToDefender]
+          : r.defenderId === userId
+            ? [r.terms.tokensToDefender, r.terms.tokensToAttacker]
+            : [0, 0];
+      tokensTaken += taken;
+      tokensPaid += paid;
+    }
+    const via = viaOf(r.outcome);
     for (const t of r.transfers) {
       const change = { territoryId: t.territoryId, warId: r.warId, round: r.round, via } as const;
       if (t.to === userId) gained.push({ ...change, otherId: t.from });

@@ -21,7 +21,7 @@ import { campaigns, games, holdings, members, missionAwards, missionPlayers } fr
 import { loadEnv } from '../src/env';
 import { loadPlayers, loadWorld } from '../src/victory/state';
 import { runDueWork } from '../src/wars/scheduler';
-import { listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
+import { listen, signIn, startTestServer, tick, type Client, type TestServer, ORIGINAL_ANSWERS } from './helpers';
 
 /**
  * Victory mechanics on the war test map, driven through real wars. Ann holds A1 A2 A3 A4 A6
@@ -320,7 +320,10 @@ describe('claims and wars', () => {
   });
 
   it('count a country taken as tribute', async () => {
-    const s = await objectives({ missions: [{ kind: 'strategic_positions', territories: ['Q2'], need: 1 }] });
+    const s = await objectives({
+      missions: [{ kind: 'strategic_positions', territories: ['Q2'], need: 1 }],
+      rules: { war: ORIGINAL_ANSWERS },
+    });
     const warId = await s.declare(s.ann, 'B5', 'A4', ['A4']);
     expect((await s.respond(s.bo, warId, { response: 'tribute', territoryId: 'Q2' })).status).toBe(200);
     expect((await s.reply(s.ann, warId, { reply: 'accept' })).status).toBe(200);
@@ -330,7 +333,8 @@ describe('claims and wars', () => {
   });
 
   it('judge Across the Seas on the attack as fought, after any redirect', async () => {
-    const s = await objectives({ missions: [{ kind: 'across_the_seas', count: 2 }] });
+    // Q2 doesn't border B2, so this redirect needs redirects anywhere (the original rule).
+    const s = await objectives({ missions: [{ kind: 'across_the_seas', count: 2 }], rules: { war: ORIGINAL_ANSWERS } });
     // A6 ~ B7 is a sea lane.
     const bySea = await s.declare(s.ann, 'B7', 'A6', ['A6']);
     await s.respond(s.bo, bySea, { response: 'accept' });
@@ -517,6 +521,8 @@ describe('winning', () => {
       owners: { ...OWNERS, B1: CY, B7: CY, B10: CY, R2: CY },
       // A minute, so both wars are still open when the claim scores.
       holdMinutes: 1,
+      // Tribute in tokens, held back while offered: the original answers.
+      rules: { war: ORIGINAL_ANSWERS },
     });
     const cy = s.cy!;
     // Cy attacks Bo, and the game gets going.

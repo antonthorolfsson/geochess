@@ -1,12 +1,22 @@
 'use client';
 
 import {
-  RESPONSE_WINDOW_MS,
+  ACCORD_MAX_ROUNDS,
+  ACCORD_MIN_ROUNDS,
+  PEACE_MAX_TOKENS,
+  PEACE_REJECTION_MESSAGES,
   canRaise,
-  raiseFloor,
+  counterCost,
+  matchedRaiseRange,
+  peaceCountries,
+  peaceIssue,
+  raiseDemand,
+  raiseOptions,
   redirectOptions,
   tributeOptions,
   valueOf,
+  type PeaceOfferView,
+  type PeaceTerms,
   type TerritoryId,
   type WarReply,
   type WarResponse,
@@ -25,10 +35,13 @@ import {
   outcomeText,
   playerName,
   resultText,
+  stakedByRaise,
+  termsText,
   timeLeft,
+  tokensText,
   warStatusText,
 } from '@/lib/wars';
-import { Notice, ValueBadge } from '../ui';
+import { Notice } from '../ui';
 import { PlayerName } from './player-name';
 import { useEmpireHref } from './room-context';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
@@ -63,6 +76,10 @@ export function WarDetail({
   const me = model.me.userId;
   const game = currentGame(war);
   const empireHref = useEmpireHref(model.campaign.id);
+  const rules = model.campaign.rules.war;
+  const added = stakedByRaise(war);
+  const pending = war.status === 'declared' || war.status === 'countered';
+  const party = war.attackerId === me || war.defenderId === me;
 
   const country = (id: TerritoryId) => (
     <button
@@ -114,7 +131,15 @@ export function WarDetail({
           <dt className="label mb-1">
             Target{war.redirectedFrom ? ` (redirected from ${countryName(model, war.redirectedFrom)})` : ''}
           </dt>
-          <dd>{country(war.targetId)}</dd>
+          <dd className="flex flex-wrap gap-1.5">
+            {country(war.targetId)}
+            {added && (
+              <>
+                <span className="self-center text-sm text-muted">and, put in by the raise,</span>
+                {country(added)}
+              </>
+            )}
+          </dd>
         </div>
         <div>
           <dt className="label mb-1">Stake · worth {valueOf(idx, war.stake)}</dt>
@@ -124,6 +149,16 @@ export function WarDetail({
             ))}
           </dd>
         </div>
+        {pending && war.reserves.length > 0 && (
+          <div>
+            <dt className="label mb-1">In reserve to meet a raise · worth {valueOf(idx, war.reserves)}</dt>
+            <dd className="flex flex-wrap gap-1.5">
+              {war.reserves.map((id) => (
+                <span key={id}>{country(id)}</span>
+              ))}
+            </dd>
+          </div>
+        )}
       </dl>
 
       <p className="text-[0.95rem]">{warStatusText(model, war)}.</p>
@@ -131,14 +166,17 @@ export function WarDetail({
       {war.status === 'declared' && war.defenderId === me && (
         <DefenderAnswer model={model} war={war} onFocusCountry={onFocusCountry} />
       )}
+      {war.status === 'declared' && war.attackerId === me && rules.recall && <Recall model={model} war={war} />}
       {war.status === 'countered' && (
         <>
           <Notice tone="amber">{counterText(model, war)}</Notice>
           {war.attackerId === me && <AttackerReply model={model} war={war} onPreview={onPreview} />}
         </>
       )}
-      {(war.status === 'declared' || war.status === 'countered') && war.respondBy && (
-        <Deadline war={war} model={model} />
+      {pending && war.respondBy && <Deadline war={war} model={model} />}
+
+      {rules.peaceTerms && party && war.status !== 'resolved' && (
+        <PeacePanel model={model} war={war} onFocusCountry={onFocusCountry} />
       )}
 
       {war.games.length > 0 && (
@@ -154,7 +192,9 @@ export function WarDetail({
                     {g.status === 'finished' && g.result
                       ? resultText(g.result, g.reason)
                       : g.status === 'cancelled'
-                        ? 'Called off: the campaign ended first'
+                        ? war.outcome === 'settled'
+                          ? 'Called off: the war ended in peace'
+                          : 'Called off: the campaign ended first'
                         : g.status === 'waiting'
                           ? 'Waiting for both players to be free'
                           : 'In progress'}
@@ -205,7 +245,16 @@ function Outcome({ model, war }: { model: CampaignModel; war: WarView }) {
   const event = [...model.campaign.events]
     .reverse()
     .find((e) => e.type === 'war.resolved' && e.payload.warId === war.id);
-  const transfers = event?.type === 'war.resolved' ? event.payload.transfers : [];
+  const payload = event?.type === 'war.resolved' ? event.payload : null;
+  const transfers = payload?.transfers ?? [];
+  if (payload?.terms) {
+    return (
+      <div className="space-y-2 border-l-2 border-grease/70 pl-3">
+        <p className="font-semibold">{outcomeText(model, war)}.</p>
+        <p className="text-sm text-muted">{termsText(model, war, payload.terms)}.</p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-2 border-l-2 border-grease/70 pl-3">
       <p className="font-semibold">{outcomeText(model, war)}.</p>
@@ -215,11 +264,7 @@ function Outcome({ model, war }: { model: CampaignModel; war: WarView }) {
           {playerName(model, transfers[0]!.to)}.
         </p>
       )}
-      {event?.type === 'war.resolved' && event.payload.tokens ? (
-        <p className="text-sm text-muted">
-          {event.payload.tokens} war {event.payload.tokens === 1 ? 'token' : 'tokens'} changed hands.
-        </p>
-      ) : null}
+      {payload?.tokens ? <p className="text-sm text-muted">{tokensText(payload.tokens)} changed hands.</p> : null}
     </div>
   );
 }
@@ -241,15 +286,54 @@ function DefenderAnswer({
   war: WarView;
   onFocusCountry(id: TerritoryId): void;
 }) {
-  const [mode, setMode] = useState<'redirect' | 'tribute' | null>(null);
+  const rules = model.campaign.rules.war;
+  const [mode, setMode] = useState<'raise' | 'redirect' | 'tribute' | null>(null);
   const respond = useWarAction(model, (input: WarResponse) => api.respondToWar(model.campaign.id, war.id, input));
   const active = model.board.wars.find((w) => w.id === war.id);
   const target = model.idx.byId.get(war.targetId)!;
-  const raiseTo = raiseFloor(model.campaign.rules, target.value);
+  const attacker = playerName(model, war.attackerId);
+  const raiseCost = counterCost(model.campaign.rules, 'raise');
+  const redirectCost = counterCost(model.campaign.rules, 'redirect');
   const raisable = active ? canRaise(model.board, active) : false;
+  const raiseChoices = active && rules.raise === 'matched' ? raiseOptions(model.board, active) : [];
+  const raiseTo = active && rules.raise !== 'matched' ? raiseDemand(model.board, active) : 0;
+  const range = matchedRaiseRange(target.value);
   const redirects = active ? redirectOptions(model.board, active) : [];
   const tributes = active ? tributeOptions(model.board, active) : [];
-  const attacker = playerName(model, war.attackerId);
+  const shortOf = (cost: number) => model.tokens < cost;
+  const reserves =
+    war.reserves.length > 0
+      ? ` ${attacker} has set ${valueOf(model.idx, war.reserves)} aside to meet one at once.`
+      : '';
+
+  const raiseLine = (() => {
+    switch (rules.raise) {
+      case 'matched':
+        return raisable
+          ? `put one of your countries worth ${range.min} to ${range.max} into the war. ${attacker} must add at least as much to the stake or withdraw, and if they win they take it too.${reserves}`
+          : `not available: none of your free countries is worth ${range.min} to ${range.max} and within what ${attacker} could still add.`;
+      case 'token':
+        if (!raisable) return 'not available: the stake already meets what a raise would demand.';
+        if (shortOf(raiseCost)) return `not available: it costs ${tokensText(raiseCost)}, and you have none.`;
+        return `demand a stake worth at least ${raiseTo}, for ${tokensText(raiseCost)}, which ${attacker} gets if they raise the stake. If they won't, the war is off and both tokens are spent.${reserves}`;
+      case 'free':
+        return raisable
+          ? `demand a stake worth at least ${raiseTo}. If ${attacker} won't, the war is off and the token is lost.`
+          : 'not available: the stake already meets what a raise would demand.';
+      case 'off':
+        return null;
+    }
+  })();
+  const redirectLine =
+    redirects.length === 0
+      ? rules.redirect === 'nearby'
+        ? `not available: none of your countries worth ${target.value} borders both ${target.name} and ${attacker}, free of other wars.`
+        : `not available: none of your countries worth ${target.value} borders ${attacker} and is free.`
+      : shortOf(redirectCost)
+        ? `not available: it costs ${tokensText(redirectCost)}, and you have none.`
+        : `offer another country worth ${target.value}${rules.redirect === 'nearby' ? ` next to ${target.name}` : ''} that borders ${attacker}. They fight for it or withdraw.` +
+          (rules.redirect === 'nearby' ? ` The war keeps ${target.name}'s clock.` : '') +
+          (redirectCost > 0 ? ` Costs ${tokensText(redirectCost)}, which ${attacker} gets if they fight on.` : '');
 
   return (
     <div className="space-y-3 rounded-[3px] border border-amber/70 bg-amber/5 p-3">
@@ -263,55 +347,79 @@ function DefenderAnswer({
         >
           Accept
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={respond.isPending || !raisable}
-          title={raisable ? undefined : 'The stake already meets what a raise would demand.'}
-          onClick={() => respond.mutate({ response: 'raise' })}
-        >
-          Raise
-        </button>
+        {rules.raise !== 'off' && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-expanded={rules.raise === 'matched' ? mode === 'raise' : undefined}
+            disabled={respond.isPending || !raisable || shortOf(raiseCost)}
+            onClick={() =>
+              rules.raise === 'matched'
+                ? setMode(mode === 'raise' ? null : 'raise')
+                : respond.mutate({ response: 'raise' })
+            }
+          >
+            Raise
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-ghost"
           aria-expanded={mode === 'redirect'}
-          disabled={redirects.length === 0}
+          disabled={redirects.length === 0 || shortOf(redirectCost)}
           onClick={() => setMode(mode === 'redirect' ? null : 'redirect')}
         >
           Redirect
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          aria-expanded={mode === 'tribute'}
-          disabled={tributes.length === 0 && model.tokens === 0}
-          onClick={() => setMode(mode === 'tribute' ? null : 'tribute')}
-        >
-          Pay tribute
-        </button>
+        {!rules.peaceTerms && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-expanded={mode === 'tribute'}
+            disabled={tributes.length === 0 && model.tokens === 0}
+            onClick={() => setMode(mode === 'tribute' ? null : 'tribute')}
+          >
+            Pay tribute
+          </button>
+        )}
       </div>
       <ul className="space-y-1 text-sm text-muted">
         <li>
           <strong className="text-paper">Accept:</strong> play for {target.name}. Win and you take the stake.
         </li>
+        {raiseLine && (
+          <li>
+            <strong className="text-paper">Raise:</strong> {raiseLine}
+          </li>
+        )}
         <li>
-          <strong className="text-paper">Raise:</strong>{' '}
-          {raisable
-            ? `demand a stake worth at least ${raiseTo}. If ${attacker} won't, the war is off and the token is lost.`
-            : 'not available: the stake already meets what a raise would demand.'}
+          <strong className="text-paper">Redirect:</strong> {redirectLine}
         </li>
-        <li>
-          <strong className="text-paper">Redirect:</strong>{' '}
-          {redirects.length > 0
-            ? `offer another country worth ${target.value} that borders ${attacker}. They fight for it or withdraw.`
-            : `not available: none of your countries worth ${target.value} borders ${attacker} and is free.`}
-        </li>
-        <li>
-          <strong className="text-paper">Pay tribute:</strong> offer a country worth less than {target.value}, or
-          tokens. {attacker} can take it or refuse and fight.
-        </li>
+        {rules.peaceTerms ? (
+          <li>
+            <strong className="text-paper">Peace terms:</strong> offer them below, now or at any time until the game
+            ends. Meanwhile this answer is still due.
+          </li>
+        ) : (
+          <li>
+            <strong className="text-paper">Pay tribute:</strong> offer a country worth less than {target.value}, or
+            tokens. {attacker} can take it or refuse and fight.
+          </li>
+        )}
       </ul>
+      {mode === 'raise' && (
+        <ChoiceForm
+          label="Put into the war"
+          options={raiseChoices.map((id) => ({
+            id,
+            label: `${countryName(model, id)} (${model.idx.byId.get(id)?.value})`,
+          }))}
+          submit="Raise"
+          pending={respond.isPending}
+          onPreview={onFocusCountry}
+          onSubmit={(territoryId) => respond.mutate({ response: 'raise', territoryId })}
+        />
+      )}
       {mode === 'redirect' && (
         <ChoiceForm
           label="Redirect to"
@@ -335,6 +443,30 @@ function DefenderAnswer({
         />
       )}
       {respond.error && <Notice tone="error">{errorMessage(respond.error)}</Notice>}
+    </div>
+  );
+}
+
+/** The attacker calls a declaration off before the defender answers. */
+function Recall({ model, war }: { model: CampaignModel; war: WarView }) {
+  const recall = useWarAction(model, () => api.recallWar(model.campaign.id, war.id));
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-[3px] border border-line px-3 py-2">
+      <p className="min-w-0 flex-1 text-sm text-muted">
+        Until {playerName(model, war.defenderId)} answers, you can call the attack off. Your war token stays spent, and
+        no truce follows.
+      </p>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        disabled={recall.isPending}
+        onClick={() => {
+          if (confirm('Call off the attack? Your war token stays spent.')) recall.mutate(undefined);
+        }}
+      >
+        Call off
+      </button>
+      {recall.error && <Notice tone="error">{errorMessage(recall.error)}</Notice>}
     </div>
   );
 }
@@ -482,6 +614,12 @@ function AttackerReply({
     onPreview(draft ? { targetId: war.targetId, ...draft } : null);
     return () => onPreview(null);
   }, [draft, counter.kind, war.targetId, onPreview]);
+  const earns =
+    counter.kind !== 'tribute' && counter.tokens ? (
+      <p className="text-sm text-muted">
+        {playerName(model, war.defenderId)} paid {tokensText(counter.tokens)} for this: fight on and it&apos;s yours.
+      </p>
+    ) : null;
 
   const withdraw = (
     <button
@@ -499,6 +637,7 @@ function AttackerReply({
   return (
     <div className="space-y-3 rounded-[3px] border border-amber/70 bg-amber/5 p-3">
       <div className="font-stencil text-xl tracking-wide text-amber">Your answer</div>
+      {earns}
       {counter.kind === 'raise' &&
         (draft ? (
           <>
@@ -518,7 +657,7 @@ function AttackerReply({
         ) : (
           <>
             <p className="text-[0.95rem]">
-              Your countries connected to {countryName(model, war.launchId)} can't reach {counter.minValue}.
+              Your countries connected to {countryName(model, war.launchId)} can&apos;t reach {counter.minValue}.
             </p>
             {withdraw}
           </>
@@ -561,6 +700,299 @@ function AttackerReply({
   );
 }
 
-/** How long a player has to answer, for help text. */
-export const answerWindow = (model: CampaignModel) =>
-  RESPONSE_WINDOW_MS[model.campaign.rules.war.pace] >= 3_600_000 ? '24 hours' : '5 minutes';
+// ---------------------------------------------------------------------------------------------
+// Peace terms
+
+/** Terms offered to or by the viewer in this war, and a form to offer new ones. */
+function PeacePanel({
+  model,
+  war,
+  onFocusCountry,
+}: {
+  model: CampaignModel;
+  war: WarView;
+  onFocusCountry(id: TerritoryId): void;
+}) {
+  const me = model.me.userId;
+  const other = playerName(model, war.attackerId === me ? war.defenderId : war.attackerId);
+  const open = war.peace.filter((o) => o.status === 'proposed');
+  const mine = open.find((o) => o.proposerId === me);
+  const theirs = open.find((o) => o.recipientId === me);
+  const lastMine = war.peace.find((o) => o.proposerId === me && o.status !== 'proposed' && o.status !== 'accepted');
+  const [composing, setComposing] = useState(false);
+
+  return (
+    <section aria-label="Peace terms" className="space-y-3 rounded-[3px] border border-line p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="label">Peace terms</h3>
+        {!composing && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setComposing(true)}>
+            {mine ? 'Change your offer' : 'Offer terms'}
+          </button>
+        )}
+      </div>
+      {theirs && <OfferToMe model={model} war={war} offer={theirs} />}
+      {mine && <MyOffer model={model} war={war} offer={mine} other={other} />}
+      {!mine && lastMine && (
+        <p className="text-sm text-muted">
+          Your last offer was{' '}
+          {{ declined: 'turned down', withdrawn: 'withdrawn', lapsed: 'left unanswered' }[
+            lastMine.status as 'declined' | 'withdrawn' | 'lapsed'
+          ] ?? lastMine.status}
+          .
+        </p>
+      )}
+      {!theirs && !mine && !composing && (
+        <p className="text-sm text-muted">
+          Either of you can offer terms until the game ends: countries or war tokens either way, or nothing at all, and
+          an accord. Nobody else learns of an offer unless it&apos;s accepted.
+        </p>
+      )}
+      {composing && (
+        <PeaceForm model={model} war={war} onFocusCountry={onFocusCountry} onDone={() => setComposing(false)} />
+      )}
+    </section>
+  );
+}
+
+function OfferToMe({ model, war, offer }: { model: CampaignModel; war: WarView; offer: PeaceOfferView }) {
+  const now = useNow(1000);
+  const answer = useWarAction(model, (a: 'accept' | 'decline') =>
+    api.answerPeace(model.campaign.id, war.id, offer.id, a),
+  );
+  const proposer = playerName(model, offer.proposerId);
+  return (
+    <div className="space-y-2 rounded-[3px] border border-amber/70 bg-amber/5 p-3">
+      <p className="text-[0.95rem]">
+        <strong>{proposer} offers peace:</strong> {termsText(model, war, offer.terms)}.
+      </p>
+      <p className="text-sm text-muted">
+        {war.status === 'playing' ? 'Your next move in the game turns it down. ' : ''}
+        {offer.respondBy ? `It lapses in ${timeLeft(Date.parse(offer.respondBy) - now)}.` : ''}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={answer.isPending}
+          onClick={() => {
+            if (confirm('Accept these terms? The war ends on them at once.')) answer.mutate('accept');
+          }}
+        >
+          Accept terms
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={answer.isPending}
+          onClick={() => answer.mutate('decline')}
+        >
+          Turn down
+        </button>
+      </div>
+      {answer.error && <Notice tone="error">{errorMessage(answer.error)}</Notice>}
+    </div>
+  );
+}
+
+function MyOffer({
+  model,
+  war,
+  offer,
+  other,
+}: {
+  model: CampaignModel;
+  war: WarView;
+  offer: PeaceOfferView;
+  other: string;
+}) {
+  const withdraw = useWarAction(model, () => api.withdrawPeace(model.campaign.id, war.id, offer.id));
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <p className="min-w-0 flex-1 text-[0.95rem]">
+        <strong>You offered:</strong> {termsText(model, war, offer.terms)}. Waiting for {other}.
+      </p>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        disabled={withdraw.isPending}
+        onClick={() => withdraw.mutate(undefined)}
+      >
+        Withdraw
+      </button>
+      {withdraw.error && <Notice tone="error">{errorMessage(withdraw.error)}</Notice>}
+    </div>
+  );
+}
+
+/**
+ * Composes peace terms: staked countries from the attacker; the target (and a country a raise put
+ * in), or one cheaper country instead, from the defender; tokens one way; and an accord.
+ */
+function PeaceForm({
+  model,
+  war,
+  onFocusCountry,
+  onDone,
+}: {
+  model: CampaignModel;
+  war: WarView;
+  onFocusCountry(id: TerritoryId): void;
+  onDone(): void;
+}) {
+  const me = model.me.userId;
+  const attacking = war.attackerId === me;
+  const otherId = attacking ? war.defenderId : war.attackerId;
+  const other = playerName(model, otherId);
+  const active = model.board.wars.find((w) => w.id === war.id);
+  const allowed = useMemo(
+    () => (active ? peaceCountries(model.board, active) : { fromAttacker: [], fromDefender: [], tribute: [] }),
+    [active, model.board],
+  );
+  const [toDefender, setToDefender] = useState<TerritoryId[]>([]);
+  const [fromDefender, setFromDefender] = useState<TerritoryId[]>([]);
+  const [tribute, setTribute] = useState<TerritoryId | ''>('');
+  // Positive: the viewer pays; negative: the viewer asks.
+  const [tokens, setTokens] = useState(0);
+  const [accord, setAccord] = useState<number | null>(null);
+  const offer = useWarAction(model, (terms: PeaceTerms) => api.offerPeace(model.campaign.id, war.id, terms));
+  const tokensOf = (userId: string) => model.membersById.get(userId)?.tokens ?? 0;
+  const mineTokens = Math.min(tokensOf(me), PEACE_MAX_TOKENS);
+  const theirTokens = Math.min(tokensOf(otherId), PEACE_MAX_TOKENS);
+
+  const pays = tokens > 0 ? tokens : 0;
+  const asks = tokens < 0 ? -tokens : 0;
+  const terms: PeaceTerms = {
+    toAttacker: tribute ? [tribute] : fromDefender,
+    toDefender,
+    tokensToAttacker: attacking ? asks : pays,
+    tokensToDefender: attacking ? pays : asks,
+    accordRounds: accord,
+  };
+  const issue = active
+    ? peaceIssue(model.board, active, terms, { attacker: tokensOf(war.attackerId), defender: tokensOf(war.defenderId) })
+    : 'off';
+  const toggle = (list: TerritoryId[], id: TerritoryId) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  const label = (id: TerritoryId) => `${countryName(model, id)} (${model.idx.byId.get(id)?.value})`;
+  const attackerName = attacking ? 'You' : playerName(model, war.attackerId);
+  const defenderName = attacking ? other : 'You';
+  const tokensId = useId();
+  const accordId = useId();
+  const tributeId = useId();
+
+  const checkbox = (id: TerritoryId, checked: boolean, onChange: () => void) => (
+    <label key={id} className="flex min-h-11 cursor-pointer items-center gap-2">
+      <input type="checkbox" className="size-4 accent-amber" checked={checked} onChange={onChange} />
+      <span>{label(id)}</span>
+      <button type="button" className="text-sm text-muted underline" onClick={() => onFocusCountry(id)}>
+        Show
+      </button>
+    </label>
+  );
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (issue) return;
+        offer.mutate(terms, { onSuccess: onDone });
+      }}
+    >
+      <fieldset>
+        <legend className="label mb-1">
+          {attackerName} hand{attacking ? '' : 's'} over, from the stake
+        </legend>
+        {allowed.fromAttacker.map((id) =>
+          checkbox(id, toDefender.includes(id), () => setToDefender(toggle(toDefender, id))),
+        )}
+      </fieldset>
+      <fieldset>
+        <legend className="label mb-1">
+          {defenderName} hand{attacking ? 's' : ''} over
+        </legend>
+        {allowed.fromDefender.map((id) =>
+          checkbox(id, !tribute && fromDefender.includes(id), () => {
+            setTribute('');
+            setFromDefender(toggle(fromDefender, id));
+          }),
+        )}
+        {allowed.tribute.length > 0 && (
+          <label className="mt-1 block" htmlFor={tributeId}>
+            <span className="text-sm text-muted">
+              or instead one country worth less than {countryName(model, war.targetId)}:
+            </span>
+            <select
+              id={tributeId}
+              className="input mt-1"
+              value={tribute}
+              onChange={(e) => {
+                setTribute(e.target.value);
+                setFromDefender([]);
+                if (e.target.value) onFocusCountry(e.target.value);
+              }}
+            >
+              <option value="">None</option>
+              {allowed.tribute.map((id) => (
+                <option key={id} value={id}>
+                  {label(id)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </fieldset>
+      <div className="grid grid-cols-2 gap-2">
+        <label htmlFor={tokensId}>
+          <span className="label mb-1 block">War tokens</span>
+          <select id={tokensId} className="input" value={tokens} onChange={(e) => setTokens(Number(e.target.value))}>
+            <option value={0}>None</option>
+            {Array.from({ length: mineTokens }, (_, i) => i + 1).map((n) => (
+              <option key={`pay${n}`} value={n}>
+                You pay {n}
+              </option>
+            ))}
+            {Array.from({ length: theirTokens }, (_, i) => i + 1).map((n) => (
+              <option key={`ask${n}`} value={-n}>
+                {other} pays {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor={accordId}>
+          <span className="label mb-1 block">Accord</span>
+          <select
+            id={accordId}
+            className="input"
+            value={accord ?? 0}
+            onChange={(e) => setAccord(Number(e.target.value) || null)}
+          >
+            <option value={0}>None</option>
+            {Array.from({ length: ACCORD_MAX_ROUNDS - ACCORD_MIN_ROUNDS + 1 }, (_, i) => i + ACCORD_MIN_ROUNDS).map(
+              (n) => (
+                <option key={n} value={n}>
+                  {n} {n === 1 ? 'round' : 'rounds'}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+      </div>
+      <p className="text-[0.95rem]">
+        <span className="label mr-2">Terms</span>
+        {termsText(model, war, terms)}.
+      </p>
+      {issue && issue !== 'off' && <p className="text-sm text-amber">{PEACE_REJECTION_MESSAGES[issue]}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="btn btn-amber" disabled={issue !== null || offer.isPending}>
+          Offer these terms
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+      {offer.error && <Notice tone="error">{errorMessage(offer.error)}</Notice>}
+    </form>
+  );
+}

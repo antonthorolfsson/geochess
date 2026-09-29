@@ -98,3 +98,16 @@ export async function listen(app: FastifyInstance, c: Client): Promise<{ message
 }
 
 export const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The original game's answers to a declaration (a free raise, redirects anywhere, tribute), which
+ * campaigns stored before the revised answers still play: for tests of those rules.
+ */
+export const ORIGINAL_ANSWERS = {
+  raise: 'free',
+  redirect: 'anywhere',
+  redirectToken: false,
+  fortify: false,
+  peaceTerms: false,
+  recall: false,
+} as const;

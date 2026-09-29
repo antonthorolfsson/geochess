@@ -223,6 +223,7 @@ export async function loadOpenWars(db: Tx | Db, campaignId: string): Promise<Ope
     stake: w.stake,
     status: w.status,
     counter: w.counter,
+    reserves: w.reserves,
   }));
 }
 

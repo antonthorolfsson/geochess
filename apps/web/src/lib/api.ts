@@ -13,6 +13,7 @@ import type {
   MeResponse,
   MessageView,
   MessagesPage,
+  PeaceTerms,
   ProposeAccordInput,
   PublicMissionKind,
   SendMessageInput,
@@ -104,6 +105,15 @@ export const api = {
   war: (id: string, warId: string) => request<WarView>('GET', `/campaigns/${id}/wars/${warId}`),
   replyToWar: (id: string, warId: string, input: WarReply) =>
     request('POST', `/campaigns/${id}/wars/${warId}/reply`, input),
+  recallWar: (id: string, warId: string) => request('POST', `/campaigns/${id}/wars/${warId}/recall`),
+  offerPeace: (id: string, warId: string, terms: PeaceTerms) =>
+    request<{ id: string }>('POST', `/campaigns/${id}/wars/${warId}/peace`, { terms }),
+  answerPeace: (id: string, warId: string, offerId: string, answer: 'accept' | 'decline') =>
+    request('POST', `/campaigns/${id}/wars/${warId}/peace/${offerId}/answer`, { answer }),
+  withdrawPeace: (id: string, warId: string, offerId: string) =>
+    request('POST', `/campaigns/${id}/wars/${warId}/peace/${offerId}/withdraw`),
+  fortify: (id: string, territoryId: string) =>
+    request<{ untilRound: number }>('POST', `/campaigns/${id}/fortify`, { territoryId }),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
 
   proposeAccord: (id: string, input: ProposeAccordInput) =>

@@ -14,7 +14,9 @@ import {
   frontier,
   heldBy,
   leadersAt,
+  pathThrough,
   pathWithin,
+  pointsAt,
   roundAt,
   routeTo,
   statOfSet,
@@ -128,9 +130,9 @@ function evaluatorFor(spec: MissionSpec): Evaluator {
     case 'regional_power':
       return { check: (s) => regionalPower(s, spec) };
     case 'strategic_positions':
-      return { check: (s) => ownCount(s, spec.territories, spec.need, 'Positions held') };
+      return { check: (s) => withConquest(s, spec, ownCount(s, spec.territories, spec.need, 'Positions held')) };
     case 'great_connection':
-      return { check: (s) => connection(s, spec.endpoints, 'Endpoints held') };
+      return { check: (s) => connection(s, spec.endpoints, 'Endpoints held', spec.needsConquest) };
     case 'campaign_veteran':
       return { check: (s) => veteran(s, spec) };
     case 'great_powers':
@@ -152,7 +154,7 @@ function evaluatorFor(spec: MissionSpec): Evaluator {
     case 'seven_wonders':
       return { check: (s) => sevenWonders(s, spec) };
     case 'kingslayer':
-      return { check: (s) => kingslayer(s) };
+      return { check: (s) => kingslayer(s, spec) };
     case 'lightning_campaign':
       return { check: (s) => lightningCampaign(s, spec) };
     case 'northern_passage':
@@ -261,13 +263,25 @@ function measuredExpansion(s: Scope, spec: SpecOf<'measured_expansion'>): Check 
   return { complete: allDone(parts), parts, evidence: { territories: sorted(s.fresh) } };
 }
 
+/**
+ * A position that counts only with at least one of its countries (the evidence) won since the
+ * draft, when the spec asks for it. Holding more of the position never hurts, so the countries
+ * held are the position.
+ */
+function withConquest(s: Scope, spec: { needsConquest?: boolean }, check: Check): Check {
+  if (!spec.needsConquest) return check;
+  const won = check.evidence.territories.filter((id) => s.fresh.has(id)).length;
+  const parts = [...check.parts, part('Of them won since the draft', won, 1)];
+  return { ...check, complete: allDone(parts), parts };
+}
+
 function regionalPower(s: Scope, spec: SpecOf<'regional_power'>): Check {
   const held = spec.territories.filter((id) => s.held.has(id)).sort();
   const parts = [
     part(`Value held in ${spec.region}`, valueOfSet(s.world.idx, held), spec.needValue),
     part(`Countries held in ${spec.region}`, held.length, spec.minTerritories),
   ];
-  return { complete: allDone(parts), parts, evidence: { territories: held } };
+  return withConquest(s, spec, { complete: allDone(parts), parts, evidence: { territories: held } });
 }
 
 function ownCount(s: Scope, targets: readonly TerritoryId[], need: number, label: string): Check {
@@ -360,7 +374,7 @@ function mareNostrum(s: Scope, spec: SpecOf<'mare_nostrum'>): Check {
     part('Mediterranean countries held', held.length, spec.need),
     ...spec.shores.map((shore) => part(`Held on the ${shore.name} shore`, heldOn(shore).length, spec.perShore)),
   ];
-  return { complete: allDone(parts), parts, evidence: { territories: held } };
+  return withConquest(s, spec, { complete: allDone(parts), parts, evidence: { territories: held } });
 }
 
 /** A real-world figure summed over the countries won since the draft, and still held. */
@@ -413,18 +427,32 @@ function nemesis(s: Scope, spec: SpecOf<'nemesis'>): Check {
 // ---------------------------------------------------------------------------------------------
 // Routes and blocks
 
-/** Both ends held and joined through the player's countries; otherwise the best route still open. */
-function connection(s: Scope, [a, b]: readonly [TerritoryId, TerritoryId], endsLabel: string): Check {
+/**
+ * Both ends held and joined through the player's countries (with `needsConquest`, by a chain
+ * through a country won since the draft); otherwise the best route still open.
+ */
+function connection(
+  s: Scope,
+  [a, b]: readonly [TerritoryId, TerritoryId],
+  endsLabel: string,
+  needsConquest = false,
+): Check {
   const idx = s.world.idx;
   const ends = [a, b].filter((id) => s.held.has(id)).length;
+  const wonOn = (ids: readonly TerritoryId[]) =>
+    part('Countries won since the draft on it', ids.filter((id) => s.fresh.has(id)).length, 1);
   const chain = pathWithin(idx, s.held, a, b);
   if (chain) {
-    const parts = [part(endsLabel, 2, 2), part('Countries held on the route', chain.length, chain.length)];
-    return { complete: true, parts, evidence: { territories: chain, path: chain } };
+    const through = needsConquest ? pathThrough(idx, s.held, a, b, s.fresh) : chain;
+    const shown = through ?? chain;
+    const parts = [part(endsLabel, 2, 2), part('Countries held on the route', shown.length, shown.length)];
+    if (needsConquest) parts.push(wonOn(through ?? []));
+    return { complete: through !== null, parts, evidence: { territories: shown, path: shown } };
   }
   const route = routeTo(captureCosts(idx, s.held, { sources: [a] }), b);
   const onRoute = route.filter((id) => s.held.has(id));
   const parts = [part(endsLabel, ends, 2), part('Countries held on the best route', onRoute.length, route.length || 1)];
+  if (needsConquest) parts.push(wonOn(onRoute));
   return { complete: false, parts, evidence: { territories: onRoute, path: route } };
 }
 
@@ -474,7 +502,7 @@ function straitKeeper(s: Scope, spec: SpecOf<'strait_keeper'>): Check {
 }
 
 function continentalBridge(s: Scope, spec: SpecOf<'continental_bridge'>): Check {
-  let best = { continents: 0, block: [] as TerritoryId[] };
+  let best: { parts: ProgressPart[]; complete: boolean; block: TerritoryId[] } | null = null;
   for (const block of components(s.world.idx, s.held)) {
     const perContinent = new Map<Continent, number>();
     for (const id of block) {
@@ -482,12 +510,28 @@ function continentalBridge(s: Scope, spec: SpecOf<'continental_bridge'>): Check 
       if (c) perContinent.set(c, (perContinent.get(c) ?? 0) + 1);
     }
     const spanned = [...perContinent.values()].filter((n) => n >= spec.perContinent).length;
-    if (spanned > best.continents) best = { continents: spanned, block };
+    const parts = [
+      part(`Continents with ${spec.perContinent}+ countries in one connected block`, spanned, spec.continents),
+    ];
+    if (spec.needsConquest) {
+      parts.push(part('Countries won since the draft in it', block.filter((id) => s.fresh.has(id)).length, 1));
+    }
+    const complete = allDone(parts);
+    // The block that completes it, else the one spanning most continents, then the one with most won.
+    const better =
+      !best ||
+      (complete && !best.complete) ||
+      (complete === best.complete &&
+        (parts[0]!.have > best.parts[0]!.have ||
+          (parts[0]!.have === best.parts[0]!.have && (parts[1]?.have ?? 0) > (best.parts[1]?.have ?? 0))));
+    if (better) best = { parts, complete, block };
   }
-  const parts = [
-    part(`Continents with ${spec.perContinent}+ countries in one connected block`, best.continents, spec.continents),
-  ];
-  return { complete: allDone(parts), parts, evidence: { territories: best.block } };
+  if (!best) {
+    const parts = [part(`Continents with ${spec.perContinent}+ countries in one connected block`, 0, spec.continents)];
+    if (spec.needsConquest) parts.push(part('Countries won since the draft in it', 0, 1));
+    return { complete: false, parts, evidence: { territories: [] } };
+  }
+  return { complete: best.complete, parts: best.parts, evidence: { territories: best.block } };
 }
 
 /** Every way of choosing `k` of `items`, in order. */
@@ -610,16 +654,23 @@ function isWin(war: MissionWorld['history']['wars'][number], userId: UserId): bo
 }
 
 function veteran(s: Scope, spec: SpecOf<'campaign_veteran'>): Check {
-  const wins = s.world.history.wars.filter((w) => isWin(w, s.userId));
+  const wins = s.world.history.wars.filter(
+    (w) => isWin(w, s.userId) && (!spec.attackOnly || w.attackerId === s.userId),
+  );
   const opponents = new Set(wins.map((w) => (w.attackerId === s.userId ? w.defenderId : w.attackerId)));
   const attacking = wins.filter((w) => w.attackerId === s.userId).length;
-  // With two players there is only one opponent to beat.
+  // Nobody can beat more opponents than there are: with two players there is only one.
   const opponentsNeeded = Math.min(spec.opponents, Math.max(1, s.world.players.length - 1));
-  const parts = [
-    part('Wars won', wins.length, spec.wins),
-    part('Different opponents beaten', opponents.size, opponentsNeeded),
-    part('Won as the attacker', attacking, spec.attackWins),
-  ];
+  const parts = spec.attackOnly
+    ? [
+        part('Wars won as the attacker', wins.length, spec.wins),
+        part('Different opponents beaten', opponents.size, opponentsNeeded),
+      ]
+    : [
+        part('Wars won', wins.length, spec.wins),
+        part('Different opponents beaten', opponents.size, opponentsNeeded),
+        part('Won as the attacker', attacking, spec.attackWins),
+      ];
   return { complete: allDone(parts), parts, evidence: { territories: [], wars: wins.map((w) => w.id) } };
 }
 
@@ -629,12 +680,25 @@ const warEvidence = (wars: readonly MissionWar[]): MissionEvidence => ({
   wars: wars.map((w) => w.id),
 });
 
-function kingslayer(s: Scope): Check {
-  const wins = s.world.history.wars.filter((w) => {
-    if (w.attackerId !== s.userId || w.outcome !== 'attacker') return false;
-    const leaders = leadersAt(s.world, w.declaredSeq);
-    return leaders.includes(w.defenderId) && !leaders.includes(s.userId);
-  });
+/**
+ * Whether a war was declared on the leader of the race by someone trailing: without a `lead`, the
+ * leader on points, then value; with one, on points alone, at least `lead` points ahead.
+ */
+function declaredOnLeader(world: MissionWorld, war: MissionWar, lead: number | undefined): boolean {
+  if (lead === undefined) {
+    const leaders = leadersAt(world, war.declaredSeq);
+    return leaders.includes(war.defenderId) && !leaders.includes(war.attackerId);
+  }
+  const points = pointsAt(world, war.declaredSeq);
+  const top = Math.max(0, ...points.values());
+  const theirs = points.get(war.defenderId) ?? 0;
+  return theirs === top && theirs >= (points.get(war.attackerId) ?? 0) + lead;
+}
+
+function kingslayer(s: Scope, spec: SpecOf<'kingslayer'>): Check {
+  const wins = s.world.history.wars.filter(
+    (w) => w.attackerId === s.userId && w.outcome === 'attacker' && declaredOnLeader(s.world, w, spec.lead),
+  );
   const parts = [part('Wars won against the leader', wins.length, 1)];
   return { complete: allDone(parts), parts, evidence: warEvidence(wins) };
 }
@@ -685,25 +749,34 @@ function betrayals(s: Scope): Betrayal[] {
 
 function backstab(s: Scope, spec: SpecOf<'backstab'>): Check {
   const broken = betrayals(s);
-  // A war declared on a betrayed partner after the break and within the rounds allowed, that took
-  // a country from them (won, or paid as tribute).
-  const strikes = s.world.history.wars.filter(
-    (w) =>
-      w.attackerId === s.userId &&
-      w.transfers.some((t) => t.from === w.defenderId && t.to === s.userId) &&
-      broken.some(
-        (b) => b.partner === w.defenderId && w.declaredSeq > b.seq && w.declaredRound <= b.round + spec.rounds,
+  const need = spec.count ?? 1;
+  // For each break, the wars declared on that partner after it and within the rounds allowed that
+  // took countries from them (won, or paid as tribute). The best break counts.
+  let best: { wars: MissionWar[]; taken: Set<TerritoryId> } = { wars: [], taken: new Set() };
+  for (const b of broken) {
+    const wars = s.world.history.wars.filter(
+      (w) =>
+        w.attackerId === s.userId &&
+        w.defenderId === b.partner &&
+        w.declaredSeq > b.seq &&
+        w.declaredRound <= b.round + spec.rounds &&
+        w.transfers.some((t) => t.from === b.partner && t.to === s.userId),
+    );
+    const taken = new Set(
+      wars.flatMap((w) =>
+        w.transfers.filter((t) => t.from === b.partner && t.to === s.userId).map((t) => t.territoryId),
       ),
-  );
+    );
+    if (taken.size > best.taken.size) best = { wars, taken };
+  }
   const parts = [
     part('Accords broken', broken.length, 1),
-    part('Countries taken from a betrayed partner in time', strikes.length, 1),
+    part('Countries taken from a betrayed partner in time', best.taken.size, need),
   ];
-  const taken = strikes.flatMap((w) => w.transfers.filter((t) => t.to === s.userId).map((t) => t.territoryId));
   return {
     complete: allDone(parts),
     parts,
-    evidence: { territories: sorted(new Set(taken)), wars: strikes.map((w) => w.id) },
+    evidence: { territories: sorted(best.taken), wars: best.wars.map((w) => w.id) },
   };
 }
 

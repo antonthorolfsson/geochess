@@ -301,12 +301,21 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (message.type !== 'campaign.events' || message.campaignId !== campaign.id) return;
     const current = modelRef.current;
     const warById = (warId: string) => current.campaign.wars.find((w) => w.id === warId);
+    // A raise met at once from reserves is answered in the same change.
+    const replied = new Set(message.events.flatMap((e) => (e.type === 'war.reply' ? [e.payload.warId] : [])));
     for (const e of message.events) {
       if (e.type === 'war.declared' && e.payload.defenderId === me) {
         setToast(`War declared on ${countryName(current, e.payload.targetId)}`);
         navigator.vibrate?.([80, 60, 80]);
-      } else if (e.type === 'war.response' && e.payload.counter && warById(e.payload.warId)?.attackerId === me) {
+      } else if (
+        e.type === 'war.response' &&
+        e.payload.counter &&
+        !replied.has(e.payload.warId) &&
+        warById(e.payload.warId)?.attackerId === me
+      ) {
         setToast('Your attack needs an answer');
+      } else if (e.type === 'war.recalled' && warById(e.payload.warId)?.defenderId === me) {
+        setToast(`${playerName(current, e.actorId ?? '')} called off the attack`);
       } else if (e.type === 'war.started' && (e.payload.whiteId === me || e.payload.blackId === me)) {
         setToast('Battle stations');
         navigator.vibrate?.(120);
@@ -328,14 +337,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             : `${playerName(current, e.payload.userId)}’s secret: ${missionName(e.payload.mission)}`,
         );
       } else if (e.type === 'claim.started') {
-        const mission = missionName({ kind: e.payload.kind });
+        const mission = missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version);
         setToast(
           e.payload.userId === me
             ? `Claim started: ${mission}`
             : `${playerName(current, e.payload.userId)} claims ${mission}`,
         );
       } else if (e.type === 'claim.interrupted' && e.payload.userId === me) {
-        setToast(`Claim lost: ${missionName({ kind: e.payload.kind })}`);
+        setToast(`Claim lost: ${missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version)}`);
       } else if (e.type === 'mission.awarded' && e.payload.userId === me) {
         setToast(`+${e.payload.points} victory points`);
         navigator.vibrate?.(120);
@@ -362,6 +371,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     const fresh = seenProposals.current && model.proposalsToMe.find((a) => !seenProposals.current!.has(a.id));
     if (fresh) setToast(`${playerName(model, fresh.proposerId)} proposes an accord`);
     seenProposals.current = ids;
+  }, [model]);
+  // Peace terms too: only the two players at war hear of them.
+  const seenPeace = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set(model.peaceToMe.map(({ offer }) => offer.id));
+    const fresh = seenPeace.current && model.peaceToMe.find(({ offer }) => !seenPeace.current!.has(offer.id));
+    if (fresh) setToast(`${playerName(model, fresh.offer.proposerId)} offers peace`);
+    seenPeace.current = ids;
   }, [model]);
   // Results arrive with a refetch, so the war's outcome is in the model by then.
   const lastResolved = useRef<string | null>(null);
@@ -459,6 +476,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (!isDesktop) setTab('wars');
   };
 
+  const fortifiedIds = useMemo(() => Object.keys(model.campaign.fortified), [model.campaign.fortified]);
   const mapWars: MapWar[] = useMemo(
     () =>
       model.activeWars.map((w) => ({
@@ -520,7 +538,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   );
   // Badges: amber when something needs the player, plain for unread channel messages and for
   // rivals' claims waiting to score.
-  const warsNeedMe = model.awaitingMe.length + myMoves;
+  const warsNeedMe = new Set([...model.awaitingMe, ...model.peaceToMe.map(({ war }) => war)]).size + myMoves;
   const diploNeedsMe = model.proposalsToMe.length + unread.direct;
   const rivalsClaiming = objectives ? rivalClaims(model).length : 0;
   const leftPanel =
@@ -603,6 +621,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             initialFrame={initialFrame}
             bottomInset={isDesktop ? 0 : sheetHeight}
             listed={model.draftListOpen ? model.campaign.myDraftList : undefined}
+            fortified={fortifiedIds}
             wars={mapWars}
             onSelectWar={showWar}
             preview={preview}
@@ -798,8 +817,9 @@ function CampaignHeader({
     draft: campaign.draft ? `Draft · Round ${campaign.draft.round} of ${model.totalRounds}` : 'Draft',
     selection: 'Draft over · choosing secret missions',
     active:
-      `Round ${campaign.round} · ${model.tokens} war ${model.tokens === 1 ? 'token' : 'tokens'}` +
-      (victory ? ` · ${myPoints} of ${victory.pointsToWin} VP` : ''),
+      `Round ${campaign.round}${victory?.lastRound ? ` of ${victory.lastRound}` : ''} · ${model.tokens} war ${
+        model.tokens === 1 ? 'token' : 'tokens'
+      }` + (victory ? ` · ${myPoints} of ${victory.pointsToWin} VP` : ''),
     finished:
       winners.length > 0
         ? `Finished · ${winners.join(' and ')} ${winners.length > 1 ? 'share it' : 'won'}`

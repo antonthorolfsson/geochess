@@ -10,7 +10,9 @@ import { reachableWithin } from '../graph';
 import type { WarStatus } from '../protocol';
 import {
   activeWar,
+  addedCountry,
   canRaise,
+  raiseOptions,
   redirectOptions,
   stakeableCountries,
   tributeOptions,
@@ -32,6 +34,8 @@ export interface OpenWar {
   stake: readonly TerritoryId[];
   status: WarStatus;
   counter: WarCounter | null;
+  /** Countries the attacker set aside to meet a raise. */
+  reserves?: readonly TerritoryId[];
 }
 
 const key = (transfers: readonly Transfer[]) =>
@@ -44,12 +48,15 @@ const key = (transfers: readonly Transfer[]) =>
  * Every way an unresolved war could still end, as the countries that would change hands (the empty
  * list when nothing does: a draw, a withdrawal, tokens as tribute). Open answers count every
  * option the rules allow, since the player choosing could pick any of them:
- * - declared: the defender may accept, raise, redirect to any legal country or offer any legal tribute;
+ * - declared: the defender may accept, raise (putting in any country a matched raise allows),
+ *   redirect to any legal country or offer any legal tribute;
  * - countered: the attacker may accept or refuse the offer on the table;
  * - a raised stake may be anything the attacker could stake from the launching country.
+ * Peace terms don't count: they need both players to agree, the claimant among them.
  */
 export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
-  const take = (id: TerritoryId): Transfer[] => [{ territoryId: id, from: war.defenderId, to: war.attackerId }];
+  const take = (...ids: TerritoryId[]): Transfer[] =>
+    ids.map((id) => ({ territoryId: id, from: war.defenderId, to: war.attackerId }));
   const lose = (ids: Iterable<TerritoryId>): Transfer[] =>
     [...ids].map((id) => ({ territoryId: id, from: war.attackerId, to: war.defenderId }));
   const raisedStake = () => reachableWithin(board.idx, war.launchId, stakeableCountries(board, war.attackerId, war.id));
@@ -58,13 +65,17 @@ export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
 
   switch (war.status) {
     case 'ready':
-    case 'playing':
-      fight(war.targetId);
+    case 'playing': {
+      // A met matched raise put another of the defender's countries at stake.
+      const added = addedCountry(war.counter);
+      out.push(added ? take(war.targetId, added) : take(war.targetId), lose(war.stake));
       break;
+    }
     case 'countered': {
       const counter = war.counter;
-      if (counter?.kind === 'raise') out.push(take(war.targetId), lose(raisedStake()));
-      else if (counter?.kind === 'redirect') fight(counter.targetId);
+      if (counter?.kind === 'raise') {
+        out.push(counter.added ? take(war.targetId, counter.added) : take(war.targetId), lose(raisedStake()));
+      } else if (counter?.kind === 'redirect') fight(counter.targetId);
       else {
         if (counter?.territoryId) out.push(take(counter.territoryId));
         fight(war.targetId);
@@ -74,7 +85,10 @@ export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
     case 'declared': {
       const active = activeWar(war);
       fight(war.targetId);
-      if (canRaise(board, active)) out.push(lose(raisedStake()));
+      if (canRaise(board, active)) {
+        out.push(lose(raisedStake()));
+        for (const id of raiseOptions(board, active)) out.push(take(war.targetId, id));
+      }
       for (const id of redirectOptions(board, active)) out.push(take(id));
       for (const id of tributeOptions(board, active)) out.push(take(id));
       break;

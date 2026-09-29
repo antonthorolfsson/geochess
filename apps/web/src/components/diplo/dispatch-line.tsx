@@ -1,9 +1,10 @@
 'use client';
 
-import { missionName, type EventView, type TerritoryId, type WarView } from '@empire/rules';
+import { missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { requirementText } from '@/lib/victory';
+import { termsText, tokensText } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
@@ -11,7 +12,7 @@ const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 /** How a dispatch sits in the feed: wars in grease pencil, accords on paper, missions in amber, the rest plain. */
 export function dispatchTone(type: EventView['type']): 'war' | 'accord' | 'broken' | 'mission' | 'plain' {
   if (type === 'accord.broken') return 'broken';
-  if (type.startsWith('war.')) return 'war';
+  if (type.startsWith('war.') || type === 'country.fortified') return 'war';
   if (type.startsWith('accord.') || type.startsWith('reputation.')) return 'accord';
   if (type.startsWith('mission') || type.startsWith('claim.') || type === 'campaign.won') return 'mission';
   return 'plain';
@@ -31,6 +32,7 @@ export function DispatchLine({
 }) {
   const name = (userId: string | null) =>
     userId ? (model.membersById.get(userId)?.name ?? 'A former player') : 'Someone';
+  const version = model.campaign.rules.victory.version;
   const country = (id: TerritoryId) => (
     <button
       type="button"
@@ -62,11 +64,27 @@ export function DispatchLine({
         <strong>Round {event.payload.round} began. War tokens refilled.</strong>
       );
     case 'war.declared': {
-      const { attackerId, defenderId, targetId, stake } = event.payload;
+      const { attackerId, defenderId, targetId, stake, reserves } = event.payload;
       return (
         <span className="text-[#ef7b72]">
           {name(attackerId)} declared war on {name(defenderId)} for {country(targetId)}, staking{' '}
-          {stake.map((id) => model.idx.byId.get(id)?.name ?? id).join(', ')}.
+          {stake.map((id) => model.idx.byId.get(id)?.name ?? id).join(', ')}
+          {reserves?.length ? `, with ${valueOf(model.idx, reserves)} in reserve to meet a raise` : ''}.
+        </span>
+      );
+    }
+    case 'war.recalled': {
+      const war = warOf(event.payload.warId);
+      return warLine(
+        event.payload.warId,
+        `${name(war?.attackerId ?? event.actorId)} called off the attack on ${targetName(event.payload.warId)} before an answer.`,
+      );
+    }
+    case 'country.fortified': {
+      const { userId, territoryId, untilRound } = event.payload;
+      return (
+        <span>
+          {name(userId)} fortified {country(territoryId)} until round {untilRound}.
         </span>
       );
     }
@@ -82,10 +100,22 @@ export function DispatchLine({
             : `${defender} accepted the war for ${targetName(warId)}.`,
         );
       }
-      if (counter?.kind === 'raise')
-        return warLine(warId, `${defender} raised the stakes: at least ${counter.minValue}.`);
+      const paid =
+        counter && counter.kind !== 'tribute' && counter.tokens ? `, paying ${tokensText(counter.tokens)}` : '';
+      if (counter?.kind === 'raise') {
+        if (counter.added) {
+          return warLine(
+            warId,
+            `${defender} raised the stakes, putting ${model.idx.byId.get(counter.added)?.name ?? counter.added} into the war: the stake must reach ${counter.minValue}.`,
+          );
+        }
+        return warLine(warId, `${defender} raised the stakes: at least ${counter.minValue}${paid}.`);
+      }
       if (counter?.kind === 'redirect') {
-        return warLine(warId, `${defender} redirected the attack to ${model.idx.byId.get(counter.targetId)?.name}.`);
+        return warLine(
+          warId,
+          `${defender} redirected the attack to ${model.idx.byId.get(counter.targetId)?.name}${paid}.`,
+        );
       }
       if (counter?.kind === 'tribute') {
         const what = counter.territoryId
@@ -96,9 +126,10 @@ export function DispatchLine({
       return null;
     }
     case 'war.reply': {
-      const { warId, reply, auto } = event.payload;
+      const { warId, reply, auto, fromReserves } = event.payload;
       const war = warOf(warId);
       const attacker = name(war?.attackerId ?? event.actorId);
+      if (fromReserves) return warLine(warId, `${attacker}'s reserves met the raise.`);
       if (reply === 'withdraw') {
         return warLine(warId, auto ? `No answer from ${attacker}: the attack is called off.` : `${attacker} withdrew.`);
       }
@@ -117,15 +148,18 @@ export function DispatchLine({
       );
     }
     case 'war.resolved': {
-      const { warId, outcome, transfers, tokens } = event.payload;
+      const { warId, outcome, transfers, tokens, terms } = event.payload;
       const war = warOf(warId);
       const target = targetName(warId);
       const taken = transfers.map((t) => model.idx.byId.get(t.territoryId)?.name ?? t.territoryId).join(', ');
       const text = {
-        attacker: `${name(war?.attackerId ?? null)} took ${target}.`,
+        attacker: `${name(war?.attackerId ?? null)} took ${transfers.length > 1 ? taken : target}.`,
         defender: `${name(war?.defenderId ?? null)} held ${target} and took ${taken}.`,
         held: `${target} held: the battle was drawn.`,
         tribute: `${name(war?.attackerId ?? null)} took tribute: ${taken || `${tokens} war ${tokens === 1 ? 'token' : 'tokens'}`}.`,
+        settled: `${name(war?.attackerId ?? null)} and ${name(war?.defenderId ?? null)} made peace over ${target}${
+          terms && war ? `: ${termsText(model, war, terms)}` : ''
+        }.`,
         withdrawn: `The war for ${target} was called off.`,
         cancelled: `The war for ${target} was cancelled: the campaign ended first.`,
       }[outcome];
@@ -152,7 +186,7 @@ export function DispatchLine({
       return (
         <span>
           <strong>
-            {name(userId)} claims {missionName({ kind })}
+            {name(userId)} claims {missionName({ kind }, version)}
           </strong>
           : it can score in round {eligibleRound} at the earliest, if it’s still held then and no war can break it.
         </span>
@@ -162,7 +196,7 @@ export function DispatchLine({
       const { userId, kind } = event.payload;
       return (
         <span className="text-muted">
-          {name(userId)} lost the position claimed for {missionName({ kind })} before it scored.
+          {name(userId)} lost the position claimed for {missionName({ kind }, version)} before it scored.
         </span>
       );
     }
@@ -170,7 +204,7 @@ export function DispatchLine({
       const { userId, kind, points, total } = event.payload;
       return (
         <strong className="text-amber">
-          {name(userId)} scored {missionName({ kind })}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
+          {name(userId)} scored {missionName({ kind }, version)}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
         </strong>
       );
     }
@@ -178,6 +212,7 @@ export function DispatchLine({
       const winners = event.payload.winners.map((id) => name(id));
       return (
         <strong className="font-stencil text-lg tracking-wide text-amber">
+          {event.payload.seasonEnd && 'The last round is over. '}
           {winners.length > 1
             ? `${winners.slice(0, -1).join(', ')} and ${winners.at(-1)} share the victory.`
             : `${winners[0]} wins the campaign.`}

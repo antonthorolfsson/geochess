@@ -10,14 +10,25 @@ import {
 } from '@empire/rules';
 import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context';
-import { accords, campaigns, events, games, holdings, members, missionPlayers, users, wars } from '../db/schema';
+import {
+  accords,
+  campaigns,
+  events,
+  games,
+  holdings,
+  members,
+  missionPlayers,
+  peaceOffers,
+  users,
+  wars,
+} from '../db/schema';
 import { visibleAccords } from '../diplomacy/accords';
 import { unreadPrivateMessages } from '../diplomacy/chat';
 import { toAccordView } from '../diplomacy/views';
 import { notFound } from '../lib/errors';
 import { victoryViews } from '../victory/views';
 import { relevantWars, trucesFrom, type GameRow } from '../wars/board';
-import { toWarView } from '../wars/views';
+import { peaceOffersFor, toWarView } from '../wars/views';
 
 const RECENT_EVENTS = 150;
 /** Resolved wars included in a campaign view, most recent first. */
@@ -71,7 +82,12 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         .where(and(eq(members.campaignId, campaignId), eq(members.userId, viewerId)));
 
       const holdingRows = await tx
-        .select({ territoryId: holdings.territoryId, ownerId: holdings.ownerId, acquiredRound: holdings.acquiredRound })
+        .select({
+          territoryId: holdings.territoryId,
+          ownerId: holdings.ownerId,
+          acquiredRound: holdings.acquiredRound,
+          fortifiedUntil: holdings.fortifiedUntil,
+        })
         .from(holdings)
         .where(eq(holdings.campaignId, campaignId));
       const eventRows = await tx
@@ -107,6 +123,13 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         : [];
       const gamesByWar = new Map<string, GameRow[]>();
       for (const g of gameRows) gamesByWar.set(g.warId, [...(gamesByWar.get(g.warId) ?? []), g]);
+      // Peace offers are private: only the viewer's own.
+      const peace = await peaceOffersFor(
+        tx,
+        campaignId,
+        viewerId,
+        warRows.map((w) => w.id),
+      );
       // Public missions and progress for everyone; the viewer's own secret mission for them alone.
       // In a savepoint: should working them out fail, the rest of the campaign still loads.
       const { victory, mySecret } = await tx
@@ -149,10 +172,15 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         myDraftList: own?.draftList ?? [],
         myAutodraftFallback: own?.autodraftFallback ?? 'best',
         events: eventRows.reverse().map(toEventView),
-        wars: warRows.map((w) => toWarView(w, gamesByWar.get(w.id) ?? [])),
+        wars: warRows.map((w) => toWarView(w, gamesByWar.get(w.id) ?? [], peace)),
         truces: trucesFrom(c, await relevantWars(tx, c)),
         acquired: Object.fromEntries(
           holdingRows.filter((h) => h.acquiredRound > 0).map((h) => [h.territoryId, h.acquiredRound]),
+        ),
+        fortified: Object.fromEntries(
+          holdingRows.flatMap((h) =>
+            h.fortifiedUntil !== null && h.fortifiedUntil > c.round ? [[h.territoryId, h.fortifiedUntil]] : [],
+          ),
         ),
         accords: (await visibleAccords(tx, campaignId, viewerId)).map(toAccordView),
         victory,
@@ -201,7 +229,10 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
   }));
 }
 
-/** Per campaign: wars and accord proposals waiting for the player's answer, plus games waiting for their move. */
+/**
+ * Per campaign: wars, peace offers and accord proposals waiting for the player's answer, plus games
+ * waiting for their move.
+ */
 async function attentionCounts(ctx: AppContext, userId: string, campaignIds: string[]): Promise<Map<string, number>> {
   const answers = await ctx.db
     .select({ campaignId: wars.campaignId, n: count() })
@@ -253,8 +284,19 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
       ),
     )
     .groupBy(missionPlayers.campaignId);
+  const peace = await ctx.db
+    .select({ campaignId: peaceOffers.campaignId, n: count() })
+    .from(peaceOffers)
+    .where(
+      and(
+        inArray(peaceOffers.campaignId, campaignIds),
+        eq(peaceOffers.status, 'proposed'),
+        eq(peaceOffers.recipientId, userId),
+      ),
+    )
+    .groupBy(peaceOffers.campaignId);
   const out = new Map<string, number>();
-  for (const { campaignId, n } of [...answers, ...moves, ...proposals, ...secrets]) {
+  for (const { campaignId, n } of [...answers, ...moves, ...proposals, ...secrets, ...peace]) {
     out.set(campaignId, (out.get(campaignId) ?? 0) + n);
   }
   return out;

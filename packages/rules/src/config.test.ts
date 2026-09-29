@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RULES, parseRules } from './config';
+import { DEFAULT_RULES, REVISED_WAR_RULES, lastRoundOf, parseRules } from './config';
 import { EMPIRE_COLORS, firstFreeColor } from './colors';
+
+/** The answers of the original game, which rules stored before the revised ones read as. */
+const ORIGINAL_ANSWERS = {
+  raise: 'free',
+  redirect: 'anywhere',
+  redirectToken: false,
+  fortify: false,
+  peaceTerms: false,
+  recall: false,
+};
 
 describe('campaign rules', () => {
   it('fills defaults', () => {
@@ -19,15 +29,48 @@ describe('campaign rules', () => {
         raisePct: 125,
         lockRounds: 2,
         truceRounds: 1,
+        raise: 'matched',
+        redirect: 'nearby',
+        redirectToken: true,
+        fortify: true,
+        peaceTerms: true,
+        recall: true,
       },
-      victory: { mode: 'objectives', version: 2, publicMissions: [], holdMinutes: null, selectionMinutes: null },
+      victory: {
+        mode: 'objectives',
+        version: 3,
+        publicMissions: [],
+        holdMinutes: null,
+        selectionMinutes: null,
+        lastRound: 25,
+      },
     });
-    expect(parseRules({ draft: {}, victory: { mode: 'objectives' } })).toEqual(DEFAULT_RULES);
+    expect(parseRules({ draft: {}, war: REVISED_WAR_RULES, victory: { mode: 'objectives', lastRound: 25 } })).toEqual(
+      DEFAULT_RULES,
+    );
+  });
+
+  it('gives campaigns stored before seasons no last round', () => {
+    const stored = { victory: { mode: 'objectives', version: 2, publicMissions: [] } };
+    expect(parseRules(stored).victory.lastRound).toBeNull();
+    expect(lastRoundOf(parseRules(stored))).toBeNull();
+    expect(lastRoundOf(DEFAULT_RULES)).toBe(25);
+    // An open-ended campaign has no season, whatever it stored.
+    expect(lastRoundOf(parseRules({ victory: { mode: 'open', lastRound: 20 } }))).toBeNull();
+    expect(() => parseRules({ victory: { mode: 'objectives', lastRound: 1 } })).toThrow();
   });
 
   it('fills war settings into rules stored before they existed', () => {
     const stored = { maxPlayers: 4, draft: { mode: 'free' } };
-    expect(parseRules(stored).war).toEqual(DEFAULT_RULES.war);
+    expect(parseRules(stored).war).toEqual({ ...DEFAULT_RULES.war, ...ORIGINAL_ANSWERS });
+  });
+
+  it('reads war rules stored before the revised answers as the original game', () => {
+    // A campaign underway keeps the answers it started with: a free raise, redirects anywhere, tribute.
+    const stored = { war: { pace: 'live', stakeFloorPct: 80, raisePct: 125 } };
+    expect(parseRules(stored).war).toMatchObject(ORIGINAL_ANSWERS);
+    expect(parseRules({ war: { raise: 'token' } }).war.raise).toBe('token');
+    expect(() => parseRules({ war: { raise: 'double' } })).toThrow();
   });
 
   it('reads rules stored before victory missions as open-ended, never as Objectives', () => {
@@ -35,10 +78,11 @@ describe('campaign rules', () => {
     // They play no missions, so the version only counts if the host switches a lobby to Objectives.
     expect(parseRules(stored).victory).toEqual({
       mode: 'open',
-      version: 2,
+      version: 3,
       publicMissions: [],
       holdMinutes: null,
       selectionMinutes: null,
+      lastRound: null,
     });
     expect(parseRules(undefined).victory.mode).toBe('open');
   });

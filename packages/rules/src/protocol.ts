@@ -8,7 +8,7 @@ import type { Opening } from './openings';
 import type { MissionSpec, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
-import type { Transfer, Truce, WarCounter, WarOutcome } from './war';
+import type { PeaceTerms, Transfer, Truce, WarCounter, WarOutcome } from './war';
 
 /**
  * - `lobby`: players join and the host sets the rules.
@@ -59,8 +59,12 @@ export type CampaignEvent =
         targetId: TerritoryId;
         launchId: TerritoryId;
         stake: TerritoryId[];
+        /** Countries set aside to meet a raise. */
+        reserves?: TerritoryId[];
       };
     }
+  /** The attacker called off a declaration before the defender answered. */
+  | { type: 'war.recalled'; payload: { warId: string } }
   /** The defender's answer. `auto` when their time ran out and the war went ahead as declared. */
   | {
       type: 'war.response';
@@ -71,10 +75,19 @@ export type CampaignEvent =
         auto: boolean;
       };
     }
-  /** The attacker's answer to a counter-offer. `auto` when their time ran out. */
+  /**
+   * The attacker's answer to a counter-offer. `auto` when their time ran out; `fromReserves` when
+   * the reserves set aside at the declaration met a raise at once.
+   */
   | {
       type: 'war.reply';
-      payload: { warId: string; reply: WarReply['reply']; stake?: TerritoryId[]; auto: boolean };
+      payload: {
+        warId: string;
+        reply: WarReply['reply'];
+        stake?: TerritoryId[];
+        auto: boolean;
+        fromReserves?: boolean;
+      };
     }
   | {
       type: 'war.started';
@@ -91,8 +104,12 @@ export type CampaignEvent =
         transfers: Transfer[];
         /** Tokens paid as tribute. */
         tokens?: number;
+        /** The peace terms the two agreed, for a war they settled. */
+        terms?: PeaceTerms;
       };
     }
+  /** A player spent a war token fortifying a country: war on it needs a raised stake until `untilRound` starts. */
+  | { type: 'country.fortified'; payload: { userId: string; territoryId: TerritoryId; untilRound: number } }
   /**
    * Two players signed an accord: neither may declare war on the other until `endsRound` starts.
    * `renews` is the accord it replaced, when they renewed one already in force.
@@ -164,8 +181,11 @@ export type CampaignEvent =
       type: 'mission.awarded';
       payload: { userId: string; missionKey: string; kind: MissionSpec['kind']; points: number; total: number };
     }
-  /** The campaign is won (by several players when they tie) and over. */
-  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number> } };
+  /**
+   * The campaign is won (by several players when they tie) and over: by reaching the points to win,
+   * or with `seasonEnd`, on points (then value) when the last round ended.
+   */
+  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number>; seasonEnd?: boolean } };
 
 export type CampaignEventType = CampaignEvent['type'];
 
@@ -225,6 +245,8 @@ export interface CampaignView {
   truces: Truce[];
   /** The round each country last changed hands in a war or tribute; drafted countries are absent. */
   acquired: Record<TerritoryId, number>;
+  /** Countries fortified now, with the round at whose start each fortification ends. */
+  fortified: Record<TerritoryId, number>;
   /**
    * Accords in force and recently ended ones (public), plus the viewer's own proposals, which only
    * the two players see.
@@ -298,6 +320,11 @@ export interface VictoryResultView {
   winners: string[];
   round: number;
   finishedAt: string;
+  /**
+   * Nobody reached the points to win: the season's last round ended and the most points (then the
+   * most valuable empire) won. Unset in results stored before seasons existed.
+   */
+  seasonEnd?: boolean;
   /** Every player, most points first. Secret missions are all revealed here, done or not. */
   standings: {
     userId: string;
@@ -319,6 +346,8 @@ export interface VictoryView {
   secretPoints: number;
   /** The least time a claim is held after the next round starts. */
   holdMs: number;
+  /** The season's last round, after which the most points win; null if the campaign plays on. */
+  lastRound: number | null;
   publicMissions: MissionView[];
   players: VictoryPlayerView[];
   /** Claims waiting to score. */
@@ -435,7 +464,7 @@ export interface ChatSummary {
 }
 
 /**
- * - `declared`: waiting for the defender.
+ * - `declared`: waiting for the defender (the attacker may still call it off, where the rules allow).
  * - `countered`: the defender raised, redirected or offered tribute; waiting for the attacker.
  * - `ready`: accepted, and a live game is waiting for both players to finish other games.
  * - `playing`: the game is on.
@@ -464,12 +493,45 @@ export interface WarView {
   declaredAt: string;
   resolvedAt: string | null;
   games: GameSummary[];
+  /** Countries the attacker set aside at the declaration to meet a raise. Public, like the stake. */
+  reserves: TerritoryId[];
+  /**
+   * Peace offers in this war that the viewer made or received, newest first. Private: only the two
+   * players ever see them, and nobody else learns one was made.
+   */
+  peace: PeaceOfferView[];
 }
 
-/** What the defender can do with a declaration. */
+/**
+ * - `proposed`: waiting for the other player.
+ * - `accepted`: the war ended on these terms.
+ * - `declined`: turned down, or passed over by a move in the war's game.
+ * - `withdrawn`: taken back, or replaced by a newer offer from the same player.
+ * - `lapsed`: unanswered in time, or the war ended first.
+ */
+export type PeaceOfferStatus = 'proposed' | 'accepted' | 'declined' | 'withdrawn' | 'lapsed';
+
+export interface PeaceOfferView {
+  id: string;
+  warId: string;
+  proposerId: string;
+  recipientId: string;
+  terms: PeaceTerms;
+  status: PeaceOfferStatus;
+  createdAt: string;
+  /** While proposed: when the offer lapses. */
+  respondBy: string | null;
+  endedAt: string | null;
+}
+
+export interface ProposePeaceInput {
+  terms: PeaceTerms;
+}
+
+/** What the defender can do with a declaration. A matched raise names the country put into the war. */
 export type WarResponse =
   | { response: 'accept' }
-  | { response: 'raise' }
+  | { response: 'raise'; territoryId?: TerritoryId }
   | { response: 'redirect'; targetId: TerritoryId }
   | { response: 'tribute'; territoryId?: TerritoryId; tokens?: number };
 
@@ -483,6 +545,8 @@ export interface DeclareWarInput {
   targetId: TerritoryId;
   launchId: TerritoryId;
   stake: TerritoryId[];
+  /** Countries set aside to meet a raise at once, without waiting for the attacker's reply. */
+  reserves?: TerritoryId[];
 }
 
 /**
@@ -562,9 +626,10 @@ export interface HistoryWar {
   transfers: Transfer[];
 }
 
-/** Drafted (with the zero-based pick number, when known), or won in a war or as tribute. */
+/** Drafted (with the zero-based pick number, when known), or won in a war, as tribute or by peace terms. */
 export type Acquisition =
-  { via: 'draft'; pick: number | null } | { via: 'war' | 'tribute'; warId: string; round: number; from: string };
+  | { via: 'draft'; pick: number | null }
+  | { via: 'war' | 'tribute' | 'peace'; warId: string; round: number; from: string };
 
 export interface EmpireRecordView {
   userId: string;
@@ -581,6 +646,8 @@ export interface WarTally {
   drawn: number;
   /** Settled by tribute: taken when attacking, paid when defending. */
   tribute: number;
+  /** Ended by peace terms the two agreed. */
+  settled: number;
   /** Called off by the attacker (or their silence). */
   withdrawn: number;
   /** Cut short when the campaign ended: neither won nor lost. */
@@ -591,10 +658,10 @@ export interface WarTally {
 export interface WarRecord {
   attacking: WarTally;
   defending: WarTally;
-  /** War tokens taken and paid as tribute. */
+  /** War tokens taken and paid as tribute or in peace terms. */
   tokensTaken: number;
   tokensPaid: number;
-  /** Countries won and lost in wars and tribute, oldest first. */
+  /** Countries won and lost in wars, tribute and peace terms, oldest first. */
   gained: CountryChange[];
   lost: CountryChange[];
 }
@@ -605,7 +672,7 @@ export interface CountryChange {
   round: number;
   /** Who it came from (gained) or went to (lost). */
   otherId: string;
-  via: 'war' | 'tribute';
+  via: 'war' | 'tribute' | 'peace';
 }
 
 /** Signed accords only: proposals stay private to their two players. */
@@ -676,7 +743,7 @@ export interface CampaignSummary {
   maxPlayers: number;
   myColor: number;
   currentPicker: string | null;
-  /** Wars and accord proposals waiting for the viewer's answer, plus games waiting for their move. */
+  /** Wars, peace offers and accord proposals waiting for the viewer's answer, plus games waiting for their move. */
   attention: number;
   /** Private messages the viewer hasn't read. */
   unread: number;

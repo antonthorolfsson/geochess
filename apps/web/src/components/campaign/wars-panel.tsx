@@ -1,6 +1,6 @@
 'use client';
 
-import type { WarView } from '@empire/rules';
+import { lastRoundOf, type WarView } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
@@ -22,14 +22,18 @@ export function WarsPanel({
   onOpenWar(warId: string): void;
   onOpenGame(gameId: string): void;
 }) {
-  const others = model.activeWars.filter((w) => !model.awaitingMe.includes(w));
+  // Declarations and counters to answer, and peace terms offered to me.
+  const waiting = model.activeWars.filter(
+    (w) => model.awaitingMe.includes(w) || model.peaceToMe.some(({ war }) => war.id === w.id),
+  );
+  const others = model.activeWars.filter((w) => !waiting.includes(w));
   return (
     <div className="space-y-6">
       <RoundStatus model={model} />
-      {model.awaitingMe.length > 0 && (
+      {waiting.length > 0 && (
         <section>
           <h2 className="label mb-2 text-amber">Waiting for your answer</h2>
-          <WarList model={model} wars={model.awaitingMe} onOpenWar={onOpenWar} highlight />
+          <WarList model={model} wars={waiting} onOpenWar={onOpenWar} highlight />
         </section>
       )}
       <YourGames model={model} onOpenGame={onOpenGame} />
@@ -68,11 +72,22 @@ function RoundStatus({ model }: { model: CampaignModel }) {
       ? `Live ${rules.war.liveClock}`
       : `Correspondence · ${rules.war.hoursPerMove === 24 ? '1 day' : `${rules.war.hoursPerMove} hours`} per move`;
   const cap = Math.max(rules.war.tokenCap, model.tokens);
+  const last = lastRoundOf(rules);
+  const final = last !== null && campaign.round >= last;
+  const underway = model.activeWars.length;
   return (
     <section className="space-y-3">
       <div>
-        <div className="label">Round {campaign.round}</div>
+        <div className="label">
+          Round {campaign.round}
+          {last !== null && ` of ${last}`}
+        </div>
         <p className="text-sm text-muted">{pace}</p>
+        {final && campaign.status === 'active' && (
+          <p className="text-sm text-amber">
+            The last round: when it ends, the most victory points win, then the most valuable empire.
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <span className="label">War tokens</span>
@@ -94,13 +109,20 @@ function RoundStatus({ model }: { model: CampaignModel }) {
             className="btn btn-ghost btn-sm"
             disabled={next.isPending}
             onClick={() => {
-              const question = `Start round ${campaign.round + 1}? Everyone gains ${rules.war.tokensPerRound} war ${
-                rules.war.tokensPerRound === 1 ? 'token' : 'tokens'
-              }, up to ${rules.war.tokenCap}.`;
+              const question = final
+                ? `Round ${campaign.round} was the last. End the campaign? The most victory points win, then the most ` +
+                  `valuable empire.${
+                    underway > 0
+                      ? ` ${underway} ${underway === 1 ? 'war still underway is' : 'wars still underway are'} called off.`
+                      : ''
+                  }`
+                : `Start round ${campaign.round + 1}? Everyone gains ${rules.war.tokensPerRound} war ${
+                    rules.war.tokensPerRound === 1 ? 'token' : 'tokens'
+                  }, up to ${rules.war.tokenCap}.`;
               if (confirm(question)) next.mutate();
             }}
           >
-            Next round
+            {final ? 'End the campaign' : 'Next round'}
           </button>
           {next.error && <Notice tone="error">{errorMessage(next.error)}</Notice>}
         </div>

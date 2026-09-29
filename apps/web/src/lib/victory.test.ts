@@ -69,6 +69,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       publicPoints: 2,
       secretPoints: 3,
       holdMs: 24 * 3_600_000,
+      lastRound: null,
       publicMissions: [positions],
       players: [
         { userId: 'ann', points: 4, awards: [], ready: true, secret: null, progress: { p0: evaluation(2) } },

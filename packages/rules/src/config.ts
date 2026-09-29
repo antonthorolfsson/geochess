@@ -70,10 +70,15 @@ export const SELECTION_MINUTE_OPTIONS: Record<Pace, readonly number[]> = {
   correspondence: [12 * 60, 48 * 60],
 };
 
+/** Last rounds the host can pick for an Objectives campaign (null: no last round). */
+export const LAST_ROUND_OPTIONS = [15, 20, 25, 30] as const;
+/** The last round new campaigns start with. */
+export const DEFAULT_LAST_ROUND = 25;
+
 /**
  * How a campaign is won. Rules stored before victory missions existed have no `victory` and read
  * as open-ended, so no campaign underway gains missions or points; new campaigns start from
- * `DEFAULT_RULES`, which plays Objectives.
+ * `DEFAULT_RULES`, which plays Objectives with a last round.
  */
 export const victoryRulesSchema = z.object({
   mode: z.enum(VICTORY_MODES).default('open'),
@@ -97,6 +102,12 @@ export const victoryRulesSchema = z.object({
     .max(7 * 24 * 60)
     .nullable()
     .default(null),
+  /**
+   * The season's last round (Objectives only): if nobody has reached the points to win when it
+   * ends, the most points win. Null plays on until someone does; rules stored before seasons
+   * existed read as null, so no campaign underway gains an end.
+   */
+  lastRound: z.number().int().min(2).max(100).nullable().default(null),
 });
 
 /** Every host setting for a campaign. Stored as JSON on the campaign; grows with each phase. */
@@ -121,8 +132,17 @@ export function parseRules(input: unknown): CampaignRules {
   return campaignRulesSchema.parse(input ?? {});
 }
 
-/** The settings a new campaign starts with: Objectives, its public missions generated on creation. */
-export const DEFAULT_RULES: CampaignRules = parseRules({ victory: { mode: 'objectives' } });
+/**
+ * The settings a new campaign starts with: Objectives, its public missions generated on creation,
+ * and a last round.
+ */
+export const DEFAULT_RULES: CampaignRules = parseRules({
+  victory: { mode: 'objectives', lastRound: DEFAULT_LAST_ROUND },
+});
+
+/** The round after which an Objectives campaign ends on points, or null if it plays on. */
+export const lastRoundOf = (rules: CampaignRules): number | null =>
+  rules.victory.mode === 'objectives' ? rules.victory.lastRound : null;
 
 export const campaignNameSchema = z
   .string()

@@ -19,6 +19,7 @@ import {
   type SecretMissionSpec,
 } from './catalog';
 import { evaluateMission } from './evaluate';
+import { numberInWords } from './text';
 import {
   acquisitionPlan,
   angleBetween,
@@ -92,10 +93,22 @@ export function regionsFor(idx: DatasetIndex, cfg: MissionRules): Region[] {
     .sort((a, b) => (a.name < b.name ? -1 : 1));
 }
 
-/** Why a public mission can't be played in this campaign, or null if it can. */
-export function publicMissionIssue(kind: PublicMissionKind, idx: DatasetIndex, rules: CampaignRules): string | null {
+/**
+ * Why a public mission can't be played in this campaign, or null if it can. `players` is the size
+ * of the table, when it's known: some missions are only for small ones.
+ */
+export function publicMissionIssue(
+  kind: PublicMissionKind,
+  idx: DatasetIndex,
+  rules: CampaignRules,
+  players?: number,
+): string | null {
   const cfg = missionRules(rules.victory.version);
   if (!cfg.publicKinds.includes(kind)) return 'Campaigns created before it was added can’t play it.';
+  const most = cfg.maxPlayers[kind];
+  if (most !== undefined && players !== undefined && players > most) {
+    return `Only for campaigns of up to ${numberInWords(most)} players.`;
+  }
   const continents = new Set(idx.dataset.territories.map((t) => t.continent)).size;
   const onMap = (ids: readonly TerritoryId[]) => ids.every((id) => idx.byId.has(id));
   switch (kind) {
@@ -171,7 +184,7 @@ function strategicPositions(
     }
     if (chosen.length < count) continue;
     if (new Set(chosen.map((id) => idx.byId.get(id)!.subregion)).size < 2) continue;
-    return { kind: 'strategic_positions', territories: chosen.sort(), need };
+    return { kind: 'strategic_positions', territories: chosen.sort(), need, ...conquest(cfg) };
   }
   return null;
 }
@@ -197,10 +210,14 @@ function greatConnection(
       return d - 1 >= lo && d - 1 <= hi && idx.byId.get(b)!.subregion !== region;
     });
     const b = shuffled(partners, random)[0];
-    if (b) return { kind: 'great_connection', endpoints: [a, b].sort() as [TerritoryId, TerritoryId] };
+    if (b)
+      return { kind: 'great_connection', endpoints: [a, b].sort() as [TerritoryId, TerritoryId], ...conquest(cfg) };
   }
   return null;
 }
+
+/** Positions need a country won since the draft, from version 3. */
+const conquest = (cfg: MissionRules) => (cfg.positionsNeedConquest ? { needsConquest: true } : {});
 
 /**
  * One public mission with fresh targets, avoiding countries in `taken` (other missions' targets)
@@ -229,6 +246,7 @@ export function generatePublicMission(
         totalValue: region.value,
         needValue: percentUp(region.value, cfg.regionalPower.sharePct),
         minTerritories: cfg.regionalPower.minTerritories,
+        ...conquest(cfg),
       };
     }
     case 'strategic_positions':
@@ -242,14 +260,15 @@ export function generatePublicMission(
     case 'across_the_seas':
       return { kind, ...cfg.acrossTheSeas };
     case 'continental_bridge':
-      return { kind, ...cfg.continentalBridge };
+      return { kind, ...cfg.continentalBridge, ...conquest(cfg) };
     case 'consolidation':
       return { kind, ...cfg.consolidation };
     case 'two_fronts':
       return { kind, ...cfg.twoFronts };
     case 'mare_nostrum': {
       const { shores, need, perShore } = cfg.mareNostrum;
-      return { kind, shores: shores.map((s) => ({ name: s.name, territories: [...s.territories] })), need, perShore };
+      const copied = shores.map((s) => ({ name: s.name, territories: [...s.territories] }));
+      return { kind, shores: copied, need, perShore, ...conquest(cfg) };
     }
     case 'one_billion':
       return { kind, ...cfg.oneBillion };
@@ -258,7 +277,7 @@ export function generatePublicMission(
     case 'seven_wonders':
       return { kind, ...cfg.sevenWonders, territories: [...cfg.sevenWonders.territories] };
     case 'kingslayer':
-      return { kind };
+      return { kind, ...cfg.kingslayer };
     case 'lightning_campaign':
       return { kind, ...cfg.lightningCampaign };
   }
@@ -294,30 +313,47 @@ const GENERATION_ORDER: readonly PublicMissionKind[] = [
 
 /**
  * Public missions drawn at random, all different, from those the campaign can play: its version's,
- * and fit for this map and these rules. In catalog order; fewer only if fewer fit.
+ * and fit for this map, these rules and a table of `players`. At most `longDrawn` of them take a
+ * long campaign (later ones are passed over), so a draw can't stack the rarely done ones. In
+ * catalog order; fewer only if fewer fit.
  */
-export function drawPublicKinds(idx: DatasetIndex, rules: CampaignRules, random: Random): PublicMissionKind[] {
+export function drawPublicKinds(
+  idx: DatasetIndex,
+  rules: CampaignRules,
+  random: Random,
+  players?: number,
+): PublicMissionKind[] {
   const cfg = missionRules(rules.victory.version);
-  const playable = cfg.publicKinds.filter((kind) => publicMissionIssue(kind, idx, rules) === null);
-  const drawn = shuffled(playable, random).slice(0, cfg.publicCount);
+  const playable = cfg.publicKinds.filter((kind) => publicMissionIssue(kind, idx, rules, players) === null);
+  const drawn: PublicMissionKind[] = [];
+  let long = 0;
+  for (const kind of shuffled(playable, random)) {
+    if (drawn.length >= cfg.publicCount) break;
+    if (cfg.long.includes(kind)) {
+      if (long >= cfg.longDrawn) continue;
+      long++;
+    }
+    drawn.push(kind);
+  }
   return playable.filter((kind) => drawn.includes(kind));
 }
 
 export type PublicMissionsResult = { missions: PublicMissionSpec[] } | { error: string };
 
-/** Four distinct, playable public missions with targets that don't overlap. */
+/** Four distinct, playable public missions with targets that don't overlap, for a table of `players`. */
 export function generatePublicMissions(
   kinds: readonly PublicMissionKind[],
   idx: DatasetIndex,
   rules: CampaignRules,
   random: Random,
+  players?: number,
 ): PublicMissionsResult {
   const cfg = missionRules(rules.victory.version);
   if (kinds.length !== cfg.publicCount) return { error: `Choose ${cfg.publicCount} public missions.` };
   if (new Set(kinds).size !== kinds.length) return { error: 'Each public mission can only be chosen once.' };
   for (const kind of kinds) {
     if (!PUBLIC_MISSION_KINDS.includes(kind)) return { error: 'That is not a public mission.' };
-    const issue = publicMissionIssue(kind, idx, rules);
+    const issue = publicMissionIssue(kind, idx, rules, players);
     if (issue) return { error: issue };
   }
   const taken = new Set<TerritoryId>();
@@ -568,7 +604,7 @@ export function secretCandidates(
 
   // Mountain Kingdom: three mountain countries close together.
   if (offers('mountain_kingdom')) {
-    const { count, reveal, spread } = cfg.mountainKingdom;
+    const { need, reveal, spread } = cfg.mountainKingdom;
     const peaks = idx.ids.filter((id) => idx.byId.get(id)!.terrain.includes('mountains') && claimed(id));
     const dist = new Map(peaks.map((id) => [id, hopDistances(idx, id)]));
     const close = (a: TerritoryId, b: TerritoryId) => (dist.get(a)!.get(b) ?? Infinity) <= spread;
@@ -579,14 +615,12 @@ export function secretCandidates(
         for (let k = j + 1; k < peaks.length; k++) {
           const targets = [peaks[i]!, peaks[j]!, peaks[k]!];
           if (!close(peaks[i]!, peaks[k]!) || !close(peaks[j]!, peaks[k]!)) continue;
-          if (count - targets.filter((id) => held.has(id)).length < min || !inReach(targets)) continue;
-          const plan = acquisitionPlan(idx, held, targets, count);
+          if (need - targets.filter((id) => held.has(id)).length < min || !inReach(targets)) continue;
+          const plan = acquisitionPlan(idx, held, targets, need);
           if (!plan) continue;
           const e = estimate(plan, targets);
           if (fits(e)) {
-            kingdoms.push(
-              candidate({ kind: 'mountain_kingdom', territories: targets, need: count, reveal }, 'region', e),
-            );
+            kingdoms.push(candidate({ kind: 'mountain_kingdom', territories: targets, need, reveal }, 'region', e));
           }
         }
       }
@@ -667,7 +701,7 @@ export function secretCandidates(
 
   // Hidden Triangle: three targets in at least two directions from the empire.
   if (offers('hidden_triangle')) {
-    const { count, reveal, value, distance, spreadDegrees } = cfg.hiddenTriangle;
+    const { count, need, reveal, value, distance, spreadDegrees } = cfg.hiddenTriangle;
     const middle = centroid(idx, held);
     const pool = idx.ids.filter((id) => {
       const t = idx.byId.get(id)!;
@@ -691,11 +725,11 @@ export function secretCandidates(
           targets.slice(i + 1).some((b) => angleBetween(heading.get(a)!, heading.get(b)!) >= spreadDegrees),
         );
         if (!spread) continue;
-        const plan = acquisitionPlan(idx, held, targets, count);
+        const plan = acquisitionPlan(idx, held, targets, need);
         if (!plan) continue;
         const e = estimate(plan, targets);
         if (fits(e)) {
-          triangles.push(candidate({ kind: 'hidden_triangle', territories: targets, need: count, reveal }, 'route', e));
+          triangles.push(candidate({ kind: 'hidden_triangle', territories: targets, need, reveal }, 'route', e));
         }
       }
     }
@@ -831,13 +865,15 @@ export function secretCandidates(
     }
   }
 
-  // Backstab, Iron Wall and Checkmate Artist are about battles, not the map: they fit anyone.
+  // Backstab, Iron Wall and Checkmate Artist are about battles, not the map: they fit anyone (Iron
+  // Wall only at tables big enough that one rival can't deny it by never attacking).
   const opponents = world.players.length - 1;
   if (offers('backstab') && opponents > 0) {
-    const e: EffortEstimate = { conquests: 2, inTheWay: 0, targetValue: 0, rivals: 1 };
-    found.push(candidate({ kind: 'backstab', rounds: cfg.backstab.rounds }, 'battle', e));
+    // The accord to break, then the conquests.
+    const e: EffortEstimate = { conquests: 1 + (cfg.backstab.count ?? 1), inTheWay: 0, targetValue: 0, rivals: 1 };
+    found.push(candidate({ kind: 'backstab', ...cfg.backstab }, 'battle', e));
   }
-  if (offers('iron_wall') && opponents > 0) {
+  if (offers('iron_wall') && opponents > 0 && world.players.length >= cfg.ironWall.minPlayers) {
     const { wins } = cfg.ironWall;
     const e: EffortEstimate = { conquests: wins, inTheWay: 0, targetValue: 0, rivals: opponents };
     found.push(candidate({ kind: 'iron_wall', wins }, 'battle', e));

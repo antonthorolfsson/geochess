@@ -164,8 +164,11 @@ export type CampaignEvent =
       type: 'mission.awarded';
       payload: { userId: string; missionKey: string; kind: MissionSpec['kind']; points: number; total: number };
     }
-  /** The campaign is won (by several players when they tie) and over. */
-  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number> } };
+  /**
+   * The campaign is won (by several players when they tie) and over: by reaching the points to win,
+   * or with `seasonEnd`, on points (then value) when the last round ended.
+   */
+  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number>; seasonEnd?: boolean } };
 
 export type CampaignEventType = CampaignEvent['type'];
 
@@ -298,6 +301,11 @@ export interface VictoryResultView {
   winners: string[];
   round: number;
   finishedAt: string;
+  /**
+   * Nobody reached the points to win: the season's last round ended and the most points (then the
+   * most valuable empire) won. Unset in results stored before seasons existed.
+   */
+  seasonEnd?: boolean;
   /** Every player, most points first. Secret missions are all revealed here, done or not. */
   standings: {
     userId: string;
@@ -319,6 +327,8 @@ export interface VictoryView {
   secretPoints: number;
   /** The least time a claim is held after the next round starts. */
   holdMs: number;
+  /** The season's last round, after which the most points win; null if the campaign plays on. */
+  lastRound: number | null;
   publicMissions: MissionView[];
   players: VictoryPlayerView[];
   /** Claims waiting to score. */

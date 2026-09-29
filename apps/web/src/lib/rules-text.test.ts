@@ -29,6 +29,7 @@ describe('rules in words', () => {
     const standard = Object.fromEntries(settingsList(DEFAULT_RULES).map((s) => [s.label, s.value]));
     expect(standard).toMatchObject({
       Victory: 'First to 7 points',
+      'Last round': 'Round 25, then the most points win',
       'Claims are held': '24 hours after the next round starts',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
@@ -42,6 +43,7 @@ describe('rules in words', () => {
     // Rules stored without a victory setting are an open-ended campaign.
     expect(liveSettings.Victory).toBe('Open-ended');
     expect(liveSettings['Claims are held']).toBeUndefined();
+    expect(liveSettings['Last round']).toBeUndefined();
     expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',

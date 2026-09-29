@@ -12,6 +12,7 @@ import {
   clockModifiers,
   getTerritory,
   initialClocks,
+  lastRoundOf,
   raiseFloor,
   redirectOptions,
   refillTokens,
@@ -38,6 +39,7 @@ import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { Notice } from '../notifications/notifier';
+import { endSeason } from '../victory/finish';
 import { loadBoard, type WarRow } from './board';
 import { armFlag } from './games';
 
@@ -543,12 +545,18 @@ async function resolveWar(
 
 /**
  * The host starts the next round: everyone's tokens refill, locks and truces count down, and
- * accords whose time is up run their course.
+ * accords whose time is up run their course. After the season's last round, the campaign ends
+ * instead (see `endSeason`).
  */
 export async function nextRound(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'start the next round');
     requireActive(scope);
+    const last = lastRoundOf(scope.campaign.rules);
+    if (last !== null && scope.campaign.round >= last) {
+      await endSeason(ctx, scope);
+      return;
+    }
     const round = scope.campaign.round + 1;
     const roundStartedAt = ctx.now();
     await scope.tx.update(campaigns).set({ round, roundStartedAt }).where(eq(campaigns.id, campaignId));

@@ -96,6 +96,10 @@ export interface Strait {
   shores: [TerritoryId, TerritoryId];
 }
 
+/**
+ * `needsConquest` (positions, from version 3): the position counts only with at least one of its
+ * countries won since the draft, so a draft can't hand it out.
+ */
 export type PublicMissionSpec =
   /** Current total value at least `gain` above the baseline. */
   | { kind: 'expansion'; gain: number }
@@ -107,33 +111,41 @@ export type PublicMissionSpec =
       totalValue: number;
       needValue: number;
       minTerritories: number;
+      needsConquest?: boolean;
     }
   /** Any `need` of the marked positions at once. */
-  | { kind: 'strategic_positions'; territories: TerritoryId[]; need: number }
-  /** Both endpoints and an unbroken chain of your countries between them. */
-  | { kind: 'great_connection'; endpoints: [TerritoryId, TerritoryId] }
-  /** Historical: `wins` war victories against `opponents` different players, `attackWins` of them attacking. */
-  | { kind: 'campaign_veteran'; wins: number; opponents: number; attackWins: number }
+  | { kind: 'strategic_positions'; territories: TerritoryId[]; need: number; needsConquest?: boolean }
+  /** Both endpoints and an unbroken chain of your countries between them (with `needsConquest`, through one won since the draft). */
+  | { kind: 'great_connection'; endpoints: [TerritoryId, TerritoryId]; needsConquest?: boolean }
+  /**
+   * Historical: `wins` war victories against `opponents` different players, `attackWins` of them
+   * attacking. With `attackOnly`, only wars won as the attacker count, opponents included.
+   */
+  | { kind: 'campaign_veteran'; wins: number; opponents: number; attackWins: number; attackOnly?: boolean }
   /** `count` countries worth `minValue` or more, `newCount` of them won since the draft. */
   | { kind: 'great_powers'; minValue: number; count: number; newCount: number }
   /** `count` countries taken in attacks launched across sea lanes, still held. */
   | { kind: 'across_the_seas'; count: number }
   /** One connected block with `perContinent` countries on each of `continents` continents. */
-  | { kind: 'continental_bridge'; continents: number; perContinent: number }
+  | { kind: 'continental_bridge'; continents: number; perContinent: number; needsConquest?: boolean }
   /** `sharePct` of the empire's value in one block holding `newCount` new countries (free drafts). */
   | { kind: 'consolidation'; sharePct: number; newCount: number }
   /** `perContinent` new countries on each of `continents` continents. */
   | { kind: 'two_fronts'; continents: number; perContinent: number }
   /** `need` of the countries on the shores, at least `perShore` on each shore. */
-  | { kind: 'mare_nostrum'; shores: Shore[]; need: number; perShore: number }
+  | { kind: 'mare_nostrum'; shores: Shore[]; need: number; perShore: number; needsConquest?: boolean }
   /** Countries won since the draft, still held, home to at least `people` people. */
   | { kind: 'one_billion'; people: number }
   /** Countries won since the draft, still held, covering at least `areaKm2` square kilometers. */
   | { kind: 'great_expanse'; areaKm2: number }
   /** `count` of the marked countries, `newCount` of them won since the draft. */
   | { kind: 'seven_wonders'; territories: TerritoryId[]; count: number; newCount: number }
-  /** Historical: a war won as the attacker, declared on a player who led the race while you didn't. */
-  | { kind: 'kingslayer' }
+  /**
+   * Historical: a war won as the attacker, declared on a player who led the race while you didn't.
+   * The leader is judged on points, then value; with `lead`, on points alone, and only a leader at
+   * least `lead` points ahead of you counts.
+   */
+  | { kind: 'kingslayer'; lead?: number }
   /** Historical: `wins` wars declared in the same round, all won. */
   | { kind: 'lightning_campaign'; wins: number };
 
@@ -164,8 +176,11 @@ export type SecretMissionSpec =
   | { kind: 'half_of_humanity'; sharePct: number }
   /** Hold `count` countries taken from `rival`; revealed at `reveal`. */
   | { kind: 'nemesis'; rival: UserId; count: number; reveal: number }
-  /** Historical: break an accord, then take a country from that partner in a war declared within `rounds` rounds. */
-  | { kind: 'backstab'; rounds: number }
+  /**
+   * Historical: break an accord, then take `count` countries (1 if unset) from that partner in wars
+   * declared within `rounds` rounds.
+   */
+  | { kind: 'backstab'; rounds: number; count?: number }
   /** Historical: `wins` wars won as the defender. */
   | { kind: 'iron_wall'; wins: number }
   /** Historical: `wins` wars won by checkmate. */
@@ -179,6 +194,8 @@ const territory = z.string().min(1).max(40);
 const count = z.number().int().min(1).max(1000);
 
 /** Public missions live in the campaign's rules, so they are validated whenever rules are read. */
+const needsConquest = z.boolean().optional();
+
 export const publicMissionSpecSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('expansion'), gain: count }),
   z.object({
@@ -188,13 +205,25 @@ export const publicMissionSpecSchema = z.discriminatedUnion('kind', [
     totalValue: count,
     needValue: count,
     minTerritories: count,
+    needsConquest,
   }),
-  z.object({ kind: z.literal('strategic_positions'), territories: z.array(territory).min(1).max(12), need: count }),
-  z.object({ kind: z.literal('great_connection'), endpoints: z.tuple([territory, territory]) }),
-  z.object({ kind: z.literal('campaign_veteran'), wins: count, opponents: count, attackWins: z.number().int().min(0) }),
+  z.object({
+    kind: z.literal('strategic_positions'),
+    territories: z.array(territory).min(1).max(12),
+    need: count,
+    needsConquest,
+  }),
+  z.object({ kind: z.literal('great_connection'), endpoints: z.tuple([territory, territory]), needsConquest }),
+  z.object({
+    kind: z.literal('campaign_veteran'),
+    wins: count,
+    opponents: count,
+    attackWins: z.number().int().min(0),
+    attackOnly: z.boolean().optional(),
+  }),
   z.object({ kind: z.literal('great_powers'), minValue: count, count, newCount: z.number().int().min(0) }),
   z.object({ kind: z.literal('across_the_seas'), count }),
-  z.object({ kind: z.literal('continental_bridge'), continents: count, perContinent: count }),
+  z.object({ kind: z.literal('continental_bridge'), continents: count, perContinent: count, needsConquest }),
   z.object({ kind: z.literal('consolidation'), sharePct: z.number().int().min(1).max(100), newCount: count }),
   z.object({ kind: z.literal('two_fronts'), continents: count, perContinent: count }),
   z.object({
@@ -205,6 +234,7 @@ export const publicMissionSpecSchema = z.discriminatedUnion('kind', [
       .max(6),
     need: count,
     perShore: count,
+    needsConquest,
   }),
   z.object({ kind: z.literal('one_billion'), people: z.number().int().min(1).max(1e11) }),
   z.object({ kind: z.literal('great_expanse'), areaKm2: z.number().int().min(1).max(2e8) }),
@@ -214,7 +244,7 @@ export const publicMissionSpecSchema = z.discriminatedUnion('kind', [
     count,
     newCount: z.number().int().min(0),
   }),
-  z.object({ kind: z.literal('kingslayer') }),
+  z.object({ kind: z.literal('kingslayer'), lead: count.optional() }),
   z.object({ kind: z.literal('lightning_campaign'), wins: count }),
 ]);
 
@@ -239,12 +269,8 @@ export interface MissionInfo {
   timing: 'claim' | 'historic';
   /** Secret missions only. */
   family?: SecretFamily;
-  /** The mission tends to take a long campaign. */
-  long?: boolean;
   /** Only for free drafts. */
   freeDraftOnly?: boolean;
-  /** In a sentence, without targets. */
-  summary: string;
 }
 
 const info = (m: MissionInfo) => m;
@@ -255,58 +281,48 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     name: 'Expansion',
     scope: 'public',
     timing: 'claim',
-    summary: 'Grow your empire’s total value well past what you drafted.',
   }),
   regional_power: info({
     kind: 'regional_power',
     name: 'Regional Power',
     scope: 'public',
     timing: 'claim',
-    summary: 'Hold most of the value of one marked region.',
   }),
   strategic_positions: info({
     kind: 'strategic_positions',
     name: 'Strategic Positions',
     scope: 'public',
     timing: 'claim',
-    summary: 'Hold any three of five marked countries at once.',
   }),
   great_connection: info({
     kind: 'great_connection',
     name: 'The Great Connection',
     scope: 'public',
     timing: 'claim',
-    summary:
-      'Hold two marked countries with six to ten countries between them, and an unbroken chain of yours linking them.',
   }),
   campaign_veteran: info({
     kind: 'campaign_veteran',
     name: 'Campaign Veteran',
     scope: 'public',
     timing: 'historic',
-    summary: 'Win three wars against more than one opponent, at least one as the attacker.',
   }),
   great_powers: info({
     kind: 'great_powers',
     name: 'Great Powers',
     scope: 'public',
     timing: 'claim',
-    summary: 'Hold three of the most valuable countries, two of them won after the draft.',
   }),
   across_the_seas: info({
     kind: 'across_the_seas',
     name: 'Across the Seas',
     scope: 'public',
     timing: 'claim',
-    summary: 'Win three attacks launched across sea lanes, and keep what they took.',
   }),
   continental_bridge: info({
     kind: 'continental_bridge',
     name: 'Continental Bridge',
     scope: 'public',
     timing: 'claim',
-    long: true,
-    summary: 'Hold one connected block spanning three continents.',
   }),
   consolidation: info({
     kind: 'consolidation',
@@ -314,57 +330,48 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'public',
     timing: 'claim',
     freeDraftOnly: true,
-    summary: 'Pull a scattered empire together into one block.',
   }),
   two_fronts: info({
     kind: 'two_fronts',
     name: 'Two Fronts',
     scope: 'public',
     timing: 'claim',
-    summary: 'Win new ground on two continents.',
   }),
   mare_nostrum: info({
     kind: 'mare_nostrum',
     name: 'Mare Nostrum',
     scope: 'public',
     timing: 'claim',
-    long: true,
-    summary: 'Hold twelve Mediterranean countries, at least three on each of its shores.',
   }),
   one_billion: info({
     kind: 'one_billion',
     name: 'One Billion',
     scope: 'public',
     timing: 'claim',
-    summary: 'Win countries home to a billion people, and hold them.',
   }),
   great_expanse: info({
     kind: 'great_expanse',
     name: 'Great Expanse',
     scope: 'public',
     timing: 'claim',
-    summary: 'Win 7.5 million km² of land, about the size of Australia, and hold it.',
   }),
   seven_wonders: info({
     kind: 'seven_wonders',
     name: 'Seven Wonders',
     scope: 'public',
     timing: 'claim',
-    summary: 'Hold three countries with wonders of the world, two of them won after the draft.',
   }),
   kingslayer: info({
     kind: 'kingslayer',
     name: 'Kingslayer',
     scope: 'public',
     timing: 'historic',
-    summary: 'Declare war on the leader of the race while you trail, and win it.',
   }),
   lightning_campaign: info({
     kind: 'lightning_campaign',
     name: 'Lightning Campaign',
     scope: 'public',
     timing: 'historic',
-    summary: 'Win two wars you declared in the same round.',
   }),
   northern_passage: info({
     kind: 'northern_passage',
@@ -372,7 +379,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold the North Atlantic crossing, from Canada to the United Kingdom.',
   }),
   caribbean_chain: info({
     kind: 'caribbean_chain',
@@ -380,7 +386,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold the chain of the Greater Antilles.',
   }),
   pacific_passage: info({
     kind: 'pacific_passage',
@@ -388,7 +393,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold the South Pacific from Australia to Fiji.',
   }),
   mediterranean_arc: info({
     kind: 'mediterranean_arc',
@@ -396,7 +400,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold the arc of the western Mediterranean.',
   }),
   central_asian_union: info({
     kind: 'central_asian_union',
@@ -404,7 +407,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Unite most of Central Asia.',
   }),
   black_sea: info({
     kind: 'black_sea',
@@ -412,7 +414,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold five of the six countries around the Black Sea.',
   }),
   baltic_league: info({
     kind: 'baltic_league',
@@ -420,7 +421,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold six of the nine countries around the Baltic.',
   }),
   gulf_hegemon: info({
     kind: 'gulf_hegemon',
@@ -428,7 +428,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold five of the eight countries around the Persian Gulf.',
   }),
   caspian: info({
     kind: 'caspian',
@@ -436,7 +435,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold four of the five countries around the Caspian Sea.',
   }),
   nordic: info({
     kind: 'nordic',
@@ -444,7 +442,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Unite Norway, Sweden, Finland and Denmark.',
   }),
   horn_of_africa: info({
     kind: 'horn_of_africa',
@@ -452,7 +449,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold Ethiopia, Eritrea, Djibouti and Somalia.',
   }),
   andean_spine: info({
     kind: 'andean_spine',
@@ -460,7 +456,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold four of the five countries along the Andes.',
   }),
   mekong: info({
     kind: 'mekong',
@@ -468,7 +463,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold four of the five countries of the lower Mekong.',
   }),
   island_empire: info({
     kind: 'island_empire',
@@ -476,7 +470,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold four of six marked islands, two of them won after the draft.',
   }),
   mountain_kingdom: info({
     kind: 'mountain_kingdom',
@@ -484,7 +477,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold three marked mountain countries close together.',
   }),
   unification: info({
     kind: 'unification',
@@ -492,7 +484,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Join two separate pieces of your drafted empire.',
   }),
   encirclement: info({
     kind: 'encirclement',
@@ -500,7 +491,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Surround a marked country held by someone else.',
   }),
   hidden_triangle: info({
     kind: 'hidden_triangle',
@@ -508,7 +498,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Hold three marked countries lying in different directions from your empire.',
   }),
   two_theater_power: info({
     kind: 'two_theater_power',
@@ -516,7 +505,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'expansion',
-    summary: 'Grow on two marked continents at once.',
   }),
   protected_expansion: info({
     kind: 'protected_expansion',
@@ -524,7 +512,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'expansion',
-    summary: 'Expand while accords with two partners guard your back.',
   }),
   measured_expansion: info({
     kind: 'measured_expansion',
@@ -532,7 +519,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'expansion',
-    summary: 'Grow steadily past what you drafted.',
   }),
   buffer_zone: info({
     kind: 'buffer_zone',
@@ -540,7 +526,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'region',
-    summary: 'Hold a marked country of yours and every country around it.',
   }),
   silk_road: info({
     kind: 'silk_road',
@@ -548,7 +533,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Join China and Italy with an unbroken chain of your countries.',
   }),
   cape_to_cairo: info({
     kind: 'cape_to_cairo',
@@ -556,7 +540,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Join South Africa and Egypt with an unbroken chain of your countries.',
   }),
   pan_american_highway: info({
     kind: 'pan_american_highway',
@@ -564,8 +547,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    long: true,
-    summary: 'Join the United States and Chile with an unbroken chain of your countries.',
   }),
   strait_keeper: info({
     kind: 'strait_keeper',
@@ -573,7 +554,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'route',
-    summary: 'Hold both shores of three marked straits.',
   }),
   half_of_humanity: info({
     kind: 'half_of_humanity',
@@ -581,7 +561,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'expansion',
-    summary: 'Rule half the world’s people.',
   }),
   nemesis: info({
     kind: 'nemesis',
@@ -589,7 +568,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'claim',
     family: 'battle',
-    summary: 'Take three countries from a marked rival, and hold them.',
   }),
   backstab: info({
     kind: 'backstab',
@@ -597,7 +575,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'historic',
     family: 'battle',
-    summary: 'Break an accord, then take a country from that partner within two rounds.',
   }),
   iron_wall: info({
     kind: 'iron_wall',
@@ -605,7 +582,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'historic',
     family: 'battle',
-    summary: 'Win two wars as the defender.',
   }),
   checkmate_artist: info({
     kind: 'checkmate_artist',
@@ -613,7 +589,6 @@ export const MISSIONS: Record<MissionKind, MissionInfo> = {
     scope: 'secret',
     timing: 'historic',
     family: 'battle',
-    summary: 'Win two wars by checkmate.',
   }),
 };
 
@@ -662,6 +637,19 @@ export interface MissionRules {
   /** Public missions per campaign. */
   publicCount: number;
   defaultPublic: readonly PublicMissionKind[];
+  /** Public missions only for tables of up to this many players: at bigger ones they're broken before they can be held. */
+  maxPlayers: Partial<Record<PublicMissionKind, number>>;
+  /**
+   * Missions that take a long campaign (rarely done, and late), marked as such in the lobby. A
+   * random draw of public missions takes at most `longDrawn` of them.
+   */
+  long: readonly MissionKind[];
+  longDrawn: number;
+  /**
+   * Strategic Positions, Regional Power, The Great Connection, Continental Bridge and Mare Nostrum
+   * count only with at least one country of the position won since the draft.
+   */
+  positionsNeedConquest: boolean;
   /** Secret options dealt to each player. */
   secretOptions: number;
   /** Least time a claim is held after the next round starts, by pace, in minutes. */
@@ -693,7 +681,8 @@ export interface MissionRules {
    * Such a chain must also exist without crossing the edge of the map.
    */
   greatConnection: { between: readonly [number, number] };
-  campaignVeteran: { wins: number; opponents: number; attackWins: number };
+  /** With `attackOnly`, only wars won as the attacker count. */
+  campaignVeteran: { wins: number; opponents: number; attackWins: number; attackOnly?: boolean };
   greatPowers: { minValue: number; count: number; newCount: number };
   acrossTheSeas: { count: number };
   continentalBridge: { continents: number; perContinent: number };
@@ -708,6 +697,8 @@ export interface MissionRules {
   greatExpanse: { areaKm2: number };
   sevenWonders: { territories: readonly TerritoryId[]; count: number; newCount: number };
   lightningCampaign: { wins: number };
+  /** Without a `lead`, the leader is judged on points, then value, and any lead will do. */
+  kingslayer: { lead?: number };
 
   namedSets: readonly NamedSetTemplate[];
   routes: readonly RouteTemplate[];
@@ -719,22 +710,24 @@ export interface MissionRules {
   bufferZone: { neighbors: readonly [number, number] };
   halfOfHumanity: { sharePct: number };
   nemesis: { count: number; reveal: number };
-  /** Rounds after the one the accord is broken in. */
-  backstab: { rounds: number };
-  ironWall: { wins: number };
+  /** Rounds after the one the accord is broken in, and countries to take from the partner (one if unset). */
+  backstab: { rounds: number; count?: number };
+  /** Dealt only with `minPlayers` or more: a lone rival can deny it by never attacking. */
+  ironWall: { wins: number; minPlayers: number };
   checkmateArtist: { wins: number };
   islandEmpire: { count: number; need: number; newCount: number };
-  /** Three mountain countries, each within `spread` steps of the others. */
-  mountainKingdom: { count: number; reveal: number; spread: number };
+  /** `need` of three mountain countries, each within `spread` steps of the others. */
+  mountainKingdom: { count: number; need: number; reveal: number; spread: number };
   /** New countries the link between the two marked pieces must need, at least. */
   unification: { newCount: number };
   encirclement: { neighbors: readonly [number, number] };
   /**
-   * Targets worth `value`, `distance` conquests away, at least two of them `spreadDegrees` apart
-   * as seen from the middle of the empire.
+   * `need` of `count` targets worth `value`, `distance` conquests away, at least two of them
+   * `spreadDegrees` apart as seen from the middle of the empire.
    */
   hiddenTriangle: {
     count: number;
+    need: number;
     reveal: number;
     value: readonly [number, number];
     distance: readonly [number, number];
@@ -800,6 +793,10 @@ export const MISSION_RULES_V1: MissionRules = {
   families: ['region', 'route', 'expansion'],
   publicCount: 4,
   defaultPublic: ['expansion', 'strategic_positions', 'great_connection', 'campaign_veteran'],
+  maxPlayers: {},
+  long: ['continental_bridge', 'mare_nostrum', 'pan_american_highway'],
+  longDrawn: 4,
+  positionsNeedConquest: false,
   secretOptions: 3,
   holdMinutes: { live: 10, correspondence: 24 * 60 },
   selectionMinutes: { live: 5, correspondence: 24 * 60 },
@@ -827,6 +824,7 @@ export const MISSION_RULES_V1: MissionRules = {
   greatExpanse: { areaKm2: 7_500_000 },
   sevenWonders: { territories: ['CHN', 'JOR', 'BRA', 'PER', 'MEX', 'ITA', 'IND', 'EGY'], count: 3, newCount: 2 },
   lightningCampaign: { wins: 2 },
+  kingslayer: {},
 
   namedSets: [
     { kind: 'northern_passage', territories: ['CAN', 'GRL', 'ISL', 'GBR'], need: 4, reveal: 3 },
@@ -859,13 +857,13 @@ export const MISSION_RULES_V1: MissionRules = {
   halfOfHumanity: { sharePct: 50 },
   nemesis: { count: 3, reveal: 2 },
   backstab: { rounds: 2 },
-  ironWall: { wins: 2 },
+  ironWall: { wins: 2, minPlayers: 2 },
   checkmateArtist: { wins: 2 },
   islandEmpire: { count: 6, need: 4, newCount: 2 },
-  mountainKingdom: { count: 3, reveal: 2, spread: 3 },
+  mountainKingdom: { count: 3, need: 3, reveal: 2, spread: 3 },
   unification: { newCount: 2 },
   encirclement: { neighbors: [3, 5] },
-  hiddenTriangle: { count: 3, reveal: 2, value: [2, 7], distance: [1, 3], spreadDegrees: 90 },
+  hiddenTriangle: { count: 3, need: 3, reveal: 2, value: [2, 7], distance: [1, 3], spreadDegrees: 90 },
   twoTheater: { netValue: 8, newCount: 2 },
   protectedExpansion: { partners: 2, rounds: 2, acquisitions: 3, minPlayers: 4 },
   measuredExpansion: { gain: 20, newCount: 3, revealGain: 16, revealNew: 2 },
@@ -903,10 +901,72 @@ export const MISSION_RULES_V2: MissionRules = {
   ],
 };
 
-const MISSION_RULES: Record<number, MissionRules> = { 1: MISSION_RULES_V1, 2: MISSION_RULES_V2 };
+/**
+ * Version 3 follows the balance simulation (docs/balance-report.md), which found campaigns won by
+ * round 6 to 9 instead of 15 to 25:
+ * - Records are harder: Campaign Veteran counts only wars won as the attacker, Kingslayer only a
+ *   leader four points ahead, and the battle secrets need more wins (Iron Wall is dealt only from
+ *   four players: with fewer, a rival can deny it by never attacking).
+ * - Giants are bigger: one huge country no longer completes Great Expanse or One Billion (now two
+ *   billion), and Great Powers needs all three won.
+ * - Positions need a conquest, so a draft can't hand them out; The Great Connection and Mare
+ *   Nostrum are only for four players or fewer, and Great Powers replaces the former as a default.
+ * - Across the Seas, and region and route secrets, which were rarely done, are easier.
+ * - A random draw takes at most one mission that makes for a long campaign.
+ * The season's last round, the other half of the fix, is a host setting (`victory.lastRound`).
+ */
+export const MISSION_RULES_V3: MissionRules = {
+  ...MISSION_RULES_V2,
+  version: 3,
+  defaultPublic: ['expansion', 'strategic_positions', 'great_powers', 'campaign_veteran'],
+  maxPlayers: { great_connection: 4, mare_nostrum: 4 },
+  // Scored by a fifth of players or fewer in the simulator (Continental Bridge at bigger tables),
+  // and the secrets done least: chains and rings.
+  long: [
+    'great_connection',
+    'mare_nostrum',
+    'consolidation',
+    'regional_power',
+    'strategic_positions',
+    'seven_wonders',
+    'one_billion',
+    'continental_bridge',
+    'silk_road',
+    'cape_to_cairo',
+    'pan_american_highway',
+    'encirclement',
+    'unification',
+  ],
+  longDrawn: 1,
+  positionsNeedConquest: true,
+
+  campaignVeteran: { wins: 4, opponents: 3, attackWins: 4, attackOnly: true },
+  greatPowers: { minValue: 8, count: 3, newCount: 3 },
+  acrossTheSeas: { count: 2 },
+  oneBillion: { people: 2_000_000_000 },
+  greatExpanse: { areaKm2: 20_000_000 },
+  kingslayer: { lead: 4 },
+
+  // Region and route secrets: half the countries (at least two), revealed only once complete.
+  namedSets: MISSION_RULES_V2.namedSets.map((t) => {
+    const need = Math.max(2, Math.ceil(t.territories.length / 2));
+    return { ...t, need, reveal: need };
+  }),
+  mountainKingdom: { count: 3, need: 2, reveal: 2, spread: 3 },
+  hiddenTriangle: { ...MISSION_RULES_V2.hiddenTriangle, need: 2, reveal: 2, distance: [1, 2] },
+  straitKeeper: { count: 1, reveal: 1 },
+  islandEmpire: { count: 6, need: 3, newCount: 2 },
+
+  nemesis: { count: 4, reveal: 3 },
+  backstab: { rounds: 2, count: 2 },
+  ironWall: { wins: 3, minPlayers: 4 },
+  checkmateArtist: { wins: 3 },
+};
+
+const MISSION_RULES: Record<number, MissionRules> = { 1: MISSION_RULES_V1, 2: MISSION_RULES_V2, 3: MISSION_RULES_V3 };
 
 /** The mission rules version new campaigns are created with. */
-export const CURRENT_MISSION_RULES = MISSION_RULES_V2.version;
+export const CURRENT_MISSION_RULES = MISSION_RULES_V3.version;
 
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {

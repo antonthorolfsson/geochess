@@ -1,5 +1,6 @@
 import {
   holdMs,
+  lastRoundOf,
   missionRules,
   SECRET_MISSION_KEY,
   evaluateMission,
@@ -90,6 +91,7 @@ export async function victoryViews(
     publicPoints: cfg.points.public,
     secretPoints: cfg.points.secret,
     holdMs: holdMs(campaign.rules),
+    lastRound: lastRoundOf(campaign.rules),
     publicMissions,
     players: memberIds.map((userId) => {
       const player = byUser.get(userId);

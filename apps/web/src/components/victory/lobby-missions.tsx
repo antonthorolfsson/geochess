@@ -2,11 +2,14 @@
 
 import {
   HOLD_MINUTE_OPTIONS,
-  MISSIONS,
+  LAST_ROUND_OPTIONS,
   SELECTION_MINUTE_OPTIONS,
   durationText,
   holdMs,
+  isLongMission,
+  kindName,
   missionRules,
+  missionSummary,
   missionTargets,
   publicMissionIssue,
   selectionMs,
@@ -31,7 +34,7 @@ const MODES: { value: VictoryMode; title: string; body: string }[] = [
   {
     value: 'objectives',
     title: 'Objectives',
-    body: 'Four public missions and a secret one for each player. The first to 7 victory points wins.',
+    body: 'Four public missions and a secret one for each player. The first to 7 victory points wins, or the most points when the last round ends.',
   },
   { value: 'open', title: 'Open-ended', body: 'No fixed end: play for as long as the group likes.' },
 ];
@@ -71,7 +74,9 @@ export function LobbyMissions({
   });
   const random = useMutation({ mutationFn: () => api.randomMissions(campaign.id), onSettled: refresh });
   const missions = victory?.publicMissions ?? [];
+  const players = campaign.members.length;
   const pace = rules.war.pace;
+  const lastRound = rules.victory.lastRound;
   const error = reroll.error ?? choose.error ?? random.error;
 
   return (
@@ -106,7 +111,10 @@ export function LobbyMissions({
               Public missions are worth {cfg.points.public} points each, and everyone can score every one. After the
               draft each player privately picks a secret mission worth {cfg.points.secret}. Points are never lost; the
               first to {cfg.points.toWin} wins. A completed position scores once it has been held through the next full
-              round and {durationText(holdMs(rules))} after that round starts.
+              round and {durationText(holdMs(rules))} after that round starts.{' '}
+              {lastRound !== null
+                ? `If nobody has ${cfg.points.toWin} when round ${lastRound} ends, the most points win, then the most valuable empire.`
+                : 'There is no last round: the campaign goes on until someone reaches it.'}
             </p>
 
             {missions.length < cfg.publicCount && (
@@ -117,31 +125,39 @@ export function LobbyMissions({
             )}
 
             <div className="space-y-3">
-              {missions.map((mission, slot) => (
-                <MissionCard
-                  key={mission.key}
-                  model={model}
-                  mission={mission}
-                  onSelectCountry={onSelectCountry}
-                  onShowOnMap={
-                    missionTargets(mission.spec).length > 0
-                      ? () => onShowOnMap({ kind: 'mission', ownerId: null, key: mission.key })
-                      : undefined
-                  }
-                >
-                  {isHost &&
-                    ['regional_power', 'strategic_positions', 'great_connection'].includes(mission.spec.kind) && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm mr-2"
-                        disabled={reroll.isPending}
-                        onClick={() => reroll.mutate(slot)}
-                      >
-                        New targets
-                      </button>
+              {missions.map((mission, slot) => {
+                const issue = publicMissionIssue(mission.spec.kind as PublicMissionKind, model.idx, rules, players);
+                return (
+                  <MissionCard
+                    key={mission.key}
+                    model={model}
+                    mission={mission}
+                    onSelectCountry={onSelectCountry}
+                    onShowOnMap={
+                      missionTargets(mission.spec).length > 0
+                        ? () => onShowOnMap({ kind: 'mission', ownerId: null, key: mission.key })
+                        : undefined
+                    }
+                  >
+                    {issue && (
+                      <Notice tone="amber">
+                        {issue} {isHost ? 'Swap it for another before starting the draft.' : 'The host has to swap it.'}
+                      </Notice>
                     )}
-                </MissionCard>
-              ))}
+                    {isHost &&
+                      ['regional_power', 'strategic_positions', 'great_connection'].includes(mission.spec.kind) && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm mr-2"
+                          disabled={reroll.isPending}
+                          onClick={() => reroll.mutate(slot)}
+                        >
+                          New targets
+                        </button>
+                      )}
+                  </MissionCard>
+                );
+              })}
             </div>
 
             {isHost && picking === null && (
@@ -169,8 +185,7 @@ export function LobbyMissions({
                   Choose {cfg.publicCount} public missions ({picking.length} chosen)
                 </legend>
                 {cfg.publicKinds.map((kind) => {
-                  const info = MISSIONS[kind];
-                  const issue = publicMissionIssue(kind, model.idx, rules);
+                  const issue = publicMissionIssue(kind, model.idx, rules, players);
                   const checked = picking.includes(kind);
                   return (
                     <label
@@ -186,10 +201,12 @@ export function LobbyMissions({
                       />
                       <span>
                         <span className="block font-semibold">
-                          {info.name}
-                          {info.long ? <span className="ml-2 text-xs text-muted uppercase">Long campaign</span> : null}
+                          {kindName(kind, cfg)}
+                          {isLongMission(kind, cfg) ? (
+                            <span className="ml-2 text-xs text-muted uppercase">Long campaign</span>
+                          ) : null}
                         </span>
-                        <span className="block text-sm text-muted">{issue ?? info.summary}</span>
+                        <span className="block text-sm text-muted">{issue ?? missionSummary(kind, cfg)}</span>
                       </span>
                     </label>
                   );
@@ -207,11 +224,33 @@ export function LobbyMissions({
                     Cancel
                   </button>
                 </div>
-                <p className="text-xs text-muted">Each mission gets fresh targets from this map.</p>
+                <p className="text-xs text-muted">
+                  Each mission gets fresh targets from this map.
+                  {cfg.longDrawn < cfg.publicCount &&
+                    ` Random missions take at most ${cfg.longDrawn === 1 ? 'one' : cfg.longDrawn} marked Long campaign.`}
+                </p>
               </fieldset>
             )}
 
             <div className="space-y-2">
+              <label className="flex min-h-11 items-center justify-between gap-3">
+                <span className="text-[0.95rem]">Last round</span>
+                <select
+                  className="input w-36"
+                  value={lastRound ?? ''}
+                  disabled={!isHost}
+                  onChange={(e) =>
+                    onSaveRules({ victory: { lastRound: e.target.value ? Number(e.target.value) : null } })
+                  }
+                >
+                  {withCurrent(LAST_ROUND_OPTIONS, lastRound).map((r) => (
+                    <option key={r} value={r}>
+                      Round {r}
+                    </option>
+                  ))}
+                  <option value="">No last round</option>
+                </select>
+              </label>
               <label className="flex min-h-11 items-center justify-between gap-3">
                 <span className="text-[0.95rem]">Holding time before a claim scores</span>
                 <select

@@ -11,6 +11,8 @@ import {
   MIN_PLAYERS,
   MISSIONS,
   MODIFIER_CAP_PCT,
+  type MissionKind,
+  type MissionRules,
   REPUTATION_BROKEN,
   REPUTATION_PER_ROUND,
   REPUTATION_START,
@@ -19,8 +21,13 @@ import {
   TERRAIN_PCT,
   durationText,
   holdMs,
+  isLongMission,
   joinWords,
+  kindName,
+  lastRoundOf,
+  missionName,
   missionRules,
+  missionSummary,
   refillTokens,
   selectionMs,
   stakeFloor,
@@ -271,7 +278,9 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
           and everyone gets {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves
           in rounds, and the host starts each one.
           {rules.victory.mode === 'objectives' &&
-            ` The first to ${missionRules(rules.victory.version).points.toWin} victory points wins.`}
+            ` The first to ${missionRules(rules.victory.version).points.toWin} victory points wins${
+              lastRoundOf(rules) === null ? '' : `, or the most points once round ${lastRoundOf(rules)} is over`
+            }.`}
         </>
       ),
     },
@@ -324,6 +333,12 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
           The host presses <UI>Next round</UI>. Everyone gains {warTokens(war.tokensPerRound)}, up to {war.tokenCap}.{' '}
           {countdown[0]!.toUpperCase() + countdown.slice(1)} count down, and every accord that held through the whole of
           the last round earns both partners {REPUTATION_PER_ROUND} reputation.
+          {lastRoundOf(rules) !== null && (
+            <>
+              {' '}
+              After round {lastRoundOf(rules)}, the campaign’s last, the host presses <UI>End the campaign</UI> instead.
+            </>
+          )}
         </>
       ),
     },
@@ -777,12 +792,14 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         rules.war.pace === 'live' ? 'correspondence' : 'live'
       } campaigns)`
     : '';
-  const chosen = rules.victory.publicMissions.map((m) => MISSIONS[m.kind].name);
+  const chosen = rules.victory.publicMissions.map((m) => missionName(m));
+  const defaults = cfg.defaultPublic.map((k) => kindName(k, cfg));
   const secretKinds = cfg.secretKinds.filter((k) => k !== 'measured_expansion');
   // Missions that are records, not positions: they score the moment they're done.
   const records = [...cfg.publicKinds, ...cfg.secretKinds]
     .filter((k) => MISSIONS[k].timing === 'historic')
-    .map((k) => MISSIONS[k].name);
+    .map((k) => kindName(k, cfg));
+  const last = lastRoundOf(rules);
   return (
     <Section id="ending" title="Winning">
       <p className="text-lg">
@@ -790,6 +807,9 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         every player has one secret mission worth {points.secret}: two public missions and the secret make{' '}
         {points.public * 2 + points.secret}, and all four public ones make {points.public * 4}, so a player can win
         without their secret.
+        {last !== null &&
+          ` If nobody has ${points.toWin} when round ${last} ends, the campaign ends anyway, and the most points win.`}
+        {standard && ' (The host can pick another last round, or none, in the lobby.)'}
         {!standard && ' (The host can instead make a campaign open-ended in the lobby: no missions and no fixed end.)'}
       </p>
       <Part title="Public missions">
@@ -801,10 +821,15 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         {standard ? (
           <>
             <p>
-              New campaigns play Expansion, Strategic Positions, The Great Connection and Campaign Veteran. The host can
-              pick any other four before the draft, or have four drawn at random, and draw new targets for them:
+              New campaigns play {joinWords(defaults)}. The host can pick any other four before the draft, or have four
+              drawn at random
+              {cfg.longDrawn < cfg.publicCount &&
+                ` (at most ${cfg.longDrawn === 1 ? 'one' : cfg.longDrawn} of them marked Long campaign)`}
+              , and draw new targets for them.
+              {cfg.positionsNeedConquest &&
+                ' Positions such as Strategic Positions count only once you have won one of their countries since the draft: the draft alone never scores them.'}
             </p>
-            <MissionList kinds={cfg.publicKinds} />
+            <MissionList kinds={cfg.publicKinds} cfg={cfg} />
           </>
         ) : (
           <p>
@@ -820,12 +845,21 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           {durationText(selectionMs(rules))}, and can't change it. Anyone still choosing when time runs out gets the
           best fit. Other players see only that you're ready.
         </p>
-        <p>
-          A secret mission is revealed to everyone, with its exact targets, when you come within one step of it: for
-          most missions, holding all but one target, or one conquest away. Completing it always reveals it. Once
-          revealed it stays public, even if you lose ground.
-        </p>
-        <MissionList kinds={secretKinds} />
+        {cfg.namedSets.every((t) => t.reveal >= t.need) ? (
+          <p>
+            A secret mission is revealed to everyone, with its exact targets, when you come within one step of it: for
+            most missions, one conquest or one win away. Missions to hold named countries (seas and regions, mountains,
+            straits and the Hidden Triangle) are revealed only once complete. Completing any mission always reveals it.
+            Once revealed it stays public, even if you lose ground.
+          </p>
+        ) : (
+          <p>
+            A secret mission is revealed to everyone, with its exact targets, when you come within one step of it: for
+            most missions, holding all but one target, or one conquest away. Completing it always reveals it. Once
+            revealed it stays public, even if you lose ground.
+          </p>
+        )}
+        <MissionList kinds={secretKinds} cfg={cfg} />
         <p className="text-muted">
           If fewer than three fit, Measured Expansion fills in: gain {cfg.measuredExpansion.gain} value over your draft,
           with {cfg.measuredExpansion.newCount} new countries. If nothing fits at all, the host decides whether that
@@ -868,27 +902,63 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           moves are kept), tokens offered as tribute go back, and every secret mission is revealed in the final results.
         </p>
       </Part>
+      <Part title="The last round">
+        {last === null ? (
+          <p>
+            This campaign has no last round: it goes on until someone reaches {points.toWin}. The host sets one in the
+            lobby, before the draft.
+          </p>
+        ) : (
+          <p>
+            Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. When the
+            host moves on from it, the campaign ends as if someone had won: the most victory points win, then the most
+            valuable empire, and players level on both share the victory. Claims still waiting to score don't count, so
+            a position has to be complete by round {last - 2} to score in time.
+          </p>
+        )}
+      </Part>
     </Section>
   );
 }
 
-function MissionList({ kinds }: { kinds: readonly (keyof typeof MISSIONS)[] }) {
+const PLAYER_COUNTS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+
+/** Who a mission is for, where that depends on the size of the table. */
+function tableTag(kind: MissionKind, cfg: MissionRules): string | null {
+  const most = (cfg.maxPlayers as Partial<Record<MissionKind, number>>)[kind];
+  if (most !== undefined) return `Up to ${PLAYER_COUNTS[most] ?? most} players`;
+  const least =
+    kind === 'iron_wall'
+      ? cfg.ironWall.minPlayers
+      : kind === 'protected_expansion'
+        ? cfg.protectedExpansion.minPlayers
+        : 0;
+  return least > 2 ? `${PLAYER_COUNTS[least] ?? least} players or more` : null;
+}
+
+function MissionList({ kinds, cfg }: { kinds: readonly MissionKind[]; cfg: MissionRules }) {
   return (
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-      {kinds.map((kind) => (
-        <div key={kind} className="border-b border-line pb-2">
-          <dt className="font-semibold">
-            {MISSIONS[kind].name}
-            {MISSIONS[kind].long && (
-              <span className="ml-2 text-xs font-normal text-muted uppercase">Long campaign</span>
-            )}
-            {MISSIONS[kind].freeDraftOnly && (
-              <span className="ml-2 text-xs font-normal text-muted uppercase">Free drafts</span>
-            )}
-          </dt>
-          <dd className="text-[0.95rem] text-muted">{MISSIONS[kind].summary}</dd>
-        </div>
-      ))}
+      {kinds.map((kind) => {
+        const tags = [
+          isLongMission(kind, cfg) && 'Long campaign',
+          MISSIONS[kind].freeDraftOnly && 'Free drafts',
+          tableTag(kind, cfg),
+        ].filter((t): t is string => Boolean(t));
+        return (
+          <div key={kind} className="border-b border-line pb-2">
+            <dt className="font-semibold">
+              {kindName(kind, cfg)}
+              {tags.map((tag) => (
+                <span key={tag} className="ml-2 text-xs font-normal text-muted uppercase">
+                  {tag}
+                </span>
+              ))}
+            </dt>
+            <dd className="text-[0.95rem] text-muted">{missionSummary(kind, cfg)}</dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }

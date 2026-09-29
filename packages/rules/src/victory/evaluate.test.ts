@@ -971,3 +971,235 @@ describe('iron wall and checkmate artist', () => {
     });
   });
 });
+
+describe('positions that need a conquest (version 3)', () => {
+  // Five positions in a row; Ann drafted three of them.
+  const idx = buildMap({
+    P1: { v: 3, land: ['P2'] },
+    P2: { v: 3, land: ['P3'] },
+    P3: { v: 3, land: ['P4'] },
+    P4: { v: 3, land: ['P5'] },
+    P5: { v: 3 },
+  });
+  const baseline = { ...all(ANN, 'P1', 'P2', 'P3'), ...all(BO, 'P4', 'P5') };
+  const spec: MissionSpec = {
+    kind: 'strategic_positions',
+    territories: ['P1', 'P2', 'P3', 'P4', 'P5'],
+    need: 3,
+    needsConquest: true,
+  };
+
+  it('are not handed out by the draft: one of the positions held must be won since', () => {
+    const drafted = evaluateMission(makeWorld(idx, baseline), ANN, spec);
+    expect(drafted.complete).toBe(false);
+    expect(parts(drafted)).toEqual([
+      ['Positions held', 3, 3],
+      ['Of them won since the draft', 0, 1],
+    ]);
+    const won = makeWorld(idx, { ...baseline, P4: ANN }, { baseline });
+    expect(missionComplete(won, ANN, spec)).toBe(true);
+    // Losing a drafted one keeps it complete: two drafted and one won still make three.
+    expect(missionComplete(makeWorld(idx, { ...baseline, P4: ANN, P1: BO }, { baseline }), ANN, spec)).toBe(true);
+    // Without the flag (version 2), the draft alone completes it.
+    expect(missionComplete(makeWorld(idx, baseline), ANN, { ...spec, needsConquest: false })).toBe(true);
+  });
+
+  it('apply to Regional Power and Mare Nostrum the same way', () => {
+    const region: MissionSpec = {
+      kind: 'regional_power',
+      region: 'Test',
+      territories: ['P1', 'P2', 'P3', 'P4', 'P5'],
+      totalValue: 15,
+      needValue: 9,
+      minTerritories: 3,
+      needsConquest: true,
+    };
+    expect(missionComplete(makeWorld(idx, baseline), ANN, region)).toBe(false);
+    expect(missionComplete(makeWorld(idx, { ...baseline, P5: ANN }, { baseline }), ANN, region)).toBe(true);
+    const sea: MissionSpec = {
+      kind: 'mare_nostrum',
+      shores: [
+        { name: 'western', territories: ['P1', 'P2'] },
+        { name: 'eastern', territories: ['P3', 'P4', 'P5'] },
+      ],
+      need: 3,
+      perShore: 1,
+      needsConquest: true,
+    };
+    expect(missionComplete(makeWorld(idx, baseline), ANN, sea)).toBe(false);
+    expect(missionComplete(makeWorld(idx, { ...baseline, P4: ANN }, { baseline }), ANN, sea)).toBe(true);
+  });
+
+  it('need the block of a Continental Bridge to hold a country won since the draft', () => {
+    const map = buildMap({
+      E1: { v: 1, land: ['E2'], c: 'europe' },
+      E2: { v: 1, land: ['A1'], c: 'europe' },
+      A1: { v: 1, land: ['A2'], c: 'asia' },
+      A2: { v: 1, land: ['F1'], c: 'asia' },
+      F1: { v: 1, land: ['F2'], c: 'africa' },
+      F2: { v: 1, land: ['F3'], c: 'africa' },
+      F3: { v: 1, c: 'africa' },
+    });
+    const bridge: MissionSpec = { kind: 'continental_bridge', continents: 3, perContinent: 2, needsConquest: true };
+    const drafted = { ...all(ANN, 'E1', 'E2', 'A1', 'A2', 'F1', 'F2'), F3: BO };
+    const e = evaluateMission(makeWorld(map, drafted), ANN, bridge);
+    expect(e.complete).toBe(false);
+    expect(parts(e)).toEqual([
+      ['Continents with 2+ countries in one connected block', 3, 3],
+      ['Countries won since the draft in it', 0, 1],
+    ]);
+    expect(missionComplete(makeWorld(map, { ...drafted, F3: ANN }, { baseline: drafted }), ANN, bridge)).toBe(true);
+  });
+});
+
+describe('the great connection through a conquest (version 3)', () => {
+  //   A - B - C - D - E      the drafted chain
+  //       |       |
+  //       F - G - H          a way round
+  //           |
+  //           K              a dead end
+  const idx = buildMap({
+    A: { v: 1, land: ['B'] },
+    B: { v: 1, land: ['C', 'F'] },
+    C: { v: 1, land: ['D'] },
+    D: { v: 1, land: ['E', 'H'] },
+    E: { v: 1 },
+    F: { v: 1, land: ['G'] },
+    G: { v: 1, land: ['H', 'K'] },
+    H: { v: 1 },
+    K: { v: 1 },
+  });
+  const spec: MissionSpec = { kind: 'great_connection', endpoints: ['A', 'E'], needsConquest: true };
+  const drafted = { ...all(ANN, 'A', 'B', 'C', 'D', 'E', 'F', 'H'), ...all(BO, 'G', 'K') };
+
+  it('needs a chain that passes through a country won since the draft', () => {
+    const e = evaluateMission(makeWorld(idx, drafted), ANN, spec);
+    expect(e.complete).toBe(false);
+    expect(parts(e)).toEqual([
+      ['Endpoints held', 2, 2],
+      ['Countries held on the route', 5, 5],
+      ['Countries won since the draft on it', 0, 1],
+    ]);
+    // Winning G opens a second chain, A B F G H D E, through it.
+    const round = evaluateMission(makeWorld(idx, { ...drafted, G: ANN }, { baseline: drafted }), ANN, spec);
+    expect(round).toMatchObject({ complete: true, evidence: { path: ['A', 'B', 'F', 'G', 'H', 'D', 'E'] } });
+  });
+
+  it('does not count a conquest that hangs off the chain', () => {
+    const world = makeWorld(idx, { ...drafted, K: ANN }, { baseline: drafted });
+    expect(missionComplete(world, ANN, spec)).toBe(false);
+  });
+
+  it('counts a won endpoint, and keeps the old rule without the flag', () => {
+    const endpoint = { ...drafted, E: BO };
+    expect(missionComplete(makeWorld(idx, { ...endpoint, E: ANN }, { baseline: endpoint }), ANN, spec)).toBe(true);
+    expect(missionComplete(makeWorld(idx, drafted), ANN, { ...spec, needsConquest: false })).toBe(true);
+  });
+});
+
+describe('version 3 records', () => {
+  const idx = buildMap({ L: { v: 1, land: ['T'] }, T: { v: 1 } });
+  const owners = { L: ANN, T: BO };
+  const players = [ANN, BO, CY, DI];
+
+  it('Campaign Veteran counts only wars won as the attacker, opponents too', () => {
+    const spec: MissionSpec = { kind: 'campaign_veteran', wins: 4, opponents: 3, attackWins: 4, attackOnly: true };
+    const wars = [
+      war({ attackerId: ANN, defenderId: BO, outcome: 'attacker' }),
+      war({ attackerId: ANN, defenderId: CY, outcome: 'attacker' }),
+      war({ attackerId: ANN, defenderId: CY, outcome: 'attacker' }),
+      war({ attackerId: ANN, defenderId: BO, outcome: 'attacker' }),
+      // Won as the defender against a third opponent: doesn't count.
+      war({ attackerId: DI, defenderId: ANN, outcome: 'defender' }),
+    ];
+    const e = evaluateMission(makeWorld(idx, owners, { history: { wars }, players }), ANN, spec);
+    expect(e.complete).toBe(false);
+    expect(parts(e)).toEqual([
+      ['Wars won as the attacker', 4, 4],
+      ['Different opponents beaten', 2, 3],
+    ]);
+    const third = [...wars, war({ attackerId: ANN, defenderId: DI, outcome: 'attacker' })];
+    expect(missionComplete(makeWorld(idx, owners, { history: { wars: third }, players }), ANN, spec)).toBe(true);
+    // Three opponents can't be asked of a three-player table.
+    const small = wars.slice(0, 4);
+    expect(
+      missionComplete(makeWorld(idx, owners, { history: { wars: small }, players: [ANN, BO, CY] }), ANN, spec),
+    ).toBe(true);
+  });
+
+  it('Kingslayer counts only a leader on points, four or more ahead', () => {
+    const spec: MissionSpec = { kind: 'kingslayer', lead: 4 };
+    const w = war({ attackerId: ANN, defenderId: BO, outcome: 'attacker' });
+    const at = (points: [string, number][]) =>
+      points.map(([userId, p], i) => ({ userId, points: p, seq: w.declaredSeq - 10 + i }));
+    const check = (points: [string, number][]) =>
+      missionComplete(makeWorld(idx, owners, { history: { wars: [w], awards: at(points) }, players }), ANN, spec);
+    // The biggest empire with no points leads nothing.
+    expect(check([])).toBe(false);
+    expect(check([[BO, 4]])).toBe(true);
+    expect(
+      check([
+        [BO, 4],
+        [ANN, 2],
+      ]),
+    ).toBe(false);
+    // Four ahead of Ann, but Cy leads.
+    expect(
+      check([
+        [BO, 4],
+        [CY, 6],
+      ]),
+    ).toBe(false);
+    // Level at the top counts: both lead.
+    expect(
+      check([
+        [BO, 5],
+        [CY, 5],
+      ]),
+    ).toBe(true);
+  });
+
+  it('Backstab needs two countries from the betrayed partner by the end of the next round', () => {
+    const spec: MissionSpec = { kind: 'backstab', rounds: 1, count: 2 };
+    const roundStarts = [
+      { round: 1, seq: 5 },
+      { round: 2, seq: 20 },
+      { round: 3, seq: 30 },
+    ];
+    const broken: AccordSpan = { id: 'a1', players: [ANN, BO], from: 2, to: 12, brokenBy: ANN };
+    const strike = (declaredRound: number, declaredSeq: number, territoryId: string) =>
+      war({
+        attackerId: ANN,
+        defenderId: BO,
+        outcome: 'attacker',
+        declaredRound,
+        declaredSeq,
+        transfers: [{ territoryId, from: BO, to: ANN }],
+      });
+    const check = (wars: MissionWar[]) =>
+      evaluateMission(
+        makeWorld(
+          buildMap({ H: { v: 1 }, X: { v: 1 }, Y: { v: 1 } }),
+          { H: ANN, X: ANN, Y: ANN },
+          {
+            players: [ANN, BO],
+            history: { wars, accords: [broken], roundStarts },
+          },
+        ),
+        ANN,
+        spec,
+      );
+    expect(check([strike(1, 14, 'X')])).toMatchObject({
+      complete: false,
+      parts: [
+        { label: 'Accords broken', have: 1 },
+        { label: 'Countries taken from a betrayed partner in time', have: 1, need: 2 },
+      ],
+    });
+    expect(check([strike(1, 14, 'X'), strike(2, 22, 'Y')]).complete).toBe(true);
+    // The round after next is too late.
+    expect(check([strike(1, 14, 'X'), strike(3, 32, 'Y')]).complete).toBe(false);
+    // The same country twice is one country.
+    expect(check([strike(1, 14, 'X'), strike(2, 22, 'X')]).complete).toBe(false);
+  });
+});

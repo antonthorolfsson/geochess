@@ -109,6 +109,15 @@ export function roundAt(history: MissionHistory, seq: number): number {
 /** The round underway now: the last one to start, 0 before round 1. */
 export const currentRound = (history: MissionHistory) => roundAt(history, Infinity);
 
+/** Every player's victory points at a point in the campaign's history. */
+export function pointsAt(world: MissionWorld, seq: number): Map<UserId, number> {
+  const points = new Map(world.players.map((p) => [p, 0]));
+  for (const a of world.history.awards) {
+    if (a.seq < seq && points.has(a.userId)) points.set(a.userId, points.get(a.userId)! + a.points);
+  }
+  return points;
+}
+
 /**
  * Who led the race at a point in the campaign's history: the most victory points, then the most
  * valuable empire (several players when they're level). The map then is today's with the transfers
@@ -118,10 +127,7 @@ export function leadersAt(world: MissionWorld, seq: number): UserId[] {
   const owners = new Map(world.owners);
   const since = world.history.wars.filter((w) => w.seq > seq).sort((a, b) => b.seq - a.seq);
   for (const w of since) for (const t of [...w.transfers].reverse()) owners.set(t.territoryId, t.from);
-  const points = new Map(world.players.map((p) => [p, 0]));
-  for (const a of world.history.awards) {
-    if (a.seq < seq && points.has(a.userId)) points.set(a.userId, points.get(a.userId)! + a.points);
-  }
+  const points = pointsAt(world, seq);
   const value = new Map(world.players.map((p) => [p, 0]));
   for (const [id, owner] of owners) {
     if (value.has(owner)) value.set(owner, value.get(owner)! + (world.idx.byId.get(id)?.value ?? 0));
@@ -189,6 +195,128 @@ export function pathWithin(
   const path: TerritoryId[] = [];
   for (let at: TerritoryId | null = b; at !== null; at = prev.get(at) ?? null) path.push(at);
   return path.reverse();
+}
+
+/**
+ * A chain from `a` to `b` through `set` that passes through at least one country of `through`
+ * (both ends included, no country twice), or null. A country of `through` lies on such a chain
+ * when it has two routes within `set`, one to each end, that share no other country: two units of
+ * flow from it to the ends, each country carrying at most one. Candidates are tried nearest the
+ * ends first, so the chain found is a short one.
+ */
+export function pathThrough(
+  idx: DatasetIndex,
+  set: ReadonlySet<TerritoryId>,
+  a: TerritoryId,
+  b: TerritoryId,
+  through: ReadonlySet<TerritoryId>,
+): TerritoryId[] | null {
+  if (!set.has(a) || !set.has(b)) return null;
+  if (through.has(a) || through.has(b)) return pathWithin(idx, set, a, b);
+  const fromA = hopsWithin(idx, set, a);
+  const fromB = hopsWithin(idx, set, b);
+  const candidates = [...through]
+    .filter((id) => set.has(id) && fromA.has(id) && fromB.has(id))
+    .sort((x, y) => fromA.get(x)! + fromB.get(x)! - (fromA.get(y)! + fromB.get(y)!) || (x < y ? -1 : 1));
+  for (const via of candidates) {
+    const legs = disjointLegs(idx, set, via, a, b);
+    if (legs) return [...legs[0].reverse(), ...legs[1].slice(1)];
+  }
+  return null;
+}
+
+/** Steps from `from` to every country reachable within `set`. */
+function hopsWithin(idx: DatasetIndex, set: ReadonlySet<TerritoryId>, from: TerritoryId): Map<TerritoryId, number> {
+  const dist = new Map<TerritoryId, number>([[from, 0]]);
+  const queue = [from];
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i]!;
+    for (const n of idx.neighbors(id)) {
+      if (set.has(n) && !dist.has(n)) {
+        dist.set(n, dist.get(id)! + 1);
+        queue.push(n);
+      }
+    }
+  }
+  return dist;
+}
+
+/**
+ * Two routes within `set` from `via`, one ending at `a` and one at `b`, sharing no country but
+ * `via`: a unit-capacity flow on the countries split in two (in and out), found by augmenting
+ * paths. Each route starts at `via`. Null if there aren't two.
+ */
+function disjointLegs(
+  idx: DatasetIndex,
+  set: ReadonlySet<TerritoryId>,
+  via: TerritoryId,
+  a: TerritoryId,
+  b: TerritoryId,
+): [TerritoryId[], TerritoryId[]] | null {
+  const ids = [...set].sort();
+  const index = new Map(ids.map((id, i) => [id, i]));
+  // Node 2i is country i's way in, 2i + 1 its way out; the sink is the last node.
+  const sink = 2 * ids.length;
+  const to: number[] = [];
+  const cap: number[] = [];
+  const edges: number[][] = Array.from({ length: sink + 1 }, () => []);
+  const link = (u: number, v: number) => {
+    edges[u]!.push(to.length);
+    to.push(v);
+    cap.push(1);
+    edges[v]!.push(to.length);
+    to.push(u);
+    cap.push(0);
+  };
+  const viaIndex = index.get(via)!;
+  ids.forEach((id, i) => {
+    if (i !== viaIndex) link(2 * i, 2 * i + 1);
+    for (const n of idx.neighbors(id)) {
+      const j = index.get(n);
+      if (j !== undefined && j !== viaIndex) link(2 * i + 1, 2 * j);
+    }
+  });
+  link(2 * index.get(a)! + 1, sink);
+  link(2 * index.get(b)! + 1, sink);
+  const source = 2 * viaIndex + 1;
+  for (let found = 0; found < 2; found++) {
+    const prevEdge = new Map<number, number>([[source, -1]]);
+    const queue = [source];
+    for (let i = 0; i < queue.length && !prevEdge.has(sink); i++) {
+      for (const e of edges[queue[i]!]!) {
+        if (cap[e]! > 0 && !prevEdge.has(to[e]!)) {
+          prevEdge.set(to[e]!, e);
+          queue.push(to[e]!);
+        }
+      }
+    }
+    if (!prevEdge.has(sink)) return null;
+    for (let v = sink; v !== source;) {
+      const e = prevEdge.get(v)!;
+      cap[e] = cap[e]! - 1;
+      cap[e ^ 1] = cap[e ^ 1]! + 1;
+      v = to[e ^ 1]!;
+    }
+  }
+  // Follow the flow out of `via`: each unit is one route, ending next to the sink at `a` or `b`.
+  const legs: TerritoryId[][] = [];
+  for (const first of edges[source]!) {
+    if (first % 2 !== 0 || cap[first] !== 0) continue;
+    const route = [via];
+    let node = to[first]!;
+    while (node !== sink) {
+      if (node % 2 === 0) route.push(ids[node / 2]!);
+      const next = edges[node]!.find((e) => e % 2 === 0 && cap[e] === 0);
+      if (next === undefined) return null;
+      cap[next] = -1;
+      node = to[next]!;
+    }
+    legs.push(route);
+  }
+  if (legs.length !== 2) return null;
+  const toA = legs.find((l) => l.at(-1) === a);
+  const toB = legs.find((l) => l.at(-1) === b);
+  return toA && toB ? [toA, toB] : null;
 }
 
 /**

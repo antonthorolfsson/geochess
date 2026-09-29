@@ -13,6 +13,8 @@ when starting new work.**
 - `pnpm data:build`: rebuild the country dataset (downloads are cached in `packages/data/raw/`)
 - `pnpm data:openings`: rebuild the opening names table from the Lichess openings list
 - `pnpm db:generate`: new SQL migration after editing `apps/server/src/db/schema.ts`
+- `pnpm sim --scenario baseline --players 2-8 --seeds 400`, then `pnpm sim:report baseline`: the
+  balance simulator (`packages/sim`, see its README); findings are in `docs/balance-report.md`
 
 ## Layout and rules of the road
 
@@ -33,13 +35,21 @@ when starting new work.**
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target
   generation and claim blockers are in `packages/rules/src/victory/`; the server side is in
-  `apps/server/src/victory/`. `settleVictory()` runs inside every `mutate()` (reveals, claims,
-  awards, the finish). A player's secret mission and options are private until `mission.revealed`:
-  never put them in events, pushes, notices or another player's view before that.
+  `apps/server/src/victory/`. Tuning means a new version (version 3 since 2026-09-29); stored
+  campaigns keep theirs. `settleVictory()` runs inside every `mutate()` (reveals, claims, awards,
+  the finish). A campaign's last round (`rules.victory.lastRound`) ends it on points when the host
+  moves on from it (`endSeason`). A player's secret mission and options are private until
+  `mission.revealed`: never put them in events, pushes, notices or another player's view before
+  that.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and
   pushes `chat.message` only to the players who can read it.
+- `packages/sim` plays whole campaigns with bots for balance runs. It uses the rules package for
+  every rule but mirrors the server's orchestration (round starts, the war lifecycle,
+  `settleVictory`) in `src/engine/`: change one, change the other.
+  `apps/server/test/sim-parity.test.ts` replays simulated campaigns through the server and fails
+  on any drift.
 - `apps/web` is Next.js 16. Its bundled docs in `apps/web/node_modules/next/dist/docs/` are the
   reference, since APIs differ from older versions (async `params`, `proxy.ts`, Turbopack default).
   Pages are thin server components that hand off to client screens in `src/components/`. The

@@ -8,7 +8,7 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (430 tests as of 2026-09-29).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (482 tests as of 2026-09-29).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -315,6 +315,108 @@ the rules guide list the campaign's version).
 
 Tests since: rules 211, data 66, web 40, server 113.
 
+**Balance simulation** (2026-09-29, at the user's request): whole campaigns played by bots, to
+find missions that are too easy or too hard. Findings and recommendations are in
+[balance-report.md](balance-report.md). Not committed yet.
+
+- **`packages/sim` (`@empire/sim`)** plays campaigns headlessly.
+  - It uses the rules package for every rule and mirrors only the server's orchestration
+    (`src/engine/`): round starts, the war lifecycle and `settleVictory`.
+  - The bots (`src/bots/`) chase their missions, block visible claims, answer wars and make and
+    break accords.
+  - Run it with `pnpm sim` and summarise with `pnpm sim:report`; `trace` tells one campaign round
+    by round. The README explains the scenarios, the knobs and how to add a what-if.
+  - Output goes to `packages/sim/out/` (git-ignored).
+- **`apps/server/test/sim-parity.test.ts`** replays eight simulated campaigns through the real
+  server. Awards, reveals, winners and the final map must match exactly. If the server's lifecycle
+  changes, mirror it in `packages/sim/src/engine/`, or this test fails.
+- **What the runs found** (44,284 campaigns):
+  - **Pace.** Campaigns are won around round 6–9, not 15–25. At 2–3 players a sixth to a quarter
+    never finish.
+  - **Near-free public missions.** Campaign Veteran and Kingslayer are scored by 70–98% of
+    players.
+  - **Secrets.** The battle secrets double their holder's chance of winning, while most region and
+    route secrets are almost never done.
+  - **The draft.** At 2–3 players it hands out Strategic Positions and similar positions.
+  - **Dead missions.** Great Connection and Mare Nostrum are dead at 5 or more players.
+  - **What was ruled out.** No single number fixes the pace, and more points to win makes half of
+    all campaigns stall.
+  - **Recommendations** for mission rules version 3, and two new host settings (a season length
+    and a slower token rate), are in the report. All but the slower token rate are now applied:
+    see the next section.
+
+Tests since: sim 17, server 121 (the parity test).
+
+**Mission rules version 3 and seasons** (2026-09-29, the report's recommendations at the user's
+request, all but the slower war tokens; not committed yet). New campaigns play version 3 with a
+last round of 25. Campaigns stored before keep their version, and have no last round unless the
+host sets one in the lobby. What the simulator says about the result is in the report's
+[Version 3, as built](balance-report.md#version-3-as-built).
+
+- **Records are harder.**
+  - Campaign Veteran counts only wars won as the attacker, opponents included: four of them,
+    against three different opponents, or all there are (`attackOnly`).
+  - Kingslayer counts only a war declared on the leader on points while they were four or more
+    points ahead (`lead`; value no longer decides who leads, so nobody leads before points exist).
+  - Checkmate Artist needs three mates, Iron Wall three wins (and is dealt only from four players),
+    Nemesis four countries (revealed at three).
+  - Backstab needs two countries from the betrayed partner in wars declared within the next two
+    rounds (`count`). The report said "in the round after the break"; simulated, that left it
+    completed 5% of the time and its holder with 0.4 of a fair chance, so it was eased.
+- **Giants are bigger:** Great Expanse 20 million km², One Billion two billion people (it's named
+  for its figure, so version 3 shows "Two Billion": `missionName`, `kindName`), Great Powers all
+  three won since the draft.
+- **Across the Seas** needs two attacks.
+- **Positions need a conquest** (`needsConquest`): Strategic Positions, Regional Power and Mare
+  Nostrum count only with one of the countries held won since the draft, Continental Bridge with
+  one in the block, and The Great Connection through a chain that passes through one
+  (`pathThrough` in `world.ts`: a country lies on such a chain when two routes from it, one to
+  each end, share nothing else, found as a two-unit flow).
+- **Table size:** The Great Connection and Mare Nostrum are only for four players or fewer
+  (`MissionRules.maxPlayers`, `publicMissionIssue(…, players)`). The lobby card says so once a fifth
+  player joins, the draft can't start with them, and random draws leave them out. **Great Powers
+  replaces The Great Connection in the default set** (the user's call).
+- **Long campaigns:** `MissionRules.long` lists the missions that make for a long campaign (the
+  "Long campaign" tag in the lobby, on mission cards and in the rules, version by version), and a
+  random draw takes at most one of them (`longDrawn`); version 2 draws with no limit, as before.
+  Version 3's list is the public missions a fifth of players or fewer scored in the simulator
+  (Continental Bridge at 5 or more players), and the five secrets done least: Silk Road, Cape to
+  Cairo, Pan-American Highway, Encirclement and Unification.
+- **Region and route secrets** (the user's call: fewer targets, tuned in the simulator):
+  - Named seas and regions need half their countries, at least two (Black Sea three of six, Baltic
+    League five of nine, the sets of four two of them). Mountain Kingdom and Hidden Triangle need
+    two of three (Hidden Triangle's targets one or two conquests away), Strait Keeper one strait,
+    Island Empire three islands.
+  - These are revealed only once complete (`reveal` = `need`), not one short: rivals saw the last
+    step coming and blocked it.
+  - Tried and dropped: holding region and route secrets to fewer conquests when dealing, and
+    Encirclement to rings of three. Completion didn't move, and chains and rings looked cheap, so
+    players chose them and rarely finished them.
+- **Summaries follow the version:** `missionSummary(kind, cfg)` words each mission with its
+  version's numbers; `MissionInfo` no longer has `summary` or `long`.
+- **The season** (`rules.victory.lastRound`, 2 to 100 or null; `lastRoundOf(rules)` is null for
+  open-ended campaigns). The lobby offers rounds 15, 20, 25 or 30, or none. In the last round the
+  war room says so and the host's button reads **End the campaign**: `nextRound` then calls
+  `endSeason` (`victory/finish.ts`), which brings missions up to date (something just done could
+  still take someone to 7), then gives the win to the most points, then the most valuable empire
+  (`seasonWinners`), players level on both sharing it. The result and the `campaign.won` event carry
+  `seasonEnd`; the missions panel and the dispatches say how it ended. Claims still waiting don't
+  count.
+- **Simulator:** campaigns play the current version with a last round of 25; `--mission-rules 2`
+  and `--last-round none` replay the report's setup. `endSeason` is mirrored in `engine.ts` (a
+  `{ t: 'end' }` action), records carry the version and last round, and the bots value the version
+  3 rules. The what-ifs in `variants-catalog.ts` before "Tuning mission rules version 3" patch
+  version 2. The parity test gained two campaigns that end on points and one on version 2.
+
+- **Web:** the lobby's Victory section has a Last round setting and flags a mission the table has
+  outgrown; the campaign header and war room read "Round 12 of 25"; the missions panel and final
+  results say when the season ended it; `rules-text.ts` lists the last round.
+- **Dev database:** Field Marshal's test campaigns "Season Check" (a lobby) and "Last Round Check"
+  (with Bo, ended on points after round 2) come from this work, plus a stray lobby also named
+  "Last Round Check".
+
+Tests since: rules 229, web 40, sim 20, server 127 (482 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -507,6 +609,12 @@ All at the proposed defaults.
   Germany (9) and Western Sahara (2). The friend group should review `REPORT.md`.
 - **Web push on real devices** is untested end to end: it needs VAPID keys, a production build
   served over HTTPS, and (on iOS) the app on the home screen.
+- **Secret missions still uneven after version 3** (see the report's
+  [Version 3, as built](balance-report.md#version-3-as-built)): battle secrets still give their
+  holder more than a fair chance, and a few route secrets (Pan-American Highway, Cape to Cairo,
+  Encirclement, Unification) are almost never done by the bots, since a chain or a ring can't be
+  made shorter. Retire them, redesign them, or wait for the playtest? The slower war tokens the
+  report also suggested were left out at the user's request.
 
 ## Running and testing
 

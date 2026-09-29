@@ -16,6 +16,8 @@
     "data:build": "pnpm --filter @empire/data generate",
     "data:openings": "pnpm --filter @empire/data openings",
     "db:generate": "pnpm --filter @empire/server db:generate",
+    "sim": "pnpm --filter @empire/sim sim",
+    "sim:report": "pnpm --filter @empire/sim report",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

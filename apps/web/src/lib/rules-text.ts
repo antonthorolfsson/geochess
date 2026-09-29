@@ -68,6 +68,10 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     },
     ...(objectives
       ? [
+          {
+            label: 'Last round',
+            value: victory.lastRound === null ? 'None' : `Round ${victory.lastRound}, then the most points win`,
+          },
           { label: 'Claims are held', value: `${durationText(holdMs(rules))} after the next round starts` },
           { label: 'Time to choose a secret', value: durationText(selectionMs(rules)) },
         ]

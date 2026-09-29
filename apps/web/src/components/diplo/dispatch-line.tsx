@@ -31,6 +31,7 @@ export function DispatchLine({
 }) {
   const name = (userId: string | null) =>
     userId ? (model.membersById.get(userId)?.name ?? 'A former player') : 'Someone';
+  const version = model.campaign.rules.victory.version;
   const country = (id: TerritoryId) => (
     <button
       type="button"
@@ -152,7 +153,7 @@ export function DispatchLine({
       return (
         <span>
           <strong>
-            {name(userId)} claims {missionName({ kind })}
+            {name(userId)} claims {missionName({ kind }, version)}
           </strong>
           : it can score in round {eligibleRound} at the earliest, if it’s still held then and no war can break it.
         </span>
@@ -162,7 +163,7 @@ export function DispatchLine({
       const { userId, kind } = event.payload;
       return (
         <span className="text-muted">
-          {name(userId)} lost the position claimed for {missionName({ kind })} before it scored.
+          {name(userId)} lost the position claimed for {missionName({ kind }, version)} before it scored.
         </span>
       );
     }
@@ -170,7 +171,7 @@ export function DispatchLine({
       const { userId, kind, points, total } = event.payload;
       return (
         <strong className="text-amber">
-          {name(userId)} scored {missionName({ kind })}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
+          {name(userId)} scored {missionName({ kind }, version)}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
         </strong>
       );
     }
@@ -178,6 +179,7 @@ export function DispatchLine({
       const winners = event.payload.winners.map((id) => name(id));
       return (
         <strong className="font-stencil text-lg tracking-wide text-amber">
+          {event.payload.seasonEnd && 'The last round is over. '}
           {winners.length > 1
             ? `${winners.slice(0, -1).join(', ')} and ${winners.at(-1)} share the victory.`
             : `${winners[0]} wins the campaign.`}

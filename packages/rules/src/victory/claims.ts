@@ -49,6 +49,23 @@ export function claimTimeServed(claim: ClaimTiming, round: number, now: number):
 }
 
 /**
+ * Who wins when the season's last round ends and nobody has reached the points to win: the most
+ * points, then the most valuable empire; players level on both share it. Sorted by id.
+ */
+export function seasonWinners(standings: ReadonlyMap<UserId, { points: number; value: number }>): UserId[] {
+  let best: { points: number; value: number } | null = null;
+  for (const s of standings.values()) {
+    if (!best || s.points > best.points || (s.points === best.points && s.value > best.value)) best = s;
+  }
+  if (!best) return [];
+  const top = best;
+  return [...standings]
+    .filter(([, s]) => s.points === top.points && s.value === top.value)
+    .map(([userId]) => userId)
+    .sort();
+}
+
+/**
  * Who wins, given everyone's points after a batch of awards: the highest total among those who
  * reached `toWin`, every player with that total sharing the win. Empty if nobody reached it.
  * Sorted by id only so the result is stable; order never decides a tie.

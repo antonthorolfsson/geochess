@@ -1,0 +1,25 @@
+{
+  "name": "@empire/sim",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Balance simulator: plays whole campaigns headlessly with bots, on the real rules, to find overpowered or dead missions.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "sim": "tsx src/cli/run.ts",
+    "trace": "tsx src/cli/trace.ts",
+    "report": "tsx src/cli/report.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@empire/data": "workspace:*",
+    "@empire/rules": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

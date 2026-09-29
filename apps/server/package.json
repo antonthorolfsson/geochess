@@ -27,6 +27,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@empire/sim": "workspace:*",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/web-push": "^3.6.4",

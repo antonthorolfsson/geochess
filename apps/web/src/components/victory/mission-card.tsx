@@ -1,7 +1,10 @@
 'use client';
 
 import {
+  isLongMission,
   missionInfo,
+  missionName,
+  missionRules,
   missionTargets,
   partAmount,
   type MissionView,
@@ -122,19 +125,21 @@ export function MissionCard({
   children?: ReactNode;
 }) {
   const info = missionInfo(mission.spec.kind);
+  const name = missionName(mission.spec);
+  const cfg = missionRules(model.campaign.rules.victory.version);
   const tags = [
     mission.scope === 'secret' ? 'Secret' : 'Public',
     info.timing === 'historic' ? 'Scores the moment it’s done' : 'Hold it to score',
-    ...(info.long ? ['Long campaign'] : []),
+    ...(isLongMission(mission.spec.kind, cfg) ? ['Long campaign'] : []),
   ];
   return (
     <article
       className={`space-y-2.5 rounded-[3px] border bg-panel p-3 ${highlight ? 'border-amber/60' : 'border-line'}`}
-      aria-label={info.name}
+      aria-label={name}
     >
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="font-stencil text-xl leading-tight tracking-wide">{info.name}</h3>
+          <h3 className="font-stencil text-xl leading-tight tracking-wide">{name}</h3>
           <p className="text-xs font-semibold tracking-[0.12em] text-muted uppercase">{tags.join(' · ')}</p>
         </div>
         <PointsBadge points={mission.points} />

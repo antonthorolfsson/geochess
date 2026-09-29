@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, parseRules, type CampaignRules } from '../config';
 import type { TerritoryId } from '../dataset';
-import { MISSION_RULES_V1, PUBLIC_MISSION_KINDS, missionInfo, type PublicMissionSpec } from './catalog';
+import {
+  MISSION_RULES_V1,
+  MISSION_RULES_V3,
+  PUBLIC_MISSION_KINDS,
+  missionInfo,
+  type PublicMissionKind,
+  type PublicMissionSpec,
+} from './catalog';
 import { evaluateMission } from './evaluate';
 import {
   drawPublicKinds,
@@ -69,6 +76,7 @@ const quarters = {
   ...all(DI, ...quarter(5, 4), 'I4', 'I5', 'I6', 'I7'),
 };
 const free: CampaignRules = parseRules({ victory: { mode: 'objectives' }, draft: { mode: 'free' } });
+const v2: CampaignRules = parseRules({ victory: { mode: 'objectives', version: 2 } });
 
 describe('seeded randomness', () => {
   it('repeats for the same seed and differs between seeds', () => {
@@ -175,7 +183,7 @@ describe('public missions', () => {
     expect(generatePublicMissions(kinds, idx, v1, Math.random)).toMatchObject({
       error: expect.stringMatching(/added/),
     });
-    expect(generatePublicMissions(kinds, idx, DEFAULT_RULES, Math.random)).toEqual({
+    expect(generatePublicMissions(kinds, idx, v2, Math.random)).toEqual({
       missions: [
         { kind: 'expansion', gain: 15 },
         { kind: 'kingslayer' },
@@ -183,6 +191,79 @@ describe('public missions', () => {
         { kind: 'campaign_veteran', wins: 3, opponents: 2, attackWins: 1 },
       ],
     });
+  });
+
+  it('carry version 3’s numbers: records and giants harder, positions needing a conquest', () => {
+    const kinds: PublicMissionKind[] = ['kingslayer', 'campaign_veteran', 'across_the_seas', 'lightning_campaign'];
+    expect(generatePublicMissions(kinds, idx, DEFAULT_RULES, Math.random)).toEqual({
+      missions: [
+        { kind: 'kingslayer', lead: 4 },
+        { kind: 'campaign_veteran', wins: 4, opponents: 3, attackWins: 4, attackOnly: true },
+        { kind: 'across_the_seas', count: 2 },
+        { kind: 'lightning_campaign', wins: 2 },
+      ],
+    });
+    expect(generatePublicMission('great_powers', idx, DEFAULT_RULES, Math.random)).toEqual({
+      kind: 'great_powers',
+      minValue: 8,
+      count: 3,
+      newCount: 3,
+    });
+    expect(generatePublicMission('one_billion', idx, DEFAULT_RULES, Math.random)).toEqual({
+      kind: 'one_billion',
+      people: 2_000_000_000,
+    });
+    expect(generatePublicMission('great_expanse', idx, DEFAULT_RULES, Math.random)).toEqual({
+      kind: 'great_expanse',
+      areaKm2: 20_000_000,
+    });
+    for (const kind of ['strategic_positions', 'regional_power', 'great_connection', 'continental_bridge'] as const) {
+      expect(generatePublicMission(kind, idx, DEFAULT_RULES, seededRandom(4)), kind).toMatchObject({
+        needsConquest: true,
+      });
+      expect(generatePublicMission(kind, idx, v2, seededRandom(4)), kind).not.toHaveProperty('needsConquest');
+    }
+    expect(MISSION_RULES_V3.defaultPublic).toEqual([
+      'expansion',
+      'strategic_positions',
+      'great_powers',
+      'campaign_veteran',
+    ]);
+  });
+
+  it('keep The Great Connection and Mare Nostrum to tables of four or fewer, from version 3', () => {
+    expect(publicMissionIssue('great_connection', idx, DEFAULT_RULES, 4)).toBeNull();
+    expect(publicMissionIssue('great_connection', idx, DEFAULT_RULES, 5)).toMatch(/up to four players/);
+    expect(publicMissionIssue('great_connection', idx, DEFAULT_RULES)).toBeNull();
+    expect(publicMissionIssue('great_connection', idx, v2, 8)).toBeNull();
+    const kinds: PublicMissionKind[] = ['expansion', 'great_connection', 'campaign_veteran', 'two_fronts'];
+    expect(generatePublicMissions(kinds, idx, DEFAULT_RULES, seededRandom(1), 6)).toMatchObject({
+      error: expect.stringMatching(/up to four players/),
+    });
+    for (let seed = 1; seed <= 30; seed++) {
+      expect(drawPublicKinds(idx, DEFAULT_RULES, seededRandom(seed), 6)).not.toContain('great_connection');
+    }
+  });
+
+  it('draw at most one mission that takes a long campaign, from version 3', () => {
+    let longest = 0;
+    let longestV2 = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const kinds = drawPublicKinds(idx, free, seededRandom(seed), 3);
+      expect(kinds).toHaveLength(4);
+      const long = kinds.filter((k) => MISSION_RULES_V3.long.includes(k)).length;
+      expect(long, kinds.join()).toBeLessThanOrEqual(1);
+      longest = Math.max(longest, long);
+      const older = drawPublicKinds(
+        idx,
+        parseRules({ ...free, victory: { ...free.victory, version: 2 } }),
+        seededRandom(seed),
+      );
+      longestV2 = Math.max(longestV2, older.filter((k) => MISSION_RULES_V3.long.includes(k)).length);
+    }
+    expect(longest).toBe(1);
+    // Version 2 draws uniformly, with no limit.
+    expect(longestV2).toBeGreaterThan(1);
   });
 
   it('draw four different playable missions at random, in catalog order', () => {
@@ -284,9 +365,28 @@ describe('secret options', () => {
     // Cy borders Ann along five countries, Bo along four.
     expect(nemesis).toMatchObject({
       family: 'battle',
-      spec: { rival: CY, count: 3, reveal: 2 },
-      estimate: { conquests: 3, inTheWay: 0, rivals: 1 },
+      spec: { rival: CY, count: 4, reveal: 3 },
+      estimate: { conquests: 4, inTheWay: 0, rivals: 1 },
     });
+  });
+
+  it('deal version 3’s harder battles: Backstab two countries, Iron Wall from four players', () => {
+    const kinds = (world: ReturnType<typeof makeWorld>, rules: CampaignRules) =>
+      secretCandidates(world, ANN, rules, seededRandom(1)).map((c) => c.spec);
+    expect(kinds(world4, DEFAULT_RULES)).toEqual(
+      expect.arrayContaining([
+        { kind: 'backstab', rounds: 2, count: 2 },
+        { kind: 'iron_wall', wins: 3 },
+        { kind: 'checkmate_artist', wins: 3 },
+      ]),
+    );
+    const three = makeWorld(idx, {
+      ...all(ANN, ...quarter(0, 0)),
+      ...all(BO, ...quarter(5, 0), ...quarter(5, 4), 'I0', 'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7'),
+      ...all(CY, ...quarter(0, 4)),
+    });
+    expect(kinds(three, DEFAULT_RULES).map((s) => s.kind)).not.toContain('iron_wall');
+    expect(kinds(three, v2).map((s) => s.kind)).toContain('iron_wall');
   });
 
   it('mark for Buffer Zone the most valuable drafted country with three to six neighbors', () => {
@@ -442,11 +542,16 @@ describe('secret options', () => {
     expect(options.map((o) => o.spec.kind)).toContain('measured_expansion');
     const tiny = buildMap({ H: { v: 1, land: ['Y'] }, Y: { v: 1 } });
     expect(secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, v1, seededRandom(1))).toEqual([]);
-    // Version 2 always has battles to offer.
+    // Version 2 always has battles to offer; version 3 keeps Iron Wall for four players or more.
+    expect(
+      secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, v2, seededRandom(1))
+        .map((o) => o.spec.kind)
+        .sort(),
+    ).toEqual(['backstab', 'checkmate_artist', 'iron_wall']);
     expect(
       secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, DEFAULT_RULES, seededRandom(1))
         .map((o) => o.spec.kind)
         .sort(),
-    ).toEqual(['backstab', 'checkmate_artist', 'iron_wall']);
+    ).toEqual(['backstab', 'checkmate_artist']);
   });
 });

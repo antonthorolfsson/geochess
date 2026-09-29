@@ -328,14 +328,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             : `${playerName(current, e.payload.userId)}’s secret: ${missionName(e.payload.mission)}`,
         );
       } else if (e.type === 'claim.started') {
-        const mission = missionName({ kind: e.payload.kind });
+        const mission = missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version);
         setToast(
           e.payload.userId === me
             ? `Claim started: ${mission}`
             : `${playerName(current, e.payload.userId)} claims ${mission}`,
         );
       } else if (e.type === 'claim.interrupted' && e.payload.userId === me) {
-        setToast(`Claim lost: ${missionName({ kind: e.payload.kind })}`);
+        setToast(`Claim lost: ${missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version)}`);
       } else if (e.type === 'mission.awarded' && e.payload.userId === me) {
         setToast(`+${e.payload.points} victory points`);
         navigator.vibrate?.(120);
@@ -798,8 +798,9 @@ function CampaignHeader({
     draft: campaign.draft ? `Draft · Round ${campaign.draft.round} of ${model.totalRounds}` : 'Draft',
     selection: 'Draft over · choosing secret missions',
     active:
-      `Round ${campaign.round} · ${model.tokens} war ${model.tokens === 1 ? 'token' : 'tokens'}` +
-      (victory ? ` · ${myPoints} of ${victory.pointsToWin} VP` : ''),
+      `Round ${campaign.round}${victory?.lastRound ? ` of ${victory.lastRound}` : ''} · ${model.tokens} war ${
+        model.tokens === 1 ? 'token' : 'tokens'
+      }` + (victory ? ` · ${myPoints} of ${victory.pointsToWin} VP` : ''),
     finished:
       winners.length > 0
         ? `Finished · ${winners.join(' and ')} ${winners.length > 1 ? 'share it' : 'won'}`

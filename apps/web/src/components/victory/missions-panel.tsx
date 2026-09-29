@@ -2,7 +2,9 @@
 
 import {
   durationText,
+  effortText,
   missionInfo,
+  partAmount,
   revealRule,
   type ClaimView,
   type Evaluation,
@@ -166,11 +168,7 @@ function SecretSelection({ model, onSelectCountry, onShowOnMap }: PanelProps) {
               }
             >
               <p className="text-sm text-muted">
-                About {plural(option.estimate.conquests, 'conquest')}
-                {option.estimate.inTheWay > 0 && ` (${option.estimate.inTheWay} of them in the way)`} against{' '}
-                {plural(option.estimate.rivals, 'rival')}
-                {option.estimate.targetValue > 0 && `, targets worth ${option.estimate.targetValue}`}. An estimate, not
-                a promise. {revealRule(option.spec)}
+                {effortText(option.spec, option.estimate)} An estimate, not a promise. {revealRule(option.spec)}
                 {option.rank === 1 && <strong className="block text-paper">Best fit: yours if time runs out.</strong>}
               </p>
               <button
@@ -436,7 +434,7 @@ function standingLine(model: CampaignModel, userId: string, key: string, progres
   const claim = model.campaign.victory?.claims.find((c) => c.userId === userId && c.missionKey === key);
   if (claim) return `Claimed: can score in round ${claim.eligibleRound}`;
   if (!progress) return '';
-  return progress.parts.map((p) => `${p.label} ${p.have}/${p.need}`).join(' · ');
+  return progress.parts.map((p) => `${p.label} ${partAmount(p, p.have)}/${partAmount(p, p.need)}`).join(' · ');
 }
 
 function PublicMissions({ model, onSelectCountry, onShowOnMap }: PanelProps) {

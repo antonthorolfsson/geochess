@@ -1,6 +1,7 @@
 import {
   EMPTY_HISTORY,
   MISSION_RULES_V1,
+  MISSION_RULES_V2,
   PUBLIC_MISSION_KINDS,
   captureCosts,
   components,
@@ -14,6 +15,7 @@ import {
   pickerAt,
   publicMissionIssue,
   regionsFor,
+  secretCandidates,
   secretOptions,
   seededRandom,
   shuffled,
@@ -56,10 +58,48 @@ function worldAfterDraft(owners: Map<TerritoryId, string>, players: string[]): M
 
 describe(`missions on ${index.latest}`, () => {
   it('resolves every named set to countries on the map that hang together', () => {
-    for (const set of MISSION_RULES_V1.namedSets) {
+    for (const set of MISSION_RULES_V2.namedSets) {
       for (const id of set.territories) expect(idx.byId.has(id), `${set.kind}: ${id}`).toBe(true);
       expect(components(idx, new Set(set.territories)), set.kind).toHaveLength(1);
     }
+  });
+
+  it('resolves every route, strait and fixed public target to the map', () => {
+    for (const {
+      kind,
+      endpoints: [a, b],
+    } of MISSION_RULES_V2.routes) {
+      expect(idx.byId.has(a) && idx.byId.has(b), kind).toBe(true);
+      expect(hopDistances(idx, a).get(b), kind).toBeDefined();
+    }
+    for (const {
+      name,
+      shores: [a, b],
+    } of MISSION_RULES_V2.straits) {
+      expect(idx.neighbors(a), name).toContain(b);
+    }
+    const { mareNostrum, sevenWonders } = MISSION_RULES_V2;
+    const mediterranean = mareNostrum.shores.flatMap((shore) => shore.territories);
+    expect(new Set(mediterranean).size).toBe(21);
+    for (const id of [...mediterranean, ...sevenWonders.territories]) expect(idx.byId.has(id), id).toBe(true);
+  });
+
+  it('offers every secret mission of version 2 to someone after simulated drafts', () => {
+    const offered = new Set<string>();
+    for (const n of [2, 3, 4, 8]) {
+      const players = ['ann', 'bo', 'cy', 'di', 'ed', 'flo', 'gus', 'hal'].slice(0, n);
+      for (const [rules, seed] of [
+        [objectives, 1],
+        [freeDraft, 2],
+      ] as const) {
+        const world = worldAfterDraft(simulateDraft(players, rules, seed), players);
+        for (const p of players) {
+          for (const c of secretCandidates(world, p, rules, seededRandom(seed))) offered.add(c.spec.kind);
+        }
+      }
+    }
+    const missing = MISSION_RULES_V2.secretKinds.filter((k) => k !== 'measured_expansion' && !offered.has(k));
+    expect(missing).toEqual([]);
   });
 
   it('finds regions of workable size for Regional Power, never a whole continent', () => {

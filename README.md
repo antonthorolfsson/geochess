@@ -74,14 +74,15 @@ campaign to open-ended in the lobby; campaigns created before missions existed s
 
 - Four **public missions**, worth 2 victory points each, chosen and shown with their exact targets
   in the lobby and locked when the draft starts. The default set is Expansion, Strategic
-  Positions, The Great Connection and Campaign Veteran; the host can pick any four of ten and
-  draw new targets. Every player can score each public mission once: one player scoring it takes
-  nothing from the others.
+  Positions, The Great Connection and Campaign Veteran; the host can pick any four of sixteen
+  (among them Mare Nostrum, One Billion, Seven Wonders and Kingslayer) and draw new targets.
+  Every player can score each public mission once: one player scoring it takes nothing from the
+  others.
 - One **secret mission** per player, worth 3. When the draft ends, each player is dealt up to three
-  options fitted to their empire (Northern Passage, Mediterranean Arc, Encirclement, Two-Theater
-  Power, Protected Expansion and more), privately, and chooses one before round 1; the best fit
-  is assigned if time runs out. A secret mission is revealed to everyone, for good, once its
-  player is one step from completing it, or completes it.
+  options fitted to their empire (Northern Passage, Black Sea, Silk Road, Encirclement, Strait
+  Keeper, Two-Theater Power, Nemesis, Backstab, Checkmate Artist and more), privately, and chooses
+  one before round 1; the best fit is assigned if time runs out. A secret mission is revealed to
+  everyone, for good, once its player is one step from completing it, or completes it.
 - **Claims and the response window.** Completing a territorial mission starts a public claim. It
   scores only once the round after next has started, at least 24 hours (10 minutes live) after
   the next round started, if the position was held throughout and no unresolved war could still

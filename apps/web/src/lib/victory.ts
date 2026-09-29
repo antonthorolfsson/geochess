@@ -21,9 +21,12 @@ export interface PlayedMission {
   ownerId: string | null;
 }
 
-/** The mission's exact requirement, adapted to the table (Campaign Veteran with two players). */
+/** The mission's exact requirement, adapted to the table: Campaign Veteran with two players, a Nemesis's rival. */
 export const requirementText = (model: CampaignModel, spec: MissionSpec) =>
-  missionRequirement(spec, model.idx, { players: model.campaign.members.length });
+  missionRequirement(spec, model.idx, {
+    players: model.campaign.members.length,
+    playerName: (userId) => model.membersById.get(userId)?.name ?? 'a former player',
+  });
 
 export const titleOf = (mission: Pick<MissionView, 'spec'>) => missionName(mission.spec);
 

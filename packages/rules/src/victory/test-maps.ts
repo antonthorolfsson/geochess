@@ -14,6 +14,9 @@ export interface Place {
   micro?: boolean;
   /** Longitude and latitude of the label point. */
   at?: [number, number];
+  /** Population and area in km², for the missions that count them. */
+  people?: number;
+  area?: number;
 }
 
 /** A dataset from a list of places; borders are made symmetric. */
@@ -35,14 +38,18 @@ export function buildMap(places: Record<string, Place>): DatasetIndex {
     }
   }
   const territories: Territory[] = Object.entries(places)
-    .map(([id, p]) => ({
-      ...makeTerritory(id, p.v, [...(land.get(id) ?? [])], [...(sea.get(id) ?? [])]),
-      continent: p.c ?? 'europe',
-      subregion: p.sub ?? 'Test',
-      terrain: p.terrain ?? [],
-      micro: p.micro ?? false,
-      anchor: p.at ?? [0, 0],
-    }))
+    .map(([id, p]) => {
+      const t = makeTerritory(id, p.v, [...(land.get(id) ?? [])], [...(sea.get(id) ?? [])], p.people);
+      return {
+        ...t,
+        continent: p.c ?? 'europe',
+        subregion: p.sub ?? 'Test',
+        terrain: p.terrain ?? [],
+        micro: p.micro ?? false,
+        anchor: p.at ?? [0, 0],
+        stats: { ...t.stats, areaKm2: p.area ?? null },
+      };
+    })
     .sort((a, b) => (a.id < b.id ? -1 : 1));
   const seaLanes: Dataset['seaLanes'] = [];
   for (const [a, ns] of sea) {

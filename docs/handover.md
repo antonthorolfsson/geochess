@@ -8,7 +8,7 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (395 tests as of 2026-09-28).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (428 tests as of 2026-09-29).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -272,6 +272,44 @@ part of it could break a block that losing all of it wouldn't.
 Tests: rules 182, data 63, web 40, server 99 (`apps/server/vitest.config.ts` raises the hook
 timeout: seven in-memory databases booting at once took over 10 s on Windows).
 
+**Mission rules version 2** (2026-09-29, the user's list; not committed yet). New campaigns play
+version 2; every campaign stored before keeps version 1, which never offers these missions
+(`MissionRules.publicKinds` and `secretKinds` say what each version offers; the lobby picker and
+the rules guide list the campaign's version).
+
+- **Public:** Mare Nostrum (12 of the 21 Mediterranean countries, at least 3 on each shore:
+  European, African, eastern; a long campaign), One Billion (people in countries won since the
+  draft), Great Expanse (7.5 million km² won since the draft), Seven Wonders (3 of 8 countries
+  with a wonder, 2 won since the draft), Kingslayer and Lightning Campaign (records: a war won on
+  whoever led the race when it was declared, while you trailed; two wars declared in one round,
+  won). Fixed targets are generated first, so Regional Power, The Great Connection and Strategic
+  Positions keep clear of them; Seven Wonders and Mare Nostrum share Italy and Egypt.
+- **Secret:** eight named sets (Black Sea, Baltic League, Gulf Hegemon, Caspian, Nordic, Horn of
+  Africa, Andean Spine, Mekong), three routes (Silk Road China–Italy, Cape to Cairo, Pan-American
+  Highway USA–Chile) dealt to an empire at or within reach of one end, Buffer Zone (the most
+  valuable drafted country with 3–6 neighbors, and all of them), Strait Keeper (both shores of
+  three of twelve named straits, from the nearest not already held), Half of Humanity (dealt only
+  to whoever holds one of the two most populous countries), and a fourth family, **battle**:
+  Nemesis (hold 3 countries taken from the rival with the longest front), Backstab (break an
+  accord, then take a country from that partner in a war declared within the next two rounds;
+  revealed by the break), Iron Wall (two wars won as defender), Checkmate Artist (two wars won by
+  checkmate). The last three are records and score at once.
+- **Dealing.** With four families and three options, the order the families are drawn in comes
+  from the player's seed (`MissionRules.families`), so a hand is three of the four. Battle
+  missions fit anyone with an opponent, so under version 2 every player gets three options and
+  the Measured Expansion fallback no longer comes up. Options show conquests, or wins for the
+  battle missions (`effortText`). Secret options are now dealt with the campaign's history, since
+  an accord broken during the draft would make Backstab one step away.
+- **History.** `loadHistory` (server) adds each war's declaration (round and event id) and how
+  its deciding game ended, who broke each accord, and every award with its event id. Kingslayer
+  works out who led at a declaration from that (`leadersAt`): points awarded before it, then
+  value on the map as it was, undoing every later war's transfers.
+- **Wording.** Figures in progress parts can carry a unit (`people`, `km2`, `percent`), shown by
+  `partAmount`: "1.46 billion", "7.5 million km²". A Nemesis's rival is named through
+  `missionRequirement`'s `playerName` option.
+
+Tests since: rules 210, data 66, web 40, server 112.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -292,7 +330,8 @@ timeout: seven in-memory databases booting at once took over 10 s on Windows).
   conquests to join; **Encirclement** routes can't pass through the center.
 - **Notices.** Reveals and claims go to every member, awards and lost claims to the player, the
   result to everyone; tags dedupe per claim and per mission.
-- **Mission rules version 1** is the only one; the lobby can't pick another.
+- **Mission rules versions.** The lobby can't pick one: a campaign plays the version it was
+  created with (version 2 since 2026-09-29).
 - **The Great Connection** (the user's call, 2026-09-28): the endpoints have six to ten countries
   between them on the shortest chain, by land or sea lane as the mission counts it, and the chain
   must be as short without crossing the edge of the map (`crossesMapEdge`: Russia to the United

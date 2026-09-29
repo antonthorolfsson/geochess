@@ -3,7 +3,6 @@
 import {
   HOLD_MINUTE_OPTIONS,
   MISSIONS,
-  PUBLIC_MISSION_KINDS,
   SELECTION_MINUTE_OPTIONS,
   durationText,
   holdMs,
@@ -158,7 +157,7 @@ export function LobbyMissions({
                 <legend className="px-1 font-semibold">
                   Choose {cfg.publicCount} public missions ({picking.length} chosen)
                 </legend>
-                {PUBLIC_MISSION_KINDS.map((kind) => {
+                {cfg.publicKinds.map((kind) => {
                   const info = MISSIONS[kind];
                   const issue = publicMissionIssue(kind, model.idx, rules);
                   const checked = picking.includes(kind);

@@ -2,7 +2,8 @@
  * What mission evaluators look at, and the graph arithmetic they share: holdings against the
  * baseline, connected blocks, and how many conquests it takes to reach a set of targets.
  */
-import type { TerritoryId } from '../dataset';
+import type { GameEndReason } from '../chess';
+import type { StatKey, TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
 import type { DatasetIndex } from '../graph';
 import type { Transfer, WarOutcome } from '../war';
@@ -18,10 +19,16 @@ export interface MissionWar {
   targetId: TerritoryId;
   outcome: WarOutcome;
   transfers: readonly Transfer[];
+  /** The round it was declared in. */
+  declaredRound: number;
   /** The round it ended in. */
   round: number;
+  /** Where its declaration falls in the campaign's history (the event id of `war.declared`). */
+  declaredSeq: number;
   /** Its place in the campaign's history (the event id of its resolution). */
   seq: number;
+  /** How the game that decided it ended; null when no game did (tribute, a withdrawal). */
+  endReason: GameEndReason | null;
 }
 
 /**
@@ -34,6 +41,8 @@ export interface AccordSpan {
   players: readonly [UserId, UserId];
   from: number;
   to: number | null;
+  /** Who renounced it, if it was broken. */
+  brokenBy: UserId | null;
 }
 
 /** Where each war round began in the campaign's history (round 1 onwards). */
@@ -42,11 +51,20 @@ export interface RoundStart {
   seq: number;
 }
 
+/** Points awarded for a mission, and where in the campaign's history. */
+export interface AwardMark {
+  userId: UserId;
+  points: number;
+  seq: number;
+}
+
 export interface MissionHistory {
   /** Resolved wars, oldest first. */
   wars: readonly MissionWar[];
   accords: readonly AccordSpan[];
   roundStarts: readonly RoundStart[];
+  /** Oldest first. */
+  awards: readonly AwardMark[];
 }
 
 /** Everything a mission evaluation needs: the map, who holds what, and what has happened. */
@@ -60,7 +78,7 @@ export interface MissionWorld {
   history: MissionHistory;
 }
 
-export const EMPTY_HISTORY: MissionHistory = { wars: [], accords: [], roundStarts: [] };
+export const EMPTY_HISTORY: MissionHistory = { wars: [], accords: [], roundStarts: [], awards: [] };
 
 export function heldBy(owners: ReadonlyMap<TerritoryId, UserId>, userId: UserId): Set<TerritoryId> {
   const out = new Set<TerritoryId>();
@@ -72,6 +90,47 @@ export function valueOfSet(idx: DatasetIndex, ids: Iterable<TerritoryId>): numbe
   let sum = 0;
   for (const id of ids) sum += idx.byId.get(id)?.value ?? 0;
   return sum;
+}
+
+/** A real-world figure summed over some countries, counting unknown figures as zero. */
+export function statOfSet(idx: DatasetIndex, ids: Iterable<TerritoryId>, key: StatKey): number {
+  let sum = 0;
+  for (const id of ids) sum += idx.byId.get(id)?.stats[key] ?? 0;
+  return sum;
+}
+
+/** The round underway at a point in the campaign's history: 0 before round 1 (the draft). */
+export function roundAt(history: MissionHistory, seq: number): number {
+  let round = 0;
+  for (const r of history.roundStarts) if (r.seq < seq && r.round > round) round = r.round;
+  return round;
+}
+
+/** The round underway now: the last one to start, 0 before round 1. */
+export const currentRound = (history: MissionHistory) => roundAt(history, Infinity);
+
+/**
+ * Who led the race at a point in the campaign's history: the most victory points, then the most
+ * valuable empire (several players when they're level). The map then is today's with the transfers
+ * of every war that ended since undone.
+ */
+export function leadersAt(world: MissionWorld, seq: number): UserId[] {
+  const owners = new Map(world.owners);
+  const since = world.history.wars.filter((w) => w.seq > seq).sort((a, b) => b.seq - a.seq);
+  for (const w of since) for (const t of [...w.transfers].reverse()) owners.set(t.territoryId, t.from);
+  const points = new Map(world.players.map((p) => [p, 0]));
+  for (const a of world.history.awards) {
+    if (a.seq < seq && points.has(a.userId)) points.set(a.userId, points.get(a.userId)! + a.points);
+  }
+  const value = new Map(world.players.map((p) => [p, 0]));
+  for (const [id, owner] of owners) {
+    if (value.has(owner)) value.set(owner, value.get(owner)! + (world.idx.byId.get(id)?.value ?? 0));
+  }
+  const rank = (p: UserId): [number, number] => [points.get(p)!, value.get(p)!];
+  const ahead = (a: [number, number], b: [number, number]) => a[0] - b[0] || a[1] - b[1];
+  let best: [number, number] | null = null;
+  for (const p of world.players) if (!best || ahead(rank(p), best) > 0) best = rank(p);
+  return world.players.filter((p) => best !== null && ahead(rank(p), best) === 0);
 }
 
 /** The world with some countries changed hands. */

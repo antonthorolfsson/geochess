@@ -1,5 +1,4 @@
 import {
-  EMPTY_HISTORY,
   durationText,
   missionName,
   missionRequirement,
@@ -17,8 +16,8 @@ import type { AppContext } from '../context';
 import { campaigns, holdings, members, missionPlayers } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, notFound } from '../lib/errors';
-import { missionsUrl, notifyAfter } from './settle';
-import { loadPlayers, type MissionPlayerRow } from './state';
+import { memberNames, missionsUrl, notifyAfter } from './settle';
+import { loadHistory, loadPlayers, type MissionPlayerRow } from './state';
 
 /**
  * The draft is over in an Objectives campaign. Every player's holdings are recorded as their
@@ -36,7 +35,8 @@ export async function beginSelection(ctx: AppContext, scope: MutationScope, idx:
   const players = scope.members.map((m) => m.userId).sort();
   const baseline = new Map<string, Set<TerritoryId>>(players.map((p) => [p, new Set()]));
   for (const [id, owner] of owners) baseline.get(owner)?.add(id);
-  const world = { idx, players, owners, baseline, history: EMPTY_HISTORY };
+  // Accords can be signed (and broken) during the draft, so the history counts already.
+  const world = { idx, players, owners, baseline, history: await loadHistory(tx, campaign.id) };
   const now = ctx.now();
   const deadline = new Date(now.getTime() + selectionMs(campaign.rules));
 
@@ -159,6 +159,8 @@ export async function expireSelections(ctx: AppContext): Promise<void> {
           return;
         }
         const idx = ctx.datasets.get(scope.campaign.datasetVersion);
+        const names = await memberNames(scope);
+        const playerName = (userId: string) => names.get(userId) ?? 'a rival';
         for (const p of await loadPlayers(scope.tx, id)) {
           const best = [...p.options].sort((a, b) => a.rank - b.rank)[0];
           if (ready(p) || !best) continue;
@@ -169,7 +171,7 @@ export async function expireSelections(ctx: AppContext): Promise<void> {
           notifyAfter(ctx, scope, {
             userId: p.userId,
             title: `Your secret mission: ${missionName(best.spec)}`,
-            body: `Time ran out, so your best fit was chosen. ${missionRequirement(best.spec, idx, { players: scope.members.length })}`,
+            body: `Time ran out, so your best fit was chosen. ${missionRequirement(best.spec, idx, { players: scope.members.length, playerName })}`,
             url: missionsUrl(id),
             tag: `secret:${id}`,
           });

@@ -1,8 +1,9 @@
 'use client';
 
-import { missionName, missionRequirement, type EventView, type TerritoryId, type WarView } from '@empire/rules';
+import { missionName, type EventView, type TerritoryId, type WarView } from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
+import { requirementText } from '@/lib/victory';
 import { EmpireSwatch } from '../hatch';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
@@ -142,7 +143,7 @@ export function DispatchLine({
             {name(userId)}’s secret mission {reason === 'final' ? 'was' : 'is'} {missionName(mission)}
           </strong>
           {reason === 'near' ? ', one step from completion' : reason === 'claim' ? ', now complete' : ''}:{' '}
-          {missionRequirement(mission, model.idx, { players: model.campaign.members.length })}
+          {requirementText(model, mission)}
         </span>
       );
     }

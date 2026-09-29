@@ -84,7 +84,10 @@ export async function revealSecret(
       title: own ? 'Your secret mission is revealed' : `${name}’s secret mission: ${mission}`,
       body: own
         ? `Everyone can now see ${mission}. Hold on: it still has to be completed and held.`
-        : missionRequirement(player.secret, idx, { players: scope.members.length }),
+        : missionRequirement(player.secret, idx, {
+            players: scope.members.length,
+            playerName: (userId) => names.get(userId) ?? 'a rival',
+          }),
       url: missionsUrl(campaign.id),
       tag: `mission:${campaign.id}:${player.userId}`,
     });
@@ -196,7 +199,7 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
             title: own ? `Claim started: ${missionName(mission.spec)}` : `${name} claims ${missionName(mission.spec)}`,
             body: own
               ? `Hold it until round ${claim.eligibleRound} starts, and for ${durationText(hold)} after round ${round + 1} starts.`
-              : `It can score ${mission.points} points in round ${claim.eligibleRound} at the earliest, if the position still holds then. ${missionRequirement(mission.spec, idx, { players: memberIds.length })}`,
+              : `It can score ${mission.points} points in round ${claim.eligibleRound} at the earliest, if the position still holds then. ${missionRequirement(mission.spec, idx, { players: memberIds.length, playerName: (id) => names.get(id) ?? 'a rival' })}`,
             url: missionsUrl(campaign.id),
             tag: `claim:${claim.id}`,
           });

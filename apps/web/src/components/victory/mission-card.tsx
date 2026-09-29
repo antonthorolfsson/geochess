@@ -1,6 +1,13 @@
 'use client';
 
-import { missionInfo, missionTargets, type MissionView, type ProgressPart, type TerritoryId } from '@empire/rules';
+import {
+  missionInfo,
+  missionTargets,
+  partAmount,
+  type MissionView,
+  type ProgressPart,
+  type TerritoryId,
+} from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { requirementText } from '@/lib/victory';
@@ -39,7 +46,7 @@ export function ProgressParts({ parts, label }: { parts: ProgressPart[]; label: 
               </span>
               <span className="min-w-0 flex-1">{p.label}</span>
               <span className="font-semibold tabular-nums">
-                {p.have} <span className="font-normal text-muted">of</span> {p.need}
+                {partAmount(p, p.have)} <span className="font-normal text-muted">of</span> {partAmount(p, p.need)}
                 <span className="sr-only">{p.done ? ', done' : ', not yet'}</span>
               </span>
             </div>

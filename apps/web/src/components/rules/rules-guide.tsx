@@ -11,16 +11,15 @@ import {
   MIN_PLAYERS,
   MISSIONS,
   MODIFIER_CAP_PCT,
-  PUBLIC_MISSION_KINDS,
   REPUTATION_BROKEN,
   REPUTATION_PER_ROUND,
   REPUTATION_START,
   RESPONSE_WINDOW_TEXT,
-  SECRET_MISSION_KINDS,
   SUPPLY_LINE_PCT,
   TERRAIN_PCT,
   durationText,
   holdMs,
+  joinWords,
   missionRules,
   refillTokens,
   selectionMs,
@@ -779,7 +778,11 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
       } campaigns)`
     : '';
   const chosen = rules.victory.publicMissions.map((m) => MISSIONS[m.kind].name);
-  const secretKinds = SECRET_MISSION_KINDS.filter((k) => k !== 'measured_expansion');
+  const secretKinds = cfg.secretKinds.filter((k) => k !== 'measured_expansion');
+  // Missions that are records, not positions: they score the moment they're done.
+  const records = [...cfg.publicKinds, ...cfg.secretKinds]
+    .filter((k) => MISSIONS[k].timing === 'historic')
+    .map((k) => MISSIONS[k].name);
   return (
     <Section id="ending" title="Winning">
       <p className="text-lg">
@@ -801,7 +804,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
               New campaigns play Expansion, Strategic Positions, The Great Connection and Campaign Veteran. The host can
               pick any other four before the draft, and draw new targets for them:
             </p>
-            <MissionList kinds={PUBLIC_MISSION_KINDS} />
+            <MissionList kinds={cfg.publicKinds} />
           </>
         ) : (
           <p>
@@ -813,8 +816,9 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
       <Part title="Secret missions">
         <p>
           When the draft ends, each player is dealt up to three secret options that fit their empire (each at least two
-          conquests from done), chooses one within {durationText(selectionMs(rules))}, and can't change it. Anyone still
-          choosing when time runs out gets the best fit. Other players see only that you're ready.
+          steps from done: conquests, or wins for the missions about battles), chooses one within{' '}
+          {durationText(selectionMs(rules))}, and can't change it. Anyone still choosing when time runs out gets the
+          best fit. Other players see only that you're ready.
         </p>
         <p>
           A secret mission is revealed to everyone, with its exact targets, when you come within one step of it: for
@@ -848,8 +852,10 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         </Bullets>
         <p>
           Lose the position and the claim ends; complete it again and a new claim starts. Swapping which targets you
-          hold doesn't end a claim, as long as the mission never stops being complete. Campaign Veteran is a record, not
-          a position: it scores the moment you win the third war.
+          hold doesn't end a claim, as long as the mission never stops being complete.{' '}
+          {records.length === 1
+            ? `${records[0]} is a record, not a position: it scores the moment it’s done.`
+            : `${joinWords(records)} are records, not positions: they score the moment they’re done.`}
         </p>
       </Part>
       <Part title="Points and the finish">

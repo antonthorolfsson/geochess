@@ -764,6 +764,92 @@ describe('open-ended campaigns', () => {
   });
 });
 
+describe('battle missions', () => {
+  it('score Kingslayer and Lightning Campaign the moment they are done', async () => {
+    const s = await objectives({ missions: [{ kind: 'kingslayer' }, { kind: 'lightning_campaign', wins: 2 }] });
+    // Bo leads the race on value, 29 to 16. Ann declares both wars before either is fought: once
+    // one is, the truce would stop the other.
+    const first = await s.declare(s.ann, 'B5', 'A4', ['A4']);
+    const second = await s.declare(s.ann, 'B7', 'A6', ['A6']);
+    await s.respond(s.bo, first, { response: 'accept' });
+    await s.respond(s.bo, second, { response: 'accept' });
+    await s.play(await s.game(await s.war(first)), SCHOLARS_MATE);
+    expect(await s.points(ANN)).toBe(2);
+    await s.play(await s.game(await s.war(second)), SCHOLARS_MATE);
+    expect(await s.points(ANN)).toBe(4);
+    const awarded = (await s.view()).events.flatMap((e) => (e.type === 'mission.awarded' ? [e.payload.kind] : []));
+    expect(awarded).toEqual(['kingslayer', 'lightning_campaign']);
+  });
+
+  it('score a secret battle mission once won, revealing it one win before', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'expansion', gain: 50 }],
+      secrets: { [ANN]: { kind: 'iron_wall', wins: 2 } },
+    });
+    const first = await s.declare(s.bo, 'A4', 'B5', ['B5']);
+    const second = await s.declare(s.bo, 'A6', 'B7', ['B7']);
+    await s.respond(s.ann, first, { response: 'accept' });
+    await s.respond(s.ann, second, { response: 'accept' });
+    const secretOf = async () => (await s.view(s.bo)).victory!.players.find((p) => p.userId === ANN)!.secret;
+    // Ann defends with Black and mates.
+    await s.play(await s.game(await s.war(first)), FOOLS_MATE);
+    expect(await secretOf()).toMatchObject({ reason: 'near' });
+    expect(await s.points(ANN)).toBe(0);
+    await s.play(await s.game(await s.war(second)), FOOLS_MATE);
+    expect(await s.points(ANN)).toBe(3);
+  });
+
+  it('count only wars won by checkmate for Checkmate Artist', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'expansion', gain: 50 }],
+      secrets: { [ANN]: { kind: 'checkmate_artist', wins: 2 } },
+    });
+    const mated = await s.declare(s.ann, 'B5', 'A4', ['A4']);
+    const resigned = await s.declare(s.ann, 'B7', 'A6', ['A6']);
+    await s.respond(s.bo, mated, { response: 'accept' });
+    await s.respond(s.bo, resigned, { response: 'accept' });
+    await s.play(await s.game(await s.war(mated)), SCHOLARS_MATE);
+    await s.bo.post(`/api/games/${(await s.game(await s.war(resigned))).id}/resign`);
+    const v = await s.view();
+    expect(v.wars.find((w) => w.id === resigned)).toMatchObject({ outcome: 'attacker' });
+    expect(v.victory!.players.find((p) => p.userId === ANN)).toMatchObject({
+      points: 0,
+      progress: { secret: { complete: false, parts: [{ have: 1, need: 2 }] } },
+    });
+  });
+
+  it('score Backstab for a strike on a betrayed partner, revealed by the break', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'expansion', gain: 50 }],
+      secrets: { [ANN]: { kind: 'backstab', rounds: 2 } },
+    });
+    const secretOf = async () => (await s.view(s.bo)).victory!.players.find((p) => p.userId === ANN)!.secret;
+    const accord = (await s.ann.post<{ id: string }>(`/api/campaigns/${s.id}/accords`, { partnerId: BO, rounds: 3 }))
+      .body.id;
+    await s.bo.post(`/api/campaigns/${s.id}/accords/${accord}/answer`, { answer: 'accept' });
+    expect(await secretOf()).toBeNull();
+    await s.ann.post(`/api/campaigns/${s.id}/accords/${accord}/renounce`);
+    expect(await secretOf()).toMatchObject({ reason: 'near', revealedRound: 1 });
+    // No war on the betrayed partner for the rest of the round; the next one is in time.
+    await s.next();
+    const strike = await s.declare(s.ann, 'B5', 'A4', ['A4']);
+    await s.respond(s.bo, strike, { response: 'accept' });
+    await s.play(await s.game(await s.war(strike)), SCHOLARS_MATE);
+    expect(await s.points(ANN)).toBe(3);
+
+    // What those missions read from the event log.
+    const db = server.app.ctx.db;
+    const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, s.id));
+    const world = await loadWorld(server.app.ctx, db, campaign!, [ANN, BO], await loadPlayers(db, s.id));
+    const { accords, wars, awards } = world.history;
+    expect(accords).toEqual([expect.objectContaining({ id: accord, brokenBy: ANN })]);
+    expect(wars).toEqual([expect.objectContaining({ id: strike, declaredRound: 2, round: 2, endReason: 'checkmate' })]);
+    expect(wars[0]!.declaredSeq).toBeGreaterThan(accords[0]!.to!);
+    expect(wars[0]!.declaredSeq).toBeLessThan(wars[0]!.seq);
+    expect(awards).toEqual([expect.objectContaining({ userId: ANN, points: 3 })]);
+  });
+});
+
 describe('mission history', () => {
   it('reads accords, renewals, renunciations and round starts from the event log in order', async () => {
     const s = await objectives({ names: ['Ann', 'Bo', 'Cy'], missions: [{ kind: 'expansion', gain: 30 }] });

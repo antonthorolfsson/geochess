@@ -5,17 +5,22 @@
  */
 import type { Continent, TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
-import type { MissionSpec, SpecOf } from './catalog';
+import type { MissionSpec, Shore, SpecOf } from './catalog';
 import { CONTINENT_NAMES } from './text';
 import {
   captureCosts,
   components,
+  currentRound,
   frontier,
   heldBy,
+  leadersAt,
   pathWithin,
+  roundAt,
   routeTo,
+  statOfSet,
   valueOfSet,
   withTransfers,
+  type MissionWar,
   type MissionWorld,
 } from './world';
 
@@ -25,6 +30,8 @@ export interface ProgressPart {
   have: number;
   need: number;
   done: boolean;
+  /** What the figures measure, when they aren't counts (see `partAmount`). */
+  unit?: 'people' | 'km2' | 'percent';
 }
 
 export interface MissionEvidence {
@@ -71,7 +78,13 @@ function scopeOf(world: MissionWorld, userId: UserId): Scope {
   return { world, userId, held, base, fresh };
 }
 
-const part = (label: string, have: number, need: number): ProgressPart => ({ label, have, need, done: have >= need });
+const part = (label: string, have: number, need: number, unit?: ProgressPart['unit']): ProgressPart => ({
+  label,
+  have,
+  need,
+  done: have >= need,
+  ...(unit && { unit }),
+});
 const allDone = (parts: readonly ProgressPart[]) => parts.every((p) => p.done);
 const sorted = (ids: Iterable<TerritoryId>) => [...ids].sort();
 
@@ -130,17 +143,65 @@ function evaluatorFor(spec: MissionSpec): Evaluator {
       return { check: (s) => consolidation(s, spec) };
     case 'two_fronts':
       return { check: (s) => twoFronts(s, spec) };
+    case 'mare_nostrum':
+      return { check: (s) => mareNostrum(s, spec) };
+    case 'one_billion':
+      return { check: (s) => wonMeasure(s, 'population', 'People in countries won since the draft', spec.people) };
+    case 'great_expanse':
+      return { check: (s) => wonMeasure(s, 'areaKm2', 'Land won since the draft', spec.areaKm2) };
+    case 'seven_wonders':
+      return { check: (s) => sevenWonders(s, spec) };
+    case 'kingslayer':
+      return { check: (s) => kingslayer(s) };
+    case 'lightning_campaign':
+      return { check: (s) => lightningCampaign(s, spec) };
     case 'northern_passage':
     case 'caribbean_chain':
     case 'pacific_passage':
     case 'mediterranean_arc':
     case 'central_asian_union':
+    case 'black_sea':
+    case 'baltic_league':
+    case 'gulf_hegemon':
+    case 'caspian':
+    case 'nordic':
+    case 'horn_of_africa':
+    case 'andean_spine':
+    case 'mekong':
     case 'mountain_kingdom':
     case 'hidden_triangle':
       return {
         check: (s) => ownCount(s, spec.territories, spec.need, 'Targets held'),
         near: (s) => spec.territories.filter((id) => s.held.has(id)).length >= spec.reveal,
       };
+    case 'silk_road':
+    case 'cape_to_cairo':
+    case 'pan_american_highway':
+      return { check: (s) => connection(s, spec.endpoints, 'Ends held'), near: (s) => oneConquestAway(s, spec) };
+    case 'buffer_zone':
+      return {
+        check: (s) => bufferZone(s, spec),
+        near: (s) => [spec.center, ...spec.ring].filter((id) => !s.held.has(id)).length <= 1,
+      };
+    case 'strait_keeper':
+      return {
+        check: (s) => straitKeeper(s, spec),
+        near: (s) => straitsHeld(s, spec).length >= spec.reveal,
+      };
+    case 'half_of_humanity':
+      return { check: (s) => halfOfHumanity(s, spec), near: (s) => oneConquestAway(s, spec) };
+    case 'nemesis':
+      return { check: (s) => nemesis(s, spec), near: (s) => takenFrom(s, spec.rival).length >= spec.reveal };
+    case 'backstab':
+      return {
+        check: (s) => backstab(s, spec),
+        // An accord broken, and still time to strike.
+        near: (s) => betrayals(s).some((b) => currentRound(s.world.history) <= b.round + spec.rounds),
+      };
+    case 'iron_wall':
+      return { check: (s) => ironWall(s, spec), near: (s) => defensiveWins(s).length >= spec.wins - 1 };
+    case 'checkmate_artist':
+      return { check: (s) => checkmateArtist(s, spec), near: (s) => checkmates(s).length >= spec.wins - 1 };
     case 'island_empire':
       return {
         check: (s) => islandEmpire(s, spec),
@@ -292,6 +353,63 @@ function twoTheaters(s: Scope, spec: SpecOf<'two_theater_power'>): Check {
   return { complete: allDone(parts), parts, evidence: { territories: sorted(territories) } };
 }
 
+function mareNostrum(s: Scope, spec: SpecOf<'mare_nostrum'>): Check {
+  const heldOn = (shore: Shore) => shore.territories.filter((id) => s.held.has(id));
+  const held = sorted(new Set(spec.shores.flatMap(heldOn)));
+  const parts = [
+    part('Mediterranean countries held', held.length, spec.need),
+    ...spec.shores.map((shore) => part(`Held on the ${shore.name} shore`, heldOn(shore).length, spec.perShore)),
+  ];
+  return { complete: allDone(parts), parts, evidence: { territories: held } };
+}
+
+/** A real-world figure summed over the countries won since the draft, and still held. */
+function wonMeasure(s: Scope, key: 'population' | 'areaKm2', label: string, need: number): Check {
+  const have = statOfSet(s.world.idx, s.fresh, key);
+  const parts = [part(label, have, need, key === 'population' ? 'people' : 'km2')];
+  return { complete: allDone(parts), parts, evidence: { territories: sorted(s.fresh) } };
+}
+
+function sevenWonders(s: Scope, spec: SpecOf<'seven_wonders'>): Check {
+  const held = spec.territories.filter((id) => s.held.has(id)).sort();
+  const won = held.filter((id) => !s.base.has(id));
+  const parts = [
+    part('Wonder countries held', held.length, spec.count),
+    part('Of them won since the draft', won.length, spec.newCount),
+  ];
+  return { complete: allDone(parts), parts, evidence: { territories: held } };
+}
+
+function halfOfHumanity(s: Scope, spec: SpecOf<'half_of_humanity'>): Check {
+  const idx = s.world.idx;
+  const world = statOfSet(idx, idx.ids, 'population');
+  const people = statOfSet(idx, s.held, 'population');
+  const share = part(
+    'Share of the world’s people',
+    world > 0 ? Math.floor((people * 100) / world) : 0,
+    spec.sharePct,
+    'percent',
+  );
+  // The share is compared exactly, not rounded down.
+  share.done = world > 0 && people * 100 >= spec.sharePct * world;
+  return { complete: share.done, parts: [share], evidence: { territories: sorted(s.held) } };
+}
+
+/** Countries held now that were taken from `rival`: won in a war, or paid as tribute. */
+function takenFrom(s: Scope, rival: UserId): TerritoryId[] {
+  const taken = new Set<TerritoryId>();
+  for (const w of s.world.history.wars) {
+    for (const t of w.transfers) if (t.from === rival && t.to === s.userId) taken.add(t.territoryId);
+  }
+  return [...taken].filter((id) => s.held.has(id)).sort();
+}
+
+function nemesis(s: Scope, spec: SpecOf<'nemesis'>): Check {
+  const held = takenFrom(s, spec.rival);
+  const parts = [part('Countries taken from the rival and still held', held.length, spec.count)];
+  return { complete: allDone(parts), parts, evidence: { territories: held } };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Routes and blocks
 
@@ -333,6 +451,26 @@ function unification(s: Scope, spec: SpecOf<'unification'>): Check {
   }
   const open = connection(s, spec.marks, 'Marked countries held');
   return { ...open, complete: false };
+}
+
+function bufferZone(s: Scope, spec: SpecOf<'buffer_zone'>): Check {
+  const name = s.world.idx.byId.get(spec.center)?.name ?? spec.center;
+  const center = s.held.has(spec.center);
+  const ring = spec.ring.filter((id) => s.held.has(id)).sort();
+  const parts = [
+    part(`${name} held`, center ? 1 : 0, 1),
+    part(`Neighbors of ${name} held`, ring.length, spec.ring.length),
+  ];
+  return { complete: allDone(parts), parts, evidence: { territories: sorted(center ? [spec.center, ...ring] : ring) } };
+}
+
+const straitsHeld = (s: Scope, spec: SpecOf<'strait_keeper'>) =>
+  spec.straits.filter((strait) => strait.shores.every((id) => s.held.has(id)));
+
+function straitKeeper(s: Scope, spec: SpecOf<'strait_keeper'>): Check {
+  const parts = [part('Straits held on both shores', straitsHeld(s, spec).length, spec.straits.length)];
+  const shores = spec.straits.flatMap((strait) => strait.shores).filter((id) => s.held.has(id));
+  return { complete: allDone(parts), parts, evidence: { territories: sorted(new Set(shores)) } };
 }
 
 function continentalBridge(s: Scope, spec: SpecOf<'continental_bridge'>): Check {
@@ -483,6 +621,90 @@ function veteran(s: Scope, spec: SpecOf<'campaign_veteran'>): Check {
     part('Won as the attacker', attacking, spec.attackWins),
   ];
   return { complete: allDone(parts), parts, evidence: { territories: [], wars: wins.map((w) => w.id) } };
+}
+
+/** The wars that count, for missions about battles rather than countries. */
+const warEvidence = (wars: readonly MissionWar[]): MissionEvidence => ({
+  territories: [],
+  wars: wars.map((w) => w.id),
+});
+
+function kingslayer(s: Scope): Check {
+  const wins = s.world.history.wars.filter((w) => {
+    if (w.attackerId !== s.userId || w.outcome !== 'attacker') return false;
+    const leaders = leadersAt(s.world, w.declaredSeq);
+    return leaders.includes(w.defenderId) && !leaders.includes(s.userId);
+  });
+  const parts = [part('Wars won against the leader', wins.length, 1)];
+  return { complete: allDone(parts), parts, evidence: warEvidence(wins) };
+}
+
+function lightningCampaign(s: Scope, spec: SpecOf<'lightning_campaign'>): Check {
+  const byRound = new Map<number, MissionWar[]>();
+  for (const w of s.world.history.wars) {
+    if (w.attackerId !== s.userId || w.outcome !== 'attacker') continue;
+    byRound.set(w.declaredRound, [...(byRound.get(w.declaredRound) ?? []), w]);
+  }
+  const best = [...byRound.values()].reduce<MissionWar[]>((b, wars) => (wars.length > b.length ? wars : b), []);
+  const parts = [part('Wars declared in one round and won', best.length, spec.wins)];
+  return { complete: allDone(parts), parts, evidence: warEvidence(best) };
+}
+
+const defensiveWins = (s: Scope) =>
+  s.world.history.wars.filter((w) => w.defenderId === s.userId && w.outcome === 'defender');
+
+function ironWall(s: Scope, spec: SpecOf<'iron_wall'>): Check {
+  const wins = defensiveWins(s);
+  const parts = [part('Wars won as the defender', wins.length, spec.wins)];
+  return { complete: allDone(parts), parts, evidence: warEvidence(wins) };
+}
+
+const checkmates = (s: Scope) => s.world.history.wars.filter((w) => isWin(w, s.userId) && w.endReason === 'checkmate');
+
+function checkmateArtist(s: Scope, spec: SpecOf<'checkmate_artist'>): Check {
+  const wins = checkmates(s);
+  const parts = [part('Wars won by checkmate', wins.length, spec.wins)];
+  return { complete: allDone(parts), parts, evidence: warEvidence(wins) };
+}
+
+interface Betrayal {
+  partner: UserId;
+  /** Where in the campaign's history the accord was broken, and in which round. */
+  seq: number;
+  round: number;
+}
+
+/** The accords the player broke. */
+function betrayals(s: Scope): Betrayal[] {
+  return s.world.history.accords.flatMap((a) => {
+    if (a.brokenBy !== s.userId || a.to === null) return [];
+    const partner = a.players[0] === s.userId ? a.players[1] : a.players[0];
+    return [{ partner, seq: a.to, round: roundAt(s.world.history, a.to) }];
+  });
+}
+
+function backstab(s: Scope, spec: SpecOf<'backstab'>): Check {
+  const broken = betrayals(s);
+  // A war declared on a betrayed partner after the break and within the rounds allowed, that took
+  // a country from them (won, or paid as tribute).
+  const strikes = s.world.history.wars.filter(
+    (w) =>
+      w.attackerId === s.userId &&
+      w.transfers.some((t) => t.from === w.defenderId && t.to === s.userId) &&
+      broken.some(
+        (b) => b.partner === w.defenderId && w.declaredSeq > b.seq && w.declaredRound <= b.round + spec.rounds,
+      ),
+  );
+  const parts = [
+    part('Accords broken', broken.length, 1),
+    part('Countries taken from a betrayed partner in time', strikes.length, 1),
+  ];
+  const taken = strikes.flatMap((w) => w.transfers.filter((t) => t.to === s.userId).map((t) => t.territoryId));
+  return {
+    complete: allDone(parts),
+    parts,
+    evidence: { territories: sorted(new Set(taken)), wars: strikes.map((w) => w.id) },
+  };
 }
 
 function acrossTheSeas(s: Scope, spec: SpecOf<'across_the_seas'>): Check {

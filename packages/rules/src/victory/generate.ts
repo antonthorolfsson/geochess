@@ -15,6 +15,7 @@ import {
   type PublicMissionKind,
   type PublicMissionSpec,
   type SecretFamily,
+  type SecretMissionKind,
   type SecretMissionSpec,
 } from './catalog';
 import { evaluateMission } from './evaluate';
@@ -29,6 +30,7 @@ import {
   heldBy,
   hopDistances,
   routeTo,
+  statOfSet,
   valueOfSet,
   type AcquisitionPlan,
   type MissionWorld,
@@ -93,8 +95,24 @@ export function regionsFor(idx: DatasetIndex, cfg: MissionRules): Region[] {
 /** Why a public mission can't be played in this campaign, or null if it can. */
 export function publicMissionIssue(kind: PublicMissionKind, idx: DatasetIndex, rules: CampaignRules): string | null {
   const cfg = missionRules(rules.victory.version);
+  if (!cfg.publicKinds.includes(kind)) return 'Campaigns created before it was added can’t play it.';
   const continents = new Set(idx.dataset.territories.map((t) => t.continent)).size;
+  const onMap = (ids: readonly TerritoryId[]) => ids.every((id) => idx.byId.has(id));
   switch (kind) {
+    case 'mare_nostrum':
+      return onMap(cfg.mareNostrum.shores.flatMap((shore) => shore.territories))
+        ? null
+        : 'This map doesn’t have every Mediterranean country.';
+    case 'seven_wonders':
+      return onMap(cfg.sevenWonders.territories) ? null : 'This map doesn’t have every country with a wonder.';
+    case 'one_billion':
+      return statOfSet(idx, idx.ids, 'population') >= 3 * cfg.oneBillion.people
+        ? null
+        : 'This map has too few people for it.';
+    case 'great_expanse':
+      return statOfSet(idx, idx.ids, 'areaKm2') >= 3 * cfg.greatExpanse.areaKm2
+        ? null
+        : 'This map is too small for it.';
     case 'consolidation':
       return rules.draft.mode === 'free'
         ? null
@@ -229,6 +247,20 @@ export function generatePublicMission(
       return { kind, ...cfg.consolidation };
     case 'two_fronts':
       return { kind, ...cfg.twoFronts };
+    case 'mare_nostrum': {
+      const { shores, need, perShore } = cfg.mareNostrum;
+      return { kind, shores: shores.map((s) => ({ name: s.name, territories: [...s.territories] })), need, perShore };
+    }
+    case 'one_billion':
+      return { kind, ...cfg.oneBillion };
+    case 'great_expanse':
+      return { kind, ...cfg.greatExpanse };
+    case 'seven_wonders':
+      return { kind, ...cfg.sevenWonders, territories: [...cfg.sevenWonders.territories] };
+    case 'kingslayer':
+      return { kind };
+    case 'lightning_campaign':
+      return { kind, ...cfg.lightningCampaign };
   }
 }
 
@@ -237,16 +269,28 @@ export function publicTargets(spec: PublicMissionSpec): TerritoryId[] {
   switch (spec.kind) {
     case 'regional_power':
     case 'strategic_positions':
+    case 'seven_wonders':
       return spec.territories;
     case 'great_connection':
       return [...spec.endpoints];
+    case 'mare_nostrum':
+      return spec.shores.flatMap((shore) => shore.territories);
     default:
       return [];
   }
 }
 
-/** Targeted missions first, so later ones can keep clear of earlier targets. */
-const GENERATION_ORDER: readonly PublicMissionKind[] = ['regional_power', 'great_connection', 'strategic_positions'];
+/**
+ * Targeted missions first, so later ones can keep clear of earlier targets; fixed targets before
+ * all of them, since they can't move.
+ */
+const GENERATION_ORDER: readonly PublicMissionKind[] = [
+  'mare_nostrum',
+  'seven_wonders',
+  'regional_power',
+  'great_connection',
+  'strategic_positions',
+];
 
 export type PublicMissionsResult = { missions: PublicMissionSpec[] } | { error: string };
 
@@ -284,7 +328,10 @@ export function generatePublicMissions(
 
 /** What a secret option asks for, estimated when it's dealt. */
 export interface EffortEstimate {
-  /** Conquests needed: the targets and the countries in the way. */
+  /**
+   * Conquests needed: the targets and the countries in the way. For battle missions, the wins
+   * still needed (Backstab: the broken accord and the conquest).
+   */
   conquests: number;
   /** Of those, countries in the way that aren't targets. */
   inTheWay: number;
@@ -332,7 +379,9 @@ export function secretOptions(
     const left = pool.filter((c) => !chosen.includes(c));
     if (left.length > 0 && chosen.length < cfg.secretOptions) chosen.push(left[Math.floor(random() * left.length)]!);
   };
-  for (const family of ['region', 'route', 'expansion'] as const) draw(valid.filter((c) => c.family === family));
+  // With more families than options, which families come first is drawn too.
+  const families = cfg.families.length > cfg.secretOptions ? shuffled(cfg.families, random) : cfg.families;
+  for (const family of families) draw(valid.filter((c) => c.family === family));
   while (chosen.length < Math.min(cfg.secretOptions, valid.length)) draw(valid);
   if (chosen.length < cfg.secretOptions) {
     const fallback = measuredExpansion(world, userId, cfg, random);
@@ -370,16 +419,14 @@ function measuredExpansion(
 ): SecretCandidate | null {
   const { idx, owners } = world;
   const { gain, newCount, revealGain, revealNew } = cfg.measuredExpansion;
-  const plan = valuePlan(
-    idx,
-    owners,
-    heldBy(owners, userId),
-    () => true,
+  const plan = gainPlan(idx, owners, heldBy(owners, userId), {
+    worth: (id) => idx.byId.get(id)?.value ?? 0,
+    where: () => true,
     gain,
-    newCount,
-    cfg.effort.reach,
-    cfg.effort.max,
-  );
+    count: newCount,
+    reach: cfg.effort.reach,
+    max: cfg.effort.max,
+  });
   if (!plan) return null;
   const estimate: EffortEstimate = {
     conquests: plan.length,
@@ -447,10 +494,12 @@ export function secretCandidates(
     return top.length > 0 ? [top[Math.floor(random() * top.length)]!] : [];
   };
 
+  const offers = (kind: SecretMissionKind) => cfg.secretKinds.includes(kind);
   const found: SecretCandidate[] = [];
 
   // Named sets, where this map has every country and they hang together.
   for (const tpl of cfg.namedSets) {
+    if (!offers(tpl.kind)) continue;
     const targets = [...tpl.territories];
     if (!targets.every((id) => idx.byId.has(id) && claimed(id))) continue;
     if (components(idx, new Set(targets)).length !== 1) continue;
@@ -463,8 +512,29 @@ export function secretCandidates(
     }
   }
 
+  // Routes: two named countries to join, for an empire at one end (or within reach of it).
+  for (const tpl of cfg.routes) {
+    if (!offers(tpl.kind)) continue;
+    const [a, b] = tpl.endpoints;
+    const ends: TerritoryId[] = [a, b];
+    if (!ends.every((id) => idx.byId.has(id) && claimed(id)) || !ends.some((id) => cost(id) <= reach)) continue;
+    const route = routeTo(captureCosts(idx, held, { sources: [a] }), b);
+    if (route.length === 0) continue;
+    const conquests = route.filter((id) => !held.has(id));
+    const e: EffortEstimate = {
+      conquests: conquests.length,
+      inTheWay: conquests.filter((id) => !ends.includes(id)).length,
+      targetValue: valueOfSet(
+        idx,
+        conquests.filter((id) => ends.includes(id)),
+      ),
+      rivals: new Set(conquests.map((id) => owners.get(id))).size,
+    };
+    if (fits(e)) found.push(candidate({ kind: tpl.kind, endpoints: [a, b] }, 'route', e));
+  }
+
   // Island Empire: the nearest islands.
-  {
+  if (offers('island_empire')) {
     const { count, need, newCount } = cfg.islandEmpire;
     const islands = idx.ids.filter(
       (id) => idx.byId.get(id)!.terrain.includes('island') && claimed(id) && cost(id) <= reach,
@@ -486,7 +556,7 @@ export function secretCandidates(
   }
 
   // Mountain Kingdom: three mountain countries close together.
-  {
+  if (offers('mountain_kingdom')) {
     const { count, reveal, spread } = cfg.mountainKingdom;
     const peaks = idx.ids.filter((id) => idx.byId.get(id)!.terrain.includes('mountains') && claimed(id));
     const dist = new Map(peaks.map((id) => [id, hopDistances(idx, id)]));
@@ -513,8 +583,25 @@ export function secretCandidates(
     found.push(...drawn(kingdoms));
   }
 
+  // Buffer Zone: the most valuable drafted country with a ring of workable size.
+  if (offers('buffer_zone')) {
+    const [lo, hi] = cfg.bufferZone.neighbors;
+    const ringOf = (id: TerritoryId) => [...new Set(idx.neighbors(id))].sort();
+    const center = [...base]
+      .filter((id) => held.has(id) && ringOf(id).length >= lo && ringOf(id).length <= hi)
+      .sort((a, b) => (idx.byId.get(b)?.value ?? 0) - (idx.byId.get(a)?.value ?? 0) || (a < b ? -1 : 1))[0];
+    const ring = center ? ringOf(center) : [];
+    if (center && ring.every(claimed) && ring.filter((id) => !held.has(id)).length >= min) {
+      const plan = acquisitionPlan(idx, held, ring, ring.length);
+      if (plan) {
+        const e = estimate(plan, ring);
+        if (fits(e)) found.push(candidate({ kind: 'buffer_zone', center, ring }, 'region', e));
+      }
+    }
+  }
+
   // Unification: two drafted pieces that need at least two conquests to join.
-  {
+  if (offers('unification')) {
     const pieces = components(idx, new Set(base)).slice(0, 8);
     const mostValuable = (piece: readonly TerritoryId[]) =>
       [...piece].sort((a, b) => (idx.byId.get(b)?.value ?? 0) - (idx.byId.get(a)?.value ?? 0) || (a < b ? -1 : 1))[0]!;
@@ -546,7 +633,7 @@ export function secretCandidates(
   }
 
   // Encirclement: a country held by someone else, with three to five neighbors to take.
-  {
+  if (offers('encirclement')) {
     const [lo, hi] = cfg.encirclement.neighbors;
     const rings: SecretCandidate[] = [];
     for (const center of idx.ids) {
@@ -568,7 +655,7 @@ export function secretCandidates(
   }
 
   // Hidden Triangle: three targets in at least two directions from the empire.
-  {
+  if (offers('hidden_triangle')) {
     const { count, reveal, value, distance, spreadDegrees } = cfg.hiddenTriangle;
     const middle = centroid(idx, held);
     const pool = idx.ids.filter((id) => {
@@ -604,21 +691,56 @@ export function secretCandidates(
     found.push(...drawn(triangles));
   }
 
+  // Strait Keeper: three straits not held on both shores yet, from the nearest.
+  if (offers('strait_keeper')) {
+    const { count, reveal } = cfg.straitKeeper;
+    const open = cfg.straits.filter(
+      ({ shores: [a, b] }) =>
+        idx.byId.has(a) &&
+        idx.byId.has(b) &&
+        idx.neighbors(a).includes(b) &&
+        claimed(a) &&
+        claimed(b) &&
+        !(held.has(a) && held.has(b)),
+    );
+    const alone = new Map(
+      open.map((st) => [st, acquisitionPlan(idx, held, st.shores, 2)?.conquests.length ?? Infinity]),
+    );
+    const nearest = open
+      .filter((st) => alone.get(st)! <= max)
+      .sort((x, y) => alone.get(x)! - alone.get(y)! || (x.name < y.name ? -1 : 1))
+      .slice(0, 6);
+    const sets: SecretCandidate[] = [];
+    for (const straits of combinations(nearest, count)) {
+      const targets = [...new Set(straits.flatMap((st) => st.shores))].sort();
+      if (!inReach(targets)) continue;
+      const plan = acquisitionPlan(idx, held, targets, targets.length);
+      if (!plan) continue;
+      const e = estimate(plan, targets);
+      if (!fits(e)) continue;
+      const spec: SecretMissionSpec = {
+        kind: 'strait_keeper',
+        straits: straits.map((st) => ({ name: st.name, shores: [st.shores[0], st.shores[1]] })),
+        reveal,
+      };
+      sets.push(candidate(spec, 'route', e));
+    }
+    found.push(...drawn(sets));
+  }
+
   // Two-Theater Power: the two continents where growing takes the fewest conquests.
-  {
+  if (offers('two_theater_power')) {
     const { netValue, newCount } = cfg.twoTheater;
     const continents = [...new Set(idx.dataset.territories.map((t) => t.continent))].sort();
     const theaters = continents.flatMap((c) => {
-      const plan = valuePlan(
-        idx,
-        owners,
-        held,
-        (id) => idx.byId.get(id)!.continent === c,
-        netValue,
-        newCount,
+      const plan = gainPlan(idx, owners, held, {
+        worth: (id) => idx.byId.get(id)?.value ?? 0,
+        where: (id) => idx.byId.get(id)!.continent === c,
+        gain: netValue,
+        count: newCount,
         reach,
         max,
-      );
+      });
       return plan ? [{ continent: c, plan }] : [];
     });
     const pairs: SecretCandidate[] = [];
@@ -645,8 +767,28 @@ export function secretCandidates(
     found.push(...drawn(pairs));
   }
 
+  // Half of Humanity: for an empire holding one of the two most populous countries.
+  if (offers('half_of_humanity')) {
+    const { sharePct } = cfg.halfOfHumanity;
+    const people = (id: TerritoryId) => idx.byId.get(id)?.stats.population ?? 0;
+    const giants = [...idx.ids].sort((a, b) => people(b) - people(a) || (a < b ? -1 : 1)).slice(0, 2);
+    if (giants.some((id) => held.has(id))) {
+      const short = (statOfSet(idx, idx.ids, 'population') * sharePct) / 100 - statOfSet(idx, held, 'population');
+      const plan = gainPlan(idx, owners, held, { worth: people, where: () => true, gain: short, count: 0, reach, max });
+      if (plan) {
+        const e: EffortEstimate = {
+          conquests: plan.length,
+          inTheWay: 0,
+          targetValue: valueOfSet(idx, plan),
+          rivals: new Set(plan.map((id) => owners.get(id))).size,
+        };
+        if (fits(e)) found.push(candidate({ kind: 'half_of_humanity', sharePct }, 'expansion', e));
+      }
+    }
+  }
+
   // Protected Expansion: needs two partners and someone else to take ground from.
-  {
+  if (offers('protected_expansion')) {
     const { partners, rounds, acquisitions, minPlayers } = cfg.protectedExpansion;
     const front = frontier(idx, owners, held);
     if (world.players.length >= minPlayers && front.length > 0) {
@@ -660,36 +802,75 @@ export function secretCandidates(
     }
   }
 
+  // Nemesis: the rival with the longest shared front (the most of their countries bordering yours).
+  if (offers('nemesis')) {
+    const { count, reveal } = cfg.nemesis;
+    const fronts = new Map<UserId, TerritoryId[]>();
+    for (const id of frontier(idx, owners, held)) {
+      const owner = owners.get(id)!;
+      fronts.set(owner, [...(fronts.get(owner) ?? []), id]);
+    }
+    const [rival, front] = [...fronts].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))[0] ?? [];
+    if (rival && front && heldBy(owners, rival).size >= count) {
+      const easiest = [...front]
+        .sort((a, b) => (idx.byId.get(a)?.value ?? 0) - (idx.byId.get(b)?.value ?? 0) || (a < b ? -1 : 1))
+        .slice(0, count);
+      const e: EffortEstimate = { conquests: count, inTheWay: 0, targetValue: valueOfSet(idx, easiest), rivals: 1 };
+      found.push(candidate({ kind: 'nemesis', rival, count, reveal }, 'battle', e));
+    }
+  }
+
+  // Backstab, Iron Wall and Checkmate Artist are about battles, not the map: they fit anyone.
+  const opponents = world.players.length - 1;
+  if (offers('backstab') && opponents > 0) {
+    const e: EffortEstimate = { conquests: 2, inTheWay: 0, targetValue: 0, rivals: 1 };
+    found.push(candidate({ kind: 'backstab', rounds: cfg.backstab.rounds }, 'battle', e));
+  }
+  if (offers('iron_wall') && opponents > 0) {
+    const { wins } = cfg.ironWall;
+    const e: EffortEstimate = { conquests: wins, inTheWay: 0, targetValue: 0, rivals: opponents };
+    found.push(candidate({ kind: 'iron_wall', wins }, 'battle', e));
+  }
+  if (offers('checkmate_artist') && opponents > 0) {
+    const { wins } = cfg.checkmateArtist;
+    const e: EffortEstimate = { conquests: wins, inTheWay: 0, targetValue: 0, rivals: opponents };
+    found.push(candidate({ kind: 'checkmate_artist', wins }, 'battle', e));
+  }
+
   return found.filter((c) => stillOpen(world, userId, cfg, c)).sort((a, b) => b.fit - a.fit);
 }
 
 /**
- * A greedy plan to gain `value` from at least `count` countries matching `where`, each conquest
- * the most valuable reachable one per step it costs. The conquests, or null if it takes more than
- * `max` or can't be done within `reach` of the empire.
+ * A greedy plan to gain `gain` of what `worth` measures (value, people) from at least `count`
+ * countries matching `where`, each conquest the one worth most per step it costs. The conquests,
+ * or null if it takes more than `max` or can't be done within `reach` of the empire.
  */
-function valuePlan(
+function gainPlan(
   idx: DatasetIndex,
   owners: ReadonlyMap<TerritoryId, UserId>,
   held: ReadonlySet<TerritoryId>,
-  where: (id: TerritoryId) => boolean,
-  value: number,
-  count: number,
-  reach: number,
-  max: number,
+  opts: {
+    worth: (id: TerritoryId) => number;
+    where: (id: TerritoryId) => boolean;
+    gain: number;
+    count: number;
+    reach: number;
+    max: number;
+  },
 ): TerritoryId[] | null {
+  const { worth, where, gain, count, reach, max } = opts;
   const current = new Set(held);
   const conquests: TerritoryId[] = [];
   let gained = 0;
   let won = 0;
-  while (gained < value || won < count) {
+  while (gained < gain || won < count) {
     const costs = captureCosts(idx, current);
     let best: { id: TerritoryId; score: number } | null = null;
     for (const id of idx.ids) {
       if (current.has(id) || !owners.has(id) || !where(id)) continue;
       const c = costs.cost.get(id);
       if (c === undefined || c > reach) continue;
-      const score = (idx.byId.get(id)?.value ?? 0) / c;
+      const score = worth(id) / c;
       if (!best || score > best.score || (score === best.score && id < best.id)) best = { id, score };
     }
     if (!best) return null;
@@ -698,11 +879,21 @@ function valuePlan(
       current.add(id);
       conquests.push(id);
       if (where(id)) {
-        gained += idx.byId.get(id)?.value ?? 0;
+        gained += worth(id);
         won++;
       }
     }
     if (conquests.length > max) return null;
   }
   return conquests;
+}
+
+/** Every way of choosing `k` of `items`, in order. */
+function combinations<T>(items: readonly T[], k: number, from = 0): T[][] {
+  if (k === 0) return [[]];
+  const out: T[][] = [];
+  for (let i = from; i <= items.length - k; i++) {
+    for (const rest of combinations(items, k - 1, i + 1)) out.push([items[i]!, ...rest]);
+  }
+  return out;
 }

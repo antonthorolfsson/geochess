@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MissionSpec } from './catalog';
 import { evaluateMission, missionComplete, type Evaluation } from './evaluate';
 import { all, buildMap, makeWorld } from './test-maps';
-import type { MissionWar } from './world';
+import type { AccordSpan, MissionWar } from './world';
 
 const ANN = 'ann';
 const BO = 'bo';
@@ -10,15 +10,19 @@ const CY = 'cy';
 const DI = 'di';
 
 let seq = 100;
+/** A war declared and resolved at the next two places in the history. */
 function war(p: Partial<MissionWar> & Pick<MissionWar, 'attackerId' | 'defenderId' | 'outcome'>): MissionWar {
-  seq++;
+  seq += 2;
   return {
     id: `w${seq}`,
     launchId: 'L',
     targetId: 'T',
     transfers: [],
+    declaredRound: p.round ?? 1,
     round: 1,
+    declaredSeq: seq - 1,
     seq,
+    endReason: null,
     ...p,
   };
 }
@@ -572,8 +576,11 @@ describe('protected expansion', () => {
     targetId: territoryId,
     outcome: 'attacker',
     transfers: [{ territoryId, from, to: ANN }],
+    declaredRound: 1,
     round: 1,
+    declaredSeq: at - 1,
     seq: at,
+    endReason: 'checkmate',
   });
   const wars = [
     taken('X1', DI, 15),
@@ -586,8 +593,8 @@ describe('protected expansion', () => {
 
   it('needs two whole rounds together and three countries won from others under them', () => {
     const accords = [
-      { id: 'a1', players: [ANN, BO] as const, from: 10, to: null },
-      { id: 'a2', players: [CY, ANN] as const, from: 12, to: 50 },
+      { id: 'a1', players: [ANN, BO] as const, from: 10, to: null, brokenBy: null },
+      { id: 'a2', players: [CY, ANN] as const, from: 12, to: 50, brokenBy: null },
     ];
     const world = makeWorld(idx, owners, { baseline, players, history: { wars, accords, roundStarts } });
     const e = evaluateMission(world, ANN, spec);
@@ -600,8 +607,8 @@ describe('protected expansion', () => {
 
   it('does not count a round an accord ended in', () => {
     const accords = [
-      { id: 'a1', players: [ANN, BO] as const, from: 10, to: null },
-      { id: 'a2', players: [ANN, CY] as const, from: 12, to: 40 },
+      { id: 'a1', players: [ANN, BO] as const, from: 10, to: null, brokenBy: null },
+      { id: 'a2', players: [ANN, CY] as const, from: 12, to: 40, brokenBy: null },
     ];
     const world = makeWorld(idx, owners, { baseline, players, history: { wars, accords, roundStarts } });
     expect(evaluateMission(world, ANN, spec).parts[0]).toMatchObject({ have: 1, need: 2 });
@@ -609,8 +616,8 @@ describe('protected expansion', () => {
 
   it('keeps the proof after the accords end, but the countries must still be held', () => {
     const accords = [
-      { id: 'a1', players: [ANN, BO] as const, from: 10, to: 52 },
-      { id: 'a2', players: [ANN, CY] as const, from: 12, to: 50 },
+      { id: 'a1', players: [ANN, BO] as const, from: 10, to: 52, brokenBy: null },
+      { id: 'a2', players: [ANN, CY] as const, from: 12, to: 50, brokenBy: null },
     ];
     const lostOne = { ...owners, X4: DI };
     const world = makeWorld(idx, lostOne, { baseline, players, history: { wars, accords, roundStarts } });
@@ -620,9 +627,9 @@ describe('protected expansion', () => {
 
   it('joins a renewed accord to the one it replaced', () => {
     const accords = [
-      { id: 'a1', players: [ANN, BO] as const, from: 10, to: 22 },
-      { id: 'a1b', players: [ANN, BO] as const, from: 22, to: null },
-      { id: 'a2', players: [ANN, CY] as const, from: 12, to: null },
+      { id: 'a1', players: [ANN, BO] as const, from: 10, to: 22, brokenBy: null },
+      { id: 'a1b', players: [ANN, BO] as const, from: 22, to: null, brokenBy: null },
+      { id: 'a2', players: [ANN, CY] as const, from: 12, to: null, brokenBy: null },
     ];
     const world = makeWorld(idx, owners, { baseline, players, history: { wars, accords, roundStarts } });
     expect(missionComplete(world, ANN, spec)).toBe(true);
@@ -649,5 +656,318 @@ describe('measured expansion', () => {
     expect(evaluateMission(sixteen, ANN, spec)).toMatchObject({ near: true, complete: false });
     const done = makeWorld(idx, { ...baseline, ...all(ANN, 'Y1', 'Y2', 'Y3', 'Y5') }, { baseline });
     expect(missionComplete(done, ANN, spec)).toBe(true);
+  });
+});
+
+describe('mare nostrum', () => {
+  const idx = buildMap({
+    E1: { v: 1 },
+    E2: { v: 1 },
+    E3: { v: 1 },
+    E4: { v: 1 },
+    A1: { v: 1 },
+    A2: { v: 1 },
+    A3: { v: 1 },
+    S1: { v: 1 },
+    S2: { v: 1 },
+    S3: { v: 1 },
+  });
+  const spec: MissionSpec = {
+    kind: 'mare_nostrum',
+    shores: [
+      { name: 'European', territories: ['E1', 'E2', 'E3', 'E4'] },
+      { name: 'African', territories: ['A1', 'A2', 'A3'] },
+      { name: 'eastern', territories: ['S1', 'S2', 'S3'] },
+    ],
+    need: 7,
+    perShore: 2,
+  };
+
+  it('needs the count, with enough on every shore', () => {
+    const lopsided = makeWorld(idx, all(ANN, 'E1', 'E2', 'E3', 'E4', 'A1', 'A2', 'S1'));
+    const e = evaluateMission(lopsided, ANN, spec);
+    expect(e.complete).toBe(false);
+    expect(parts(e)).toEqual([
+      ['Mediterranean countries held', 7, 7],
+      ['Held on the European shore', 4, 2],
+      ['Held on the African shore', 2, 2],
+      ['Held on the eastern shore', 1, 2],
+    ]);
+    expect(missionComplete(makeWorld(idx, all(ANN, 'E1', 'E2', 'E3', 'A1', 'A2', 'S1', 'S2')), ANN, spec)).toBe(true);
+  });
+});
+
+describe('one billion and great expanse', () => {
+  const idx = buildMap({
+    H: { v: 1, land: ['X', 'Y'], people: 10, area: 5 },
+    X: { v: 1, people: 600, area: 300 },
+    Y: { v: 1, people: 500, area: 800 },
+  });
+  const baseline = { H: ANN, X: BO, Y: BO };
+  const people: MissionSpec = { kind: 'one_billion', people: 1000 };
+  const land: MissionSpec = { kind: 'great_expanse', areaKm2: 1000 };
+
+  it('count the people and land of countries won since the draft, and still held', () => {
+    const halfway = makeWorld(idx, { H: ANN, X: ANN, Y: BO }, { baseline });
+    expect(evaluateMission(halfway, ANN, people).parts).toEqual([
+      { label: 'People in countries won since the draft', have: 600, need: 1000, done: false, unit: 'people' },
+    ]);
+    expect(evaluateMission(halfway, ANN, land).parts).toEqual([
+      { label: 'Land won since the draft', have: 300, need: 1000, done: false, unit: 'km2' },
+    ]);
+    const both = makeWorld(idx, all(ANN, 'H', 'X', 'Y'), { baseline });
+    expect(missionComplete(both, ANN, people)).toBe(true);
+    expect(missionComplete(both, ANN, land)).toBe(true);
+  });
+
+  it('never count what was drafted', () => {
+    const drafted = makeWorld(idx, all(ANN, 'H', 'X', 'Y'));
+    expect(missionComplete(drafted, ANN, people)).toBe(false);
+    expect(missionComplete(drafted, ANN, land)).toBe(false);
+  });
+});
+
+describe('seven wonders', () => {
+  const idx = buildMap({ W1: { v: 1 }, W2: { v: 1 }, W3: { v: 1 }, W4: { v: 1 } });
+  const spec: MissionSpec = { kind: 'seven_wonders', territories: ['W1', 'W2', 'W3', 'W4'], count: 3, newCount: 2 };
+
+  it('needs enough of the wonders, most of them won since the draft', () => {
+    const baseline = { W1: ANN, W2: BO, W3: BO, W4: BO };
+    const won = makeWorld(idx, all(ANN, 'W1', 'W2', 'W3'), { baseline });
+    expect(evaluateMission(won, ANN, spec)).toMatchObject({
+      complete: true,
+      evidence: { territories: ['W1', 'W2', 'W3'] },
+    });
+    const drafted = makeWorld(idx, all(ANN, 'W1', 'W2', 'W3'));
+    expect(parts(evaluateMission(drafted, ANN, spec))).toEqual([
+      ['Wonder countries held', 3, 3],
+      ['Of them won since the draft', 0, 2],
+    ]);
+  });
+});
+
+describe('kingslayer', () => {
+  // Before any war, Bo led on value (6), then Cy (3), then Ann (1).
+  const idx = buildMap({ A: { v: 1 }, B: { v: 5 }, B2: { v: 1 }, C: { v: 3 } });
+  const spec: MissionSpec = { kind: 'kingslayer' };
+  const players = [ANN, BO, CY];
+  /** `attackerId` took B from `defenderId`. */
+  const beat = (defenderId: string, attackerId = ANN) =>
+    war({
+      attackerId,
+      defenderId,
+      outcome: 'attacker',
+      targetId: 'B',
+      transfers: [{ territoryId: 'B', from: defenderId, to: attackerId }],
+    });
+  // Ann took B from Bo, and leads now.
+  const owners = { A: ANN, B: ANN, B2: BO, C: CY };
+
+  it('counts a war won against the leader when it was declared, judged on the map as it was then', () => {
+    const w = beat(BO);
+    const world = makeWorld(idx, owners, { players, history: { wars: [w] } });
+    expect(evaluateMission(world, ANN, spec)).toMatchObject({ complete: true, evidence: { wars: [w.id] } });
+  });
+
+  it('puts victory points before value', () => {
+    const w = beat(BO);
+    const awards = [{ userId: CY, points: 2, seq: w.declaredSeq - 1 }];
+    const world = makeWorld(idx, owners, { players, history: { wars: [w], awards } });
+    expect(missionComplete(world, ANN, spec)).toBe(false);
+    // Points awarded after the declaration don't change who led.
+    const later = [{ userId: CY, points: 2, seq: w.seq + 1 }];
+    expect(missionComplete(makeWorld(idx, owners, { players, history: { wars: [w], awards: later } }), ANN, spec)).toBe(
+      true,
+    );
+  });
+
+  it('is not for the leader, nor for tribute', () => {
+    const byBo = war({ attackerId: BO, defenderId: CY, outcome: 'attacker' });
+    const before = { A: ANN, B: BO, B2: BO, C: CY };
+    expect(missionComplete(makeWorld(idx, before, { players, history: { wars: [byBo] } }), BO, spec)).toBe(false);
+    const tribute = war({ attackerId: ANN, defenderId: BO, outcome: 'tribute' });
+    expect(missionComplete(makeWorld(idx, before, { players, history: { wars: [tribute] } }), ANN, spec)).toBe(false);
+  });
+});
+
+describe('lightning campaign', () => {
+  const idx = buildMap({ A: { v: 1 } });
+  const spec: MissionSpec = { kind: 'lightning_campaign', wins: 2 };
+  const won = (declaredRound: number, outcome: MissionWar['outcome'] = 'attacker') =>
+    war({ attackerId: ANN, defenderId: BO, outcome, declaredRound });
+  const check = (wars: MissionWar[]) => evaluateMission(makeWorld(idx, { A: ANN }, { history: { wars } }), ANN, spec);
+
+  it('needs the wins from wars declared in one round', () => {
+    expect(check([won(1), won(2)]).complete).toBe(false);
+    expect(check([won(2), won(2, 'tribute'), won(3)]).complete).toBe(false);
+    const both = [won(1), won(2), won(2)];
+    expect(check(both)).toMatchObject({ complete: true, evidence: { wars: [both[1]!.id, both[2]!.id] } });
+  });
+});
+
+describe('routes, buffer zones and straits', () => {
+  const idx = buildMap({
+    A: { v: 1, land: ['B'] },
+    B: { v: 1, land: ['C'] },
+    C: { v: 1, land: ['D'] },
+    D: { v: 1, land: ['E'] },
+    E: { v: 1, land: ['F'] },
+    F: { v: 1 },
+  });
+
+  it('join the two ends of a named route through your own countries', () => {
+    const spec: MissionSpec = { kind: 'silk_road', endpoints: ['A', 'D'] };
+    const gap = makeWorld(idx, { ...all(ANN, 'A', 'B', 'D'), C: BO });
+    expect(evaluateMission(gap, ANN, spec)).toMatchObject({
+      complete: false,
+      near: true,
+      evidence: { path: ['A', 'B', 'C', 'D'] },
+    });
+    expect(missionComplete(makeWorld(idx, all(ANN, 'A', 'B', 'C', 'D')), ANN, spec)).toBe(true);
+  });
+
+  it('hold a marked country and every neighbor around it', () => {
+    const spec: MissionSpec = { kind: 'buffer_zone', center: 'C', ring: ['B', 'D'] };
+    const one = evaluateMission(makeWorld(idx, { ...all(ANN, 'B', 'C'), D: BO }), ANN, spec);
+    expect(one).toMatchObject({ complete: false, near: true });
+    expect(parts(one)).toEqual([
+      ['Territory C held', 1, 1],
+      ['Neighbors of Territory C held', 1, 2],
+    ]);
+    expect(missionComplete(makeWorld(idx, all(ANN, 'B', 'C', 'D')), ANN, spec)).toBe(true);
+  });
+
+  it('hold both shores of every marked strait, revealed at two', () => {
+    const spec: MissionSpec = {
+      kind: 'strait_keeper',
+      straits: [
+        { name: 'First', shores: ['A', 'B'] },
+        { name: 'Second', shores: ['C', 'D'] },
+        { name: 'Third', shores: ['E', 'F'] },
+      ],
+      reveal: 2,
+    };
+    const check = (...ids: string[]) => evaluateMission(makeWorld(idx, all(ANN, ...ids)), ANN, spec);
+    expect(check('A', 'B', 'C')).toMatchObject({ complete: false, near: false, parts: [{ have: 1, need: 3 }] });
+    expect(check('A', 'B', 'C', 'D')).toMatchObject({ complete: false, near: true });
+    expect(check('A', 'B', 'C', 'D', 'E', 'F').complete).toBe(true);
+  });
+});
+
+describe('half of humanity', () => {
+  const idx = buildMap({
+    H: { v: 1, land: ['X'], people: 400 },
+    X: { v: 1, land: ['Y'], people: 300 },
+    Y: { v: 1, people: 300 },
+  });
+  const spec: MissionSpec = { kind: 'half_of_humanity', sharePct: 50 };
+
+  it('compares the share of the world’s people exactly, and reveals one conquest away', () => {
+    const e = evaluateMission(makeWorld(idx, { H: ANN, X: BO, Y: BO }), ANN, spec);
+    expect(e).toMatchObject({ complete: false, near: true });
+    expect(e.parts).toEqual([
+      { label: 'Share of the world’s people', have: 40, need: 50, done: false, unit: 'percent' },
+    ]);
+    expect(missionComplete(makeWorld(idx, { H: ANN, X: ANN, Y: BO }), ANN, spec)).toBe(true);
+    const exactly = buildMap({ H: { v: 1, people: 1 }, X: { v: 1, people: 1 } });
+    expect(missionComplete(makeWorld(exactly, { H: ANN, X: BO }), ANN, spec)).toBe(true);
+  });
+});
+
+describe('nemesis', () => {
+  const idx = buildMap({ H: { v: 1 }, X: { v: 1 }, Y: { v: 1 }, Z: { v: 1 }, W: { v: 1 } });
+  const spec: MissionSpec = { kind: 'nemesis', rival: BO, count: 3, reveal: 2 };
+  const took = (id: string, from: string, outcome: MissionWar['outcome'] = 'attacker') =>
+    war({ attackerId: ANN, defenderId: from, outcome, transfers: [{ territoryId: id, from, to: ANN }] });
+
+  it('counts countries taken from the rival and still held: won, paid as tribute, or taken as their stake', () => {
+    const wars = [took('X', BO), took('Y', BO, 'tribute'), took('Z', CY)];
+    const two = evaluateMission(makeWorld(idx, all(ANN, 'H', 'X', 'Y', 'Z'), { history: { wars } }), ANN, spec);
+    expect(two).toMatchObject({ complete: false, near: true, evidence: { territories: ['X', 'Y'] } });
+    // Bo attacked and lost: Ann took W from their stake.
+    const stake = war({
+      attackerId: BO,
+      defenderId: ANN,
+      outcome: 'defender',
+      transfers: [{ territoryId: 'W', from: BO, to: ANN }],
+    });
+    const owners = all(ANN, 'H', 'W', 'X', 'Y', 'Z');
+    expect(missionComplete(makeWorld(idx, owners, { history: { wars: [...wars, stake] } }), ANN, spec)).toBe(true);
+    // Lost again: no longer counts.
+    const lostX = { ...owners, X: CY };
+    expect(missionComplete(makeWorld(idx, lostX, { history: { wars: [...wars, stake] } }), ANN, spec)).toBe(false);
+  });
+});
+
+describe('backstab', () => {
+  const idx = buildMap({ H: { v: 1 }, X: { v: 1 } });
+  const spec: MissionSpec = { kind: 'backstab', rounds: 2 };
+  const roundStarts = [
+    { round: 1, seq: 5 },
+    { round: 2, seq: 20 },
+    { round: 3, seq: 30 },
+    { round: 4, seq: 40 },
+  ];
+  // Signed during the draft, broken by Ann in round 1.
+  const broken: AccordSpan = { id: 'a1', players: [ANN, BO], from: 2, to: 12, brokenBy: ANN };
+  const strike = (declaredRound: number, declaredSeq: number, outcome: MissionWar['outcome'] = 'attacker') =>
+    war({
+      attackerId: ANN,
+      defenderId: BO,
+      outcome,
+      declaredRound,
+      declaredSeq,
+      transfers: [{ territoryId: 'X', from: BO, to: ANN }],
+    });
+  const check = (wars: MissionWar[], accords = [broken], starts = roundStarts) =>
+    evaluateMission(
+      makeWorld(idx, { H: ANN, X: ANN }, { players: [ANN, BO], history: { wars, accords, roundStarts: starts } }),
+      ANN,
+      spec,
+    );
+
+  it('needs a country taken from the betrayed partner in a war declared within two rounds of the break', () => {
+    expect(check([strike(2, 22)])).toMatchObject({ complete: true, evidence: { territories: ['X'] } });
+    expect(check([strike(3, 32, 'tribute')]).complete).toBe(true);
+    expect(check([strike(4, 42)]).complete).toBe(false);
+    // Declared before the break: not a backstab.
+    expect(check([strike(1, 8)]).complete).toBe(false);
+    // Broken by the partner, not by Ann.
+    expect(check([strike(2, 22)], [{ ...broken, brokenBy: BO }]).complete).toBe(false);
+  });
+
+  it('is revealed by the break, while there is still time to strike', () => {
+    expect(check([], [broken], roundStarts.slice(0, 3)).near).toBe(true);
+    expect(check([], [broken]).near).toBe(false);
+    expect(check([], [{ ...broken, to: null, brokenBy: null }]).near).toBe(false);
+  });
+});
+
+describe('iron wall and checkmate artist', () => {
+  const idx = buildMap({ H: { v: 1 } });
+  const world = (wars: MissionWar[]) => makeWorld(idx, { H: ANN }, { history: { wars }, players: [ANN, BO] });
+  const iron: MissionSpec = { kind: 'iron_wall', wins: 2 };
+  const mate: MissionSpec = { kind: 'checkmate_artist', wins: 2 };
+
+  it('count wars won as the defender', () => {
+    const held = war({ attackerId: BO, defenderId: ANN, outcome: 'defender' });
+    const lost = war({ attackerId: BO, defenderId: ANN, outcome: 'attacker' });
+    expect(evaluateMission(world([held, lost]), ANN, iron)).toMatchObject({ complete: false, near: true });
+    expect(evaluateMission(world([held, held, lost]), ANN, iron)).toMatchObject({ complete: true });
+  });
+
+  it('count wars won by checkmate, on either side, and nothing else', () => {
+    const mated = war({ attackerId: ANN, defenderId: BO, outcome: 'attacker', endReason: 'checkmate' });
+    const defended = war({ attackerId: BO, defenderId: ANN, outcome: 'defender', endReason: 'checkmate' });
+    const resigned = war({ attackerId: ANN, defenderId: BO, outcome: 'attacker', endReason: 'resignation' });
+    const matedAnn = war({ attackerId: BO, defenderId: ANN, outcome: 'attacker', endReason: 'checkmate' });
+    expect(evaluateMission(world([mated, resigned, matedAnn]), ANN, mate)).toMatchObject({
+      complete: false,
+      near: true,
+    });
+    expect(evaluateMission(world([mated, defended]), ANN, mate)).toMatchObject({
+      complete: true,
+      evidence: { wars: [mated.id, defended.id] },
+    });
   });
 });

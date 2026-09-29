@@ -20,7 +20,7 @@ describe('campaign rules', () => {
         lockRounds: 2,
         truceRounds: 1,
       },
-      victory: { mode: 'objectives', version: 1, publicMissions: [], holdMinutes: null, selectionMinutes: null },
+      victory: { mode: 'objectives', version: 2, publicMissions: [], holdMinutes: null, selectionMinutes: null },
     });
     expect(parseRules({ draft: {}, victory: { mode: 'objectives' } })).toEqual(DEFAULT_RULES);
   });
@@ -32,14 +32,19 @@ describe('campaign rules', () => {
 
   it('reads rules stored before victory missions as open-ended, never as Objectives', () => {
     const stored = { maxPlayers: 4, draft: { mode: 'free' }, war: { pace: 'live' } };
+    // They play no missions, so the version only counts if the host switches a lobby to Objectives.
     expect(parseRules(stored).victory).toEqual({
       mode: 'open',
-      version: 1,
+      version: 2,
       publicMissions: [],
       holdMinutes: null,
       selectionMinutes: null,
     });
     expect(parseRules(undefined).victory.mode).toBe('open');
+  });
+
+  it('keeps the mission rules version a campaign stored', () => {
+    expect(parseRules({ victory: { mode: 'objectives', version: 1 } }).victory.version).toBe(1);
   });
 
   it('validates the public missions stored with the rules', () => {

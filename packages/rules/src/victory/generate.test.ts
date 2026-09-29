@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, parseRules, type CampaignRules } from '../config';
 import type { TerritoryId } from '../dataset';
-import { MISSION_RULES_V1, PUBLIC_MISSION_KINDS, type PublicMissionSpec } from './catalog';
+import { MISSION_RULES_V1, PUBLIC_MISSION_KINDS, missionInfo, type PublicMissionSpec } from './catalog';
 import { evaluateMission } from './evaluate';
 import {
   generatePublicMission,
@@ -167,6 +167,31 @@ describe('public missions', () => {
     }
   });
 
+  it('offer the missions version 2 added only to campaigns of that version', () => {
+    const v1 = parseRules({ victory: { mode: 'objectives', version: 1 } });
+    const kinds = ['expansion', 'kingslayer', 'lightning_campaign', 'campaign_veteran'] as const;
+    expect(publicMissionIssue('kingslayer', idx, v1)).toMatch(/before it was added/);
+    expect(generatePublicMissions(kinds, idx, v1, Math.random)).toMatchObject({
+      error: expect.stringMatching(/added/),
+    });
+    expect(generatePublicMissions(kinds, idx, DEFAULT_RULES, Math.random)).toEqual({
+      missions: [
+        { kind: 'expansion', gain: 15 },
+        { kind: 'kingslayer' },
+        { kind: 'lightning_campaign', wins: 2 },
+        { kind: 'campaign_veteran', wins: 3, opponents: 2, attackWins: 1 },
+      ],
+    });
+  });
+
+  it('explain which of the new missions this map cannot hold', () => {
+    expect(publicMissionIssue('mare_nostrum', idx, DEFAULT_RULES)).toMatch(/Mediterranean/);
+    expect(publicMissionIssue('seven_wonders', idx, DEFAULT_RULES)).toMatch(/wonder/);
+    // A million people and no known area per country.
+    expect(publicMissionIssue('one_billion', idx, DEFAULT_RULES)).toMatch(/people/);
+    expect(publicMissionIssue('great_expanse', idx, DEFAULT_RULES)).toMatch(/too small/);
+  });
+
   it('refuses a set that repeats a mission, is the wrong size, or does not fit', () => {
     const r = DEFAULT_RULES;
     expect(
@@ -200,18 +225,84 @@ describe('secret options', () => {
     }
   });
 
-  it('mixes families where it can', () => {
-    const options = secretOptions(world4, ANN, DEFAULT_RULES, seededRandom(1));
-    const families = new Set(
-      options.map((o) =>
-        ['unification', 'encirclement', 'hidden_triangle'].includes(o.spec.kind)
-          ? 'route'
-          : ['two_theater_power', 'protected_expansion', 'measured_expansion'].includes(o.spec.kind)
-            ? 'expansion'
-            : 'region',
-      ),
+  it('mixes families where it can: three options from three families, which three drawn with the seed', () => {
+    const drawn = new Set<string>();
+    for (const player of [ANN, BO, CY, DI]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const families = secretOptions(world4, player, DEFAULT_RULES, seededRandom(seed)).map(
+          (o) => missionInfo(o.spec.kind).family!,
+        );
+        expect(new Set(families).size, `${player} seed ${seed}`).toBe(3);
+        families.forEach((f) => drawn.add(f));
+      }
+    }
+    expect([...drawn].sort()).toEqual(['battle', 'expansion', 'region', 'route']);
+  });
+
+  it('deal only the missions of the campaign’s version', () => {
+    const v1 = parseRules({ victory: { mode: 'objectives', version: 1 } });
+    for (const seed of [1, 2, 3]) {
+      for (const player of [ANN, BO, CY, DI]) {
+        for (const c of secretCandidates(world4, player, v1, seededRandom(seed))) {
+          expect(MISSION_RULES_V1.secretKinds).toContain(c.spec.kind);
+        }
+      }
+    }
+    const kinds = secretCandidates(world4, ANN, DEFAULT_RULES, seededRandom(1)).map((c) => c.spec.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['nemesis', 'backstab', 'iron_wall', 'checkmate_artist']));
+  });
+
+  it('mark the rival with the longest front for Nemesis', () => {
+    const nemesis = secretCandidates(world4, ANN, DEFAULT_RULES, seededRandom(1)).find(
+      (c) => c.spec.kind === 'nemesis',
     );
-    expect(families.size).toBeGreaterThanOrEqual(2);
+    // Cy borders Ann along five countries, Bo along four.
+    expect(nemesis).toMatchObject({
+      family: 'battle',
+      spec: { rival: CY, count: 3, reveal: 2 },
+      estimate: { conquests: 3, inTheWay: 0, rivals: 1 },
+    });
+  });
+
+  it('mark for Buffer Zone the most valuable drafted country with three to six neighbors', () => {
+    const map = buildMap({
+      BIG: { v: 9, land: ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7'] },
+      CAP: { v: 6, land: ['BIG', 'R1', 'R2'] },
+      N1: { v: 1 },
+      N2: { v: 1 },
+      N3: { v: 1 },
+      N4: { v: 1 },
+      N5: { v: 1 },
+      N6: { v: 1 },
+      N7: { v: 1 },
+      R1: { v: 2 },
+      R2: { v: 2 },
+    });
+    const owners = { ...all(ANN, 'BIG', 'CAP'), ...all(BO, 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'R1', 'R2') };
+    const zone = secretCandidates(makeWorld(map, owners), ANN, DEFAULT_RULES, seededRandom(1)).find(
+      (c) => c.spec.kind === 'buffer_zone',
+    );
+    // BIG has eight neighbors: too many to ring.
+    expect(zone).toMatchObject({
+      family: 'region',
+      spec: { center: 'CAP', ring: ['BIG', 'R1', 'R2'] },
+      estimate: { conquests: 2 },
+    });
+  });
+
+  it('offer Half of Humanity only to an empire holding one of the two most populous countries', () => {
+    const map = buildMap({
+      IND: { v: 5, land: ['X1'], people: 400 },
+      CHN: { v: 5, land: ['X2'], people: 350 },
+      X1: { v: 1, land: ['X2'], people: 50 },
+      X2: { v: 1, land: ['X3'], people: 50 },
+      X3: { v: 1, people: 150 },
+    });
+    const world = makeWorld(map, { IND: ANN, ...all(BO, 'CHN', 'X1', 'X2'), X3: CY });
+    const kinds = (userId: string) =>
+      secretCandidates(world, userId, DEFAULT_RULES, seededRandom(1)).map((c) => c.spec.kind);
+    expect(kinds(ANN)).toContain('half_of_humanity');
+    expect(kinds(CY)).not.toContain('half_of_humanity');
   });
 
   it('are the same for the same seed', () => {
@@ -307,6 +398,8 @@ describe('secret options', () => {
   });
 
   it('fall back to Measured Expansion when fewer than three others fit, and to nothing when nothing does', () => {
+    // Version 1, which deals no battle missions: those fit anyone with an opponent.
+    const v1 = parseRules({ victory: { mode: 'objectives', version: 1 } });
     const small = buildMap({
       H: { v: 1, land: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5'] },
       Y1: { v: 6 },
@@ -318,11 +411,17 @@ describe('secret options', () => {
     const options = secretOptions(
       makeWorld(small, { H: ANN, ...all(BO, 'Y1', 'Y2', 'Y3', 'Y4', 'Y5') }),
       ANN,
-      DEFAULT_RULES,
+      v1,
       seededRandom(1),
     );
     expect(options.map((o) => o.spec.kind)).toContain('measured_expansion');
     const tiny = buildMap({ H: { v: 1, land: ['Y'] }, Y: { v: 1 } });
-    expect(secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, DEFAULT_RULES, seededRandom(1))).toEqual([]);
+    expect(secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, v1, seededRandom(1))).toEqual([]);
+    // Version 2 always has battles to offer.
+    expect(
+      secretOptions(makeWorld(tiny, { H: ANN, Y: BO }), ANN, DEFAULT_RULES, seededRandom(1))
+        .map((o) => o.spec.kind)
+        .sort(),
+    ).toEqual(['backstab', 'checkmate_artist', 'iron_wall']);
   });
 });

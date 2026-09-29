@@ -3,7 +3,9 @@ import {
   publicMissionKey,
   SECRET_MISSION_KEY,
   type AccordSpan,
+  type AwardMark,
   type CampaignEvent,
+  type MissionHistory,
   type CampaignRules,
   type MissionSpec,
   type MissionWar,
@@ -54,29 +56,28 @@ export function missionsFor(rules: CampaignRules, player: Pick<MissionPlayerRow,
 
 type ResolvedPayload = Extract<CampaignEvent, { type: 'war.resolved' }>['payload'];
 type SignedPayload = Extract<CampaignEvent, { type: 'accord.signed' }>['payload'];
+type BrokenPayload = Extract<CampaignEvent, { type: 'accord.broken' }>['payload'];
+type AwardedPayload = Extract<CampaignEvent, { type: 'mission.awarded' }>['payload'];
 
-const HISTORY_EVENTS = ['war.resolved', 'accord.signed', 'accord.broken', 'accord.kept', 'round.started'];
+const HISTORY_EVENTS = [
+  'war.declared',
+  'war.resolved',
+  'accord.signed',
+  'accord.broken',
+  'accord.kept',
+  'round.started',
+  'mission.awarded',
+];
 
 /**
- * The mission world of a campaign: who holds what, each player's baseline, and the history the
- * battle and accord missions count, read from the event log in order (event ids give the exact
- * order of wars, accords and round starts).
+ * The history the battle and accord missions count, read from the event log in order (event ids
+ * give the exact order of wars, accords, round starts and awards).
  */
-export async function loadWorld(
-  ctx: AppContext,
-  db: Tx | Db,
-  campaign: CampaignRow,
-  memberIds: readonly string[],
-  players: readonly MissionPlayerRow[],
-): Promise<MissionWorld> {
-  const holdingRows = await db
-    .select({ territoryId: holdings.territoryId, ownerId: holdings.ownerId })
-    .from(holdings)
-    .where(eq(holdings.campaignId, campaign.id));
+export async function loadHistory(db: Tx | Db, campaignId: string): Promise<MissionHistory> {
   const eventRows = await db
     .select({ id: events.id, type: events.type, payload: events.payload })
     .from(events)
-    .where(and(eq(events.campaignId, campaign.id), inArray(events.type, HISTORY_EVENTS)))
+    .where(and(eq(events.campaignId, campaignId), inArray(events.type, HISTORY_EVENTS)))
     .orderBy(asc(events.id));
   const warRows = await db
     .select({
@@ -86,20 +87,26 @@ export async function loadWorld(
       launchId: wars.launchId,
       targetId: wars.targetId,
       outcome: wars.outcome,
+      declaredRound: wars.declaredRound,
       resolvedRound: wars.resolvedRound,
     })
     .from(wars)
-    .where(and(eq(wars.campaignId, campaign.id), eq(wars.status, 'resolved')));
+    .where(and(eq(wars.campaignId, campaignId), eq(wars.status, 'resolved')));
   const warById = new Map(warRows.map((w) => [w.id, w]));
 
-  const history: { wars: MissionWar[]; accords: AccordSpan[]; roundStarts: RoundStart[] } = {
+  const history: { wars: MissionWar[]; accords: AccordSpan[]; roundStarts: RoundStart[]; awards: AwardMark[] } = {
     wars: [],
     accords: [],
     roundStarts: [],
+    awards: [],
   };
+  const declaredAt = new Map<string, number>();
   const spans = new Map<string, AccordSpan>();
   for (const e of eventRows) {
     switch (e.type) {
+      case 'war.declared':
+        declaredAt.set((e.payload as { warId: string }).warId, e.id);
+        break;
       case 'war.resolved': {
         const p = e.payload as ResolvedPayload;
         const war = warById.get(p.warId);
@@ -113,8 +120,11 @@ export async function loadWorld(
           targetId: war.targetId,
           outcome: war.outcome,
           transfers: p.transfers,
+          declaredRound: war.declaredRound,
           round: war.resolvedRound ?? 0,
+          declaredSeq: declaredAt.get(war.id) ?? 0,
           seq: e.id,
+          endReason: p.reason ?? null,
         });
         break;
       }
@@ -124,12 +134,23 @@ export async function loadWorld(
           const renewed = spans.get(p.renews);
           if (renewed && renewed.to === null) renewed.to = e.id;
         }
-        const span: AccordSpan = { id: p.accordId, players: [p.proposerId, p.recipientId], from: e.id, to: null };
+        const span: AccordSpan = {
+          id: p.accordId,
+          players: [p.proposerId, p.recipientId],
+          from: e.id,
+          to: null,
+          brokenBy: null,
+        };
         spans.set(p.accordId, span);
         history.accords.push(span);
         break;
       }
-      case 'accord.broken':
+      case 'accord.broken': {
+        const p = e.payload as BrokenPayload;
+        const span = spans.get(p.accordId);
+        if (span && span.to === null) Object.assign(span, { to: e.id, brokenBy: p.breakerId });
+        break;
+      }
       case 'accord.kept': {
         const span = spans.get((e.payload as { accordId: string }).accordId);
         if (span && span.to === null) span.to = e.id;
@@ -138,16 +159,35 @@ export async function loadWorld(
       case 'round.started':
         history.roundStarts.push({ round: (e.payload as { round: number }).round, seq: e.id });
         break;
+      case 'mission.awarded': {
+        const p = e.payload as AwardedPayload;
+        history.awards.push({ userId: p.userId, points: p.points, seq: e.id });
+        break;
+      }
     }
   }
+  return history;
+}
 
+/** The mission world of a campaign: who holds what, each player's baseline, and its history. */
+export async function loadWorld(
+  ctx: AppContext,
+  db: Tx | Db,
+  campaign: CampaignRow,
+  memberIds: readonly string[],
+  players: readonly MissionPlayerRow[],
+): Promise<MissionWorld> {
+  const holdingRows = await db
+    .select({ territoryId: holdings.territoryId, ownerId: holdings.ownerId })
+    .from(holdings)
+    .where(eq(holdings.campaignId, campaign.id));
   const baseline = new Map(players.map((p) => [p.userId, new Set<TerritoryId>(p.baseline)]));
   return {
     idx: ctx.datasets.get(campaign.datasetVersion),
     players: [...memberIds].sort(),
     owners: new Map(holdingRows.map((h) => [h.territoryId, h.ownerId])),
     baseline,
-    history,
+    history: await loadHistory(db, campaign.id),
   };
 }
 

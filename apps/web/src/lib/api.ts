@@ -87,6 +87,9 @@ export const api = {
     id: string,
     input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback },
   ) => request('PATCH', `/campaigns/${id}/me`, input),
+  /** The host gives another player a free color, in the lobby. */
+  setMemberColor: (id: string, userId: string, color: number) =>
+    request('PATCH', `/campaigns/${id}/members/${encodeURIComponent(userId)}`, { color }),
   leave: (id: string) => request('POST', `/campaigns/${id}/leave`),
   kick: (id: string, userId: string) => request('POST', `/campaigns/${id}/kick`, { userId }),
   startDraft: (id: string) => request('POST', `/campaigns/${id}/draft/start`),

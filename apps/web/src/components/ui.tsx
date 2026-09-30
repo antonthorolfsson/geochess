@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactNode, type RefObject } from 'react';
 
 export function Spinner({ label = 'Loading' }: { label?: string }) {
   return (
@@ -189,5 +189,49 @@ export function SegmentTabs<T extends string>({
         </button>
       ))}
     </nav>
+  );
+}
+
+const glow = (alpha: number): Keyframe => ({
+  boxShadow: `0 0 0 3px rgb(227 169 43 / ${alpha}), 0 0 22px 4px rgb(227 169 43 / ${alpha / 2})`,
+});
+
+/**
+ * Each time `nonce` changes, brings the element into view, gives it focus (so the keyboard carries
+ * on from there) and lights it up in signal amber: where a call to action sent the player. With
+ * reduced motion the light holds still instead of pulsing.
+ */
+export function useSpotlight(ref: RefObject<HTMLElement | null>, nonce: number | null | undefined) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!nonce || !el) return;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'nearest' });
+    el.focus({ preventScroll: true });
+    const light = el.animate(still ? [glow(1), glow(1)] : [glow(1), glow(0.2), glow(1), glow(0.2), glow(1), glow(0)], {
+      duration: 2400,
+      easing: 'ease-in-out',
+    });
+    return () => light.cancel();
+  }, [ref, nonce]);
+}
+
+/** Wraps what a call to action points at; see `useSpotlight`. */
+export function Spotlight({
+  nonce,
+  label,
+  children,
+}: {
+  nonce: number | null | undefined;
+  /** What it is, for screen readers when it takes focus. */
+  label: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSpotlight(ref, nonce);
+  return (
+    <div ref={ref} tabIndex={-1} role="group" aria-label={label} className="rounded-[3px]">
+      {children}
+    </div>
   );
 }

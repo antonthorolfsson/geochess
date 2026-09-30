@@ -32,6 +32,7 @@ export function DiploPanel({
   onOpenChat,
   onCloseChat,
   focusAccordId,
+  spotlight,
   onSelect,
   onOpenWar,
 }: {
@@ -43,6 +44,8 @@ export function DiploPanel({
   onOpenChat(userId: string): void;
   onCloseChat(): void;
   focusAccordId: string | null;
+  /** A proposal to call out, with a new nonce each time. */
+  spotlight?: { id: string; nonce: number } | null;
   onSelect(id: TerritoryId): void;
   onOpenWar(warId: string): void;
 }) {
@@ -82,7 +85,9 @@ export function DiploPanel({
           ) : (
             <Conversations model={model} onOpen={onOpenChat} />
           ))}
-        {view === 'accords' && <AccordsView model={model} focusId={focusAccordId} onOpenChat={onOpenChat} />}
+        {view === 'accords' && (
+          <AccordsView model={model} focusId={focusAccordId} spotlight={spotlight} onOpenChat={onOpenChat} />
+        )}
       </div>
     </div>
   );

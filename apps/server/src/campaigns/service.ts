@@ -222,6 +222,31 @@ export async function updateMembership(
   });
 }
 
+/**
+ * The host gives a player a free color in the lobby: a friend who never picked one, or a scripted
+ * player nobody signs in as.
+ */
+export async function setMemberColor(
+  ctx: AppContext,
+  campaignId: string,
+  actorId: string,
+  targetId: string,
+  color: number,
+): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, actorId, "change other players' colors");
+    const member = requireMember(scope, targetId);
+    requireLobby(scope, 'Colors can only be changed in the lobby.');
+    if (color === member.color) return;
+    empireColor(color);
+    if (scope.members.some((m) => m.color === color)) throw conflict('That color is taken.', 'color-taken');
+    await scope.tx
+      .update(members)
+      .set({ color })
+      .where(and(eq(members.campaignId, campaignId), eq(members.userId, targetId)));
+  });
+}
+
 // ---------------------------------------------------------------------------------------------
 // Draft
 

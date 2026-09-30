@@ -16,6 +16,7 @@ import type { AppContext } from '../context';
 import { campaigns, holdings, members, missionPlayers } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { beginTurns, roundTurnOrder } from '../wars/turns';
 import { memberNames, missionsUrl, notifyAfter } from './settle';
 import { loadHistory, loadPlayers, type MissionPlayerRow } from './state';
 
@@ -80,8 +81,10 @@ async function startWarIfReady(ctx: AppContext, scope: MutationScope): Promise<b
   const players = await loadPlayers(scope.tx, scope.campaign.id);
   if (!players.every(ready)) return false;
   await openCampaign(ctx, scope);
-  await scope.log.add({ type: 'round.started', payload: { round: 1 } }, null, 1);
+  const order = roundTurnOrder(scope.campaign, scope.members);
+  await scope.log.add({ type: 'round.started', payload: { round: 1, ...(order ? { order } : {}) } }, null, 1);
   await startRoundForAccords(ctx, scope);
+  await beginTurns(ctx, scope);
   return true;
 }
 

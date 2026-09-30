@@ -47,6 +47,17 @@ describe('a campaign with bots', () => {
     v = await view();
     expect(v.status).toBe('active');
     expect(v.round).toBe(1);
+    // Declaring in turns: round 1 starts with the host, and the bots wait for them.
+    expect(v.turns?.current).toBe(v.hostId);
+    expect(v.events.some((e) => e.type === 'war.declared')).toBe(false);
+    expect((await host.post(`/api/campaigns/${id}/turn/pass`, { userId: v.hostId })).status).toBe(200);
+    await server.bots();
+
+    // The bots take their turns, declaring and passing, until declaring is over for the round.
+    v = await view();
+    expect(v.turns?.current).toBeNull();
+    const passed = v.events.filter((e) => e.type === 'turn.passed' && isBotId(e.actorId ?? ''));
+    expect(passed.length).toBeGreaterThan(0);
     const declared = v.events.filter((e) => e.type === 'war.declared' && isBotId(e.actorId ?? ''));
     expect(declared.length).toBeGreaterThan(0);
     for (const w of v.wars) {

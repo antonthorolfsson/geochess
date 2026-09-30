@@ -106,6 +106,15 @@ export const campaigns = pgTable('campaigns', {
   /** While secret missions are being chosen: when unchosen ones are assigned. */
   selectionDeadline: timestamp('selection_deadline', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
+  /**
+   * Declaring in turns, where the rules have it: the current round's order (null: no turns this
+   * round), who has passed, whose turn it is (null with an order: declaring is over for the round)
+   * and when that turn passes on its own.
+   */
+  turnOrder: jsonb('turn_order').$type<string[]>(),
+  turnPassed: jsonb('turn_passed').$type<string[]>().notNull().default([]),
+  turnUserId: text('turn_user_id'),
+  turnDeadline: timestamp('turn_deadline', { withTimezone: true }),
 });
 
 export const members = pgTable(

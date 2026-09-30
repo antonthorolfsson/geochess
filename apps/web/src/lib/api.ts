@@ -88,6 +88,9 @@ export const api = {
     id: string,
     input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback },
   ) => request('PATCH', `/campaigns/${id}/me`, input),
+  /** The host gives another player a free color, in the lobby. */
+  setMemberColor: (id: string, userId: string, color: number) =>
+    request('PATCH', `/campaigns/${id}/members/${encodeURIComponent(userId)}`, { color }),
   leave: (id: string) => request('POST', `/campaigns/${id}/leave`),
   kick: (id: string, userId: string) => request('POST', `/campaigns/${id}/kick`, { userId }),
   addBot: (id: string, input: BotInput) => request<{ userId: string }>('POST', `/campaigns/${id}/bots`, input),
@@ -124,6 +127,8 @@ export const api = {
   fortify: (id: string, territoryId: string) =>
     request<{ untilRound: number }>('POST', `/campaigns/${id}/fortify`, { territoryId }),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
+  /** Pass the turn: your own, or (the host) whoever's it is. */
+  passTurn: (id: string, userId: string) => request('POST', `/campaigns/${id}/turn/pass`, { userId }),
 
   proposeAccord: (id: string, input: ProposeAccordInput) =>
     request<{ id: string }>('POST', `/campaigns/${id}/accords`, input),

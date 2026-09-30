@@ -1,12 +1,14 @@
 /**
  * What a campaign's bots do next, one action at a time, from a snapshot: first anything waiting
  * on a bot's answer (accord proposals, secret missions, peace offers, declarations, counters),
- * then each bot's round (breaking and proposing accords, fortifying), then declarations.
+ * then each bot's round (breaking and proposing accords, fortifying), then declarations. Where
+ * players declare in turns, a bot fortifies and declares only on its turn, and passes when it's done.
  */
-import { shuffled, type TerritoryId, type WarCounter } from '@empire/rules';
+import { fortifyEnds, shuffled, type TerritoryId, type WarCounter } from '@empire/rules';
 import type { Answer, Declaration, LiveBots, Reply, SimState } from '@empire/sim/live';
 import type { MemberRow } from '../campaigns/mutate';
 import type { AppContext } from '../context';
+import { turnState } from '../wars/turns';
 import { botState, botsIn, type Snapshot } from './state';
 
 export type BotAction =
@@ -19,7 +21,10 @@ export type BotAction =
   | { kind: 'renounce'; botId: string; accordId: string }
   /** The bot's round: an accord to propose and a country to fortify, if any. Done once a round. */
   | { kind: 'round'; botId: string; round: number; propose: string | null; fortify: TerritoryId | null }
-  | { kind: 'declare'; botId: string; declaration: Declaration };
+  | { kind: 'declare'; botId: string; declaration: Declaration }
+  /** Declaring in turns: a fortification on the bot's turn, or its pass, which ends its declaring. */
+  | { kind: 'fortify'; botId: string; round: number; territoryId: TerritoryId }
+  | { kind: 'pass'; botId: string; round: number };
 
 /** Names an action on a thing, so one that failed isn't tried again in the same pass. */
 export function actionKey(a: BotAction): string {
@@ -36,7 +41,9 @@ export function actionKey(a: BotAction): string {
     case 'declare':
       return `${a.kind}:${a.botId}`;
     case 'round':
-      return `round:${a.botId}:${a.round}`;
+    case 'fortify':
+    case 'pass':
+      return `${a.kind}:${a.botId}:${a.round}`;
   }
 }
 
@@ -82,6 +89,11 @@ export function nextAction(d: Decider, snap: Snapshot, skip: ReadonlySet<string>
       const action = roundFor(d, snap, bot, view, skip);
       if (fresh(action)) return action;
     }
+  }
+  const turns = status === 'active' ? turnState(campaign) : null;
+  if (turns) {
+    const bot = bots.find((b) => b.userId === turns.current);
+    return bot ? turnFor(d, snap, bot, view, skip) : null;
   }
   if (status === 'active') {
     for (const bot of bots) {
@@ -197,6 +209,37 @@ function roundFor(
     botId: id,
     round: snap.campaign.round,
     propose: d.bots.propose(s, player, (partnerId) => waiting.has(partnerId)),
-    fortify: active ? d.bots.fortify(s, player) : null,
+    // Where players declare in turns, fortifying takes the bot's turn.
+    fortify: active && !turnState(snap.campaign) ? d.bots.fortify(s, player) : null,
   };
+}
+
+/**
+ * The bot's turn to declare, as the simulator takes it: on its first turn of the round a country
+ * to fortify, if it wants one; otherwise a war to declare; otherwise it passes. Its first turn is
+ * one before it has fortified or declared anything this round.
+ */
+function turnFor(
+  d: Decider,
+  snap: Snapshot,
+  bot: MemberRow,
+  view: (botId: string) => SimState,
+  skip: ReadonlySet<string>,
+): BotAction | null {
+  const id = bot.userId;
+  const round = snap.campaign.round;
+  const s = view(id);
+  const player = s.byId.get(id)!;
+  const fresh = (a: BotAction | null): a is BotAction => a !== null && !skip.has(actionKey(a));
+  const firstTurn =
+    !snap.holdings.some((h) => h.ownerId === id && h.fortifiedUntil === fortifyEnds(round)) &&
+    !snap.wars.some((w) => w.attackerId === id && w.declaredRound === round);
+  const spot = firstTurn ? d.bots.fortify(s, player) : null;
+  const fortify: BotAction | null = spot ? { kind: 'fortify', botId: id, round, territoryId: spot } : null;
+  if (fresh(fortify)) return fortify;
+  const declaration = bot.tokens > 0 ? d.bots.declare(s, player) : null;
+  const declare: BotAction | null = declaration ? { kind: 'declare', botId: id, declaration } : null;
+  if (fresh(declare)) return declare;
+  const pass: BotAction = { kind: 'pass', botId: id, round };
+  return fresh(pass) ? pass : null;
 }

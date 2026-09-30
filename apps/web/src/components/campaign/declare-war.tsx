@@ -29,7 +29,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
-import { playerName, tokensText, warStatusText } from '@/lib/wars';
+import { playerName, tokensText, turnWaitText, warStatusText } from '@/lib/wars';
 import { Notice, ValueBadge } from '../ui';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
 import type { StakePreview } from './war-detail';
@@ -55,6 +55,11 @@ export function WarAction({
   const war = model.warOf.get(territory.id);
   const [building, setBuilding] = useState(false);
   useEffect(() => setBuilding(false), [territory.id]);
+  // The turn moved on (or ran out) while the stake was being built.
+  const turnRejection = model.turnRejection;
+  useEffect(() => {
+    if (turnRejection) setBuilding(false);
+  }, [turnRejection]);
 
   if (campaign.status !== 'active' || !ownerId) return null;
 
@@ -118,6 +123,15 @@ export function WarAction({
       <>
         {fortified}
         <p className="text-[0.95rem] text-muted">You have no war tokens. The next round brings one.</p>
+      </>
+    );
+  }
+  const wait = turnWaitText(model);
+  if (wait) {
+    return (
+      <>
+        {fortified}
+        <p className="text-[0.95rem] text-muted">{wait}</p>
       </>
     );
   }
@@ -340,6 +354,8 @@ function Fortify({ model, territory }: { model: CampaignModel; territory: Territ
     raiseFloor(model.campaign.rules, territory.value),
     declarationFloor({ ...board, holdings: new Map() }, territory.id),
   );
+  // Only on your turn, where the campaign takes turns.
+  const wait = rejection === null ? turnWaitText(model) : null;
   return (
     <div className="space-y-2 rounded-[3px] border border-line px-3 py-2">
       <div className="flex items-center gap-3">
@@ -359,14 +375,19 @@ function Fortify({ model, territory }: { model: CampaignModel; territory: Territ
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            disabled={fortify.isPending || model.tokens < FORTIFY_COST || rejection !== null}
-            title={model.tokens < FORTIFY_COST ? 'You have no war tokens.' : undefined}
+            disabled={fortify.isPending || model.tokens < FORTIFY_COST || rejection !== null || wait !== null}
+            title={model.tokens < FORTIFY_COST ? 'You have no war tokens.' : (wait ?? undefined)}
             onClick={() => fortify.mutate()}
           >
             {until ? `Extend to round ${ends}` : 'Fortify'}
           </button>
         )}
       </div>
+      {wait && model.tokens >= FORTIFY_COST && (
+        <p className="text-sm text-muted">
+          {model.turnRejection === 'turns-over' ? wait : `Fortifying takes your turn. ${wait}`}
+        </p>
+      )}
       {fortify.error && <Notice tone="error">{errorMessage(fortify.error)}</Notice>}
     </div>
   );

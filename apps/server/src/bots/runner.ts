@@ -19,6 +19,7 @@ import type { GameRow } from '../wars/board';
 import { gameAction, playMove } from '../wars/games';
 import { answerPeace, proposePeace } from '../wars/peace';
 import { declareWar, fortifyCountry, replyToWar, respondToWar } from '../wars/service';
+import { passTurn } from '../wars/turns';
 import { chooseMove, drawThreshold, takesDraw, thinkingMs } from './chess';
 import { acceptsPeace, actionKey, nextAction, type BotAction, type Decider } from './decide';
 import type { ChessEngine } from './engine';
@@ -79,7 +80,10 @@ export class BotRunner {
     this.run(this.moves, game.id, () => this.play(game.id));
   }
 
-  /** Finds bot work nothing announced: answers owed, secrets to choose, rounds not begun, moves due. */
+  /**
+   * Finds bot work nothing announced: answers owed, secrets to choose, rounds not begun, turns to
+   * declare, moves due.
+   */
   async sweep(): Promise<void> {
     const { db } = this.ctx;
     // Usually no campaign underway has a bot: one look settles that before the rest.
@@ -142,6 +146,12 @@ export class BotRunner {
             or(isNull(members.botRound), lt(members.botRound, campaigns.round)),
           ),
         ),
+    );
+    add(
+      await db
+        .select({ campaignId: campaigns.id })
+        .from(campaigns)
+        .where(and(eq(campaigns.status, 'active'), playedByBot(campaigns.id, campaigns.turnUserId))),
     );
     const now = Date.now();
     for (const id of due) if (now - (this.failedAt.get(id) ?? -Infinity) >= COOL_DOWN_MS) this.campaignChanged(id);
@@ -271,6 +281,11 @@ export class BotRunner {
       case 'declare':
         await declareWar(ctx, campaignId, a.botId, a.declaration);
         return;
+      case 'fortify':
+        await fortifyCountry(ctx, campaignId, a.botId, a.territoryId);
+        return;
+      case 'pass':
+        return passTurn(ctx, campaignId, a.botId, { userId: a.botId });
     }
   }
 

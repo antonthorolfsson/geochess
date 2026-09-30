@@ -6,6 +6,7 @@ import { parse } from '../lib/http';
 import { gameAction, gameView, playMove } from './games';
 import { answerPeace, proposePeace, withdrawPeace } from './peace';
 import { declareWar, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
+import { passTurn } from './turns';
 import { warView } from './views';
 
 const id = z.string().min(1).max(40);
@@ -25,6 +26,8 @@ const declareInput = z.object({
 });
 
 const fortifyInput = z.object({ territoryId: territory });
+
+const passInput = z.object({ userId: id });
 
 const tokens = z.number().int().min(0).max(99);
 const peaceInput = z.object({
@@ -126,6 +129,13 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
     const params = parse(campaignParams, req.params);
     const { territoryId } = parse(fortifyInput, req.body);
     return fortifyCountry(ctx, params.id, user.id, territoryId);
+  });
+
+  app.post('/api/campaigns/:id/turn/pass', async (req) => {
+    const user = requireUser(req);
+    const params = parse(campaignParams, req.params);
+    await passTurn(ctx, params.id, user.id, parse(passInput, req.body));
+    return { ok: true };
   });
 
   app.post('/api/campaigns/:id/round/next', async (req) => {

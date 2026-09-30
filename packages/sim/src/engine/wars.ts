@@ -1,9 +1,11 @@
 /**
- * The war lifecycle, as apps/server/src/wars/service.ts and peace.ts run it: declare, answer,
- * reply, fight, resolve; calling a declaration off, fortifying, and peace terms. Every check comes
- * from the rules package; an illegal action is refused with the rules' own reason, never applied.
+ * The war lifecycle, as apps/server/src/wars/service.ts and peace.ts run it: declare (on your turn,
+ * where the rules have turns), answer, reply, fight, resolve; calling a declaration off,
+ * fortifying, and peace terms. Every check comes from the rules package; an illegal action is
+ * refused with the rules' own reason, never applied.
  */
 import {
+  DECLARE_COST,
   FORTIFY_COST,
   afterGame,
   canRaise,
@@ -35,6 +37,7 @@ import { warBoard } from './board';
 import { playGame, type PlayedGame } from './chess';
 import { signAgreedAccord } from './diplomacy';
 import { heldBy, nameOf, newId, nextSeq, note, valueOfIds } from './state';
+import { turnIssue, turnTaken } from './turns';
 import type { SimPeaceOffer, SimState, SimWar } from './types';
 import { settle } from './victory';
 
@@ -59,7 +62,9 @@ export type Reply = { kind: 'accept'; stake?: TerritoryId[] } | { kind: 'withdra
 export function declare(s: SimState, attackerId: UserId, d: Declaration): SimWar | string {
   const attacker = s.byId.get(attackerId)!;
   if (s.status !== 'active') return 'not-active';
-  if (attacker.tokens < 1) return 'no-tokens';
+  const turn = turnIssue(s, attackerId);
+  if (turn) return turn;
+  if (attacker.tokens < DECLARE_COST) return 'no-tokens';
   const board = warBoard(s);
   const target = checkTarget(board, attackerId, d.targetId);
   if (target) return target;
@@ -102,7 +107,7 @@ export function declare(s: SimState, attackerId: UserId, d: Declaration): SimWar
     stake: war.stake,
     ...(reserves.length > 0 ? { reserves } : {}),
   });
-  attacker.tokens -= 1;
+  attacker.tokens -= DECLARE_COST;
   s.stats.declared++;
   note(
     s,
@@ -110,6 +115,7 @@ export function declare(s: SimState, attackerId: UserId, d: Declaration): SimWar
       `${attackerId} declares war on ${war.defenderId}: ${nameOf(s, d.targetId)} (${s.idx.byId.get(d.targetId)!.value}) ` +
       `from ${nameOf(s, d.launchId)}, staking ${valueOfIds(s, war.stake)}`,
   );
+  turnTaken(s, attackerId);
   return war;
 }
 
@@ -264,6 +270,8 @@ export function recall(s: SimState, war: SimWar): string | null {
 /** A player spends a war token fortifying a country until the round after next starts. */
 export function fortify(s: SimState, userId: UserId, territoryId: TerritoryId): string | null {
   if (s.status !== 'active') return 'not-active';
+  const turn = turnIssue(s, userId);
+  if (turn) return turn;
   const player = s.byId.get(userId)!;
   const rejection = checkFortify(warBoard(s), userId, territoryId);
   if (rejection) return rejection;
@@ -273,6 +281,7 @@ export function fortify(s: SimState, userId: UserId, territoryId: TerritoryId): 
   s.actions.push({ t: 'fortify', by: userId, territoryId });
   s.stats.fortified++;
   note(s, () => `${userId} fortifies ${nameOf(s, territoryId)}`);
+  turnTaken(s, userId);
   return null;
 }
 

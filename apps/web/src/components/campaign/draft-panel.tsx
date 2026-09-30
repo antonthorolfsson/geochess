@@ -58,10 +58,16 @@ export function DraftStatus({ model, compact = false }: { model: CampaignModel; 
     if (campaign.status !== 'active') return null;
     const waiting = model.awaitingMe.length;
     const points = victory?.players.find((p) => p.userId === model.me.userId)?.points;
+    const turns = model.turns;
     return (
       <div className="space-y-1">
         <div className="label">Campaign underway · Round {campaign.round}</div>
         <p className="text-[0.95rem] text-muted">
+          {turns?.mine ? (
+            <strong className="text-amber">Your turn to declare war. </strong>
+          ) : turns?.current ? (
+            `${turns.current.name} is declaring. `
+          ) : null}
           {waiting > 0 ? (
             <strong className="text-amber">
               {waiting} {waiting === 1 ? 'war is' : 'wars are'} waiting for your answer.{' '}

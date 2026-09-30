@@ -219,7 +219,11 @@ function GameBoard({
         </div>
       )}
       {game.status === 'waiting' && (
-        <Notice>This game starts when both players have finished their other games.</Notice>
+        <Notice>
+          {model.turns?.current
+            ? 'This game starts once everyone has finished declaring, and both players have finished their other games.'
+            : 'This game starts when both players have finished their other games.'}
+        </Notice>
       )}
       {game.status === 'cancelled' && (
         <Notice>The campaign ended before this game did. The moves stand; there is no result.</Notice>

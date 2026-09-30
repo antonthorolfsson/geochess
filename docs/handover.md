@@ -8,8 +8,8 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (573 tests as of 2026-09-29, after
-   the bots).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (607 tests as of 2026-09-30, after
+   the bots, declaring in turns and the fixes for GitHub issues #2 to #5).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -481,6 +481,93 @@ through `DEFAULT_RULES`.
 Tests since: rules 254, data 66, web 41, sim 25, server 151 (537 in all; the new server file is
 `test/war-answers.test.ts`).
 
+**GitHub issues #2 to #5** (2026-09-30):
+
+- **The host sets colors (#2).** In the lobby the host can give any player a free color ("Color"
+  beside their name, `PATCH /api/campaigns/:id/members/:userId`): for friends who never picked
+  one, and for scripted players nobody signs in as. Joiners still get the first free color, so the
+  first to join is Sky beside the host's Cobalt.
+- **Clearer sea lanes (#4).** Lanes are dashes of map-room white on a dark casing (`SeaLanes` in
+  `world-map.tsx`), so they read over sea, over land at their ends and over hatching; the selected
+  country's lanes are stronger still. War arrows stay the strongest marks on the map.
+- **Missions framed where they are (#3).** "Show on map" frames its countries with `frameAround()`
+  in `lib/map-geometry.ts`, where the map's geometry now lives. A country whose box is wider than a
+  quarter of the map and bigger than the others' put together (Russia, and the United States,
+  Fiji, Polynesia, Micronesia and New Zealand, which cross the date line) counts only where it
+  comes near the others: its part within a quarter of their extent, and its mainland as far as the
+  reach must stretch to meet it. The Baltic League shows the Baltic, not all of Russia; the
+  Pan-American Highway the lower 48 and Chile, not the world. Great Powers still shows all three.
+- **The header's call to action is a button (#5).** "Your pick" and "Choose mission" open the
+  draft or the missions, "Your move" the next game waiting for a move, and "Answer needed" the next
+  thing waiting for an answer (`model.answers`: one per war or proposal, soonest deadline first).
+  What needs the answer lights up: the answer box, peace terms offered, or the accord proposal
+  (`useSpotlight` in `ui.tsx` scrolls it into view, focuses it and pulses amber, holding still
+  with reduced motion). Pressing again moves on to the next (`nextAnswer`). With declaring in turns, "Your turn"
+  (after "Your move", before "Answer needed") opens the war room.
+
+Tests since: web 49, server 152 (546 in all).
+
+**Declaring in turns** (2026-09-30, at the user's request: "Players should take turns declaring war
+in that phase. Now the bots are very fast to declare"). Anyone could declare
+whenever they liked, so whoever acted first when a round began (scripted players, at once) took the
+best targets and locked the countries around them. New campaigns now take turns; it's a host
+setting in `rules.war.turns`, false when absent, so every stored campaign keeps declaring freely
+(production's included), and `REVISED_WAR_RULES` (so `DEFAULT_RULES` and the simulator) turns it on.
+
+- **Rules** (`packages/rules/src/turns.ts`): `turnOrder(seats, round)` is the draft order round the
+  table, one seat further along each round, round 1 starting with whoever drafted last.
+  `nextTurn` gives the turn to the next player after the one who acted (them last) who hasn't
+  passed and `canTakeTurn` (a token, and a country to declare war on or one of theirs to fortify);
+  a player busy in a live game goes after everyone else who can. `checkTurn` refuses anyone else
+  (`not-your-turn`) and everyone once declaring is over (`turns-over`); `turnsBefore` is the war
+  room's guide to when you're up. A turn lasts the answer window (`TURN_WINDOW_MS`: 24 h, 5 min).
+- **A turn** is one declaration or one fortification, or a pass, which ends that player's declaring
+  for the round. Silence passes when the time runs out (the scheduler's `expireTurns`), and the host
+  can pass the turn for whoever holds it (`POST …/turn/pass` names the player, so a pass can't land
+  on the next one if the turn has just moved on). Declaring is over when nobody left can act; it
+  isn't reopened if someone gains a token later. Answers, replies, peace terms, calling off,
+  diplomacy and games never wait for turns.
+- **Server** (`apps/server/src/wars/turns.ts`): the round's order, passes, whose turn and its
+  deadline are columns on `campaigns` (migration `0009_declaration_turns`). `beginTurns` runs at
+  every round start after the accords (`nextRound`, and round 1 from the draft or once secret
+  missions are chosen); `round.started` carries the order. Declaring and fortifying check the turn
+  and pass it on (`turnTaken`). The turn is only reassigned then, at a pass and at a round start, so
+  a player who loses their last token on their own turn (paying for a counter) passes by hand or by
+  time. Events: `turn.passed` (`auto` for time, the host as actor for a host pass) and
+  `turns.ended`, both under the Wars feed filter. "Your turn to declare war" is pushed, with email
+  in correspondence; the home screen counts it.
+- **Live games wait** while players are still declaring (`beginFighting`, `startQueuedGames`), and
+  start once declaring is over: otherwise a player would sit at the board while their turn ran out.
+  Correspondence games start at once, as before.
+- **Web:** the war room's "Declaring in turns" block (the order, whose turn and how long, "Your turn"
+  with Pass, and "Pass for …" for the host); country panels say whose turn it is instead of offering
+  Declare war or Fortify; a "Your turn" header badge, title flag, toast and Wars badge; dispatch
+  lines; the lobby toggle "Take turns declaring"; the rules guide's round, Declaring war ("Taking
+  turns"), fortifying, battle and deadlines text; "Declaring" in the settings list.
+- **Simulator:** `engine/turns.ts` mirrors the server; each round the bots take turns (fortify on
+  their first turn if they want, then one declaration a turn, or pass) before answers and games, so
+  later waves only answer and fight. Passes are `{ t: 'pass' }` actions, which the parity test
+  replays, and it checks every round begins with the simulator's order. `whatif:no-turns` plays
+  the old way; the comparison is in the balance report's
+  [Declaring in turns](balance-report.md#declaring-in-turns): the game plays the same.
+- **Tests** that exercise other rules pin `turns: false` (`ORIGINAL_ANSWERS` in both test helpers,
+  the diplomacy tests, the simulator's scripted campaigns). `apps/server/test/turns.test.ts` covers
+  the server side.
+
+Defaults taken while building (not asked; easy to change):
+
+- **Order:** a rotation of the draft seats, round 1 from the last seat (the first seat already had
+  the draft's first pick). The obvious alternative is a catch-up order, the player furthest behind
+  first; the simulator can't compare the two, since its bots don't race.
+- **Passing is final** for the round, and a timeout is a pass: an away player costs the table one
+  turn's wait a round, not one a lap. Unused tokens carry over as before.
+- **Turn time** is the answer window, not a host setting. A correspondence table can spend days
+  declaring; the host's "Pass for …" is the remedy.
+- **Players with nothing to do are passed over**, not marked as passed, so a player who gains a
+  token while others are still declaring gets their turn when it comes round.
+
+Tests since, with both: rules 263, data 66, web 52, sim 27, server 162 (570 in all).
+
 **Bots** (2026-09-29, at the user's request; not committed yet): players the host adds in the
 lobby, each with a chess level from 1 to 8. The user's calls, asked before building (all four were my
 recommendations): Stockfish's lite WASM build committed to the repo, rather than the 205 MB npm
@@ -498,7 +585,7 @@ chess, every bot playing the map with the simulator's standard strategy.
   `bot: { level }` ("Field Marshal added Alpha, a level 4 bot (club player).").
 - **Identity.** Each bot is a user of its own, `bot_` and 12 letters drawn from `ctx.random` (so a
   seeded test deals the same secrets every run), a member of one campaign with `members.bot_level`
-  (migration `0009_bots`, which also adds `members.bot_round`). No person's id can start with `bot_`,
+  (migration `0010_bots`, which also adds `members.bot_round`). No person's id can start with `bot_`,
   so `isBotId` is a prefix test and SQL uses `starts_with`. `MemberView.bot` is `{ level }` or null;
   levels are public.
 - **How they act.** `BotRunner` (`bots/runner.ts`) hears from `mutate()` of every change to a
@@ -637,6 +724,16 @@ and `test/stockfish.test.ts`, which plays the shipped engine).
   round's accords and fortifying; a stand-in's level is fixed until it's handed back.
 - **Map play by level:** no; every bot keeps the standard strategy at every level.
 - **Level 8 on Render's tenth of a CPU** playing weaker than on a laptop: fine.
+
+### Bots and declaring in turns (2026-09-30, merging the bots with `main`)
+
+Where the campaign declares in turns, a bot fortifies and declares only on its turn, as the
+simulator's `takeTurns` does: on its first turn of the round (before it has fortified or declared
+anything) a country to fortify if it wants one, otherwise one war, otherwise it passes
+(`turnFor` in `bots/decide.ts`, the `fortify` and `pass` actions in `runner.ts`). Its round
+(accords) no longer fortifies then. The sweep also picks up any campaign whose turn a bot holds.
+Bots see the turn state, which is public. A person holding the turn keeps the bots waiting, as
+anyone would; the host's "Pass for …" and the turn's deadline cover an away player.
 
 ### Victory defaults taken while building (not asked; easy to change)
 
@@ -928,8 +1025,12 @@ pnpm format       # Prettier
   - `games.ts`: moves, resignations and draw offers under a per-game lock (`ctx.gameLocks`),
     publishing `game.update` to every member. **Lock order:** a game lock may take the campaign
     lock inside it (to settle the war), never the other way round.
-  - `scheduler.ts`: polls every 5 s for expired responses, flag-falls and half-settled games
-    (deadlines are columns, so restarts lose nothing); live flag-falls also get in-process timers.
+  - `turns.ts`: declaring in turns, where the rules have it: the round's order, passes and whose
+    turn it is live on the campaign row; `service.ts` checks the turn before a declaration or
+    fortification and passes it on after.
+  - `scheduler.ts`: polls every 5 s for expired responses and turns, flag-falls and half-settled
+    games (deadlines are columns, so restarts lose nothing); live flag-falls also get in-process
+    timers.
   - `board.ts` loads the `WarBoard`; `views.ts` shapes rows for the API.
   - Truces aren't stored: they're derived from wars resolved recently.
 - **Diplomacy** ([apps/server/src/diplomacy/](../apps/server/src/diplomacy/)):
@@ -1056,18 +1157,18 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                     |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                               |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*` |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_bots` (`members.bot_level`, `bot_round`)                                         |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                    |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                          |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/rules/src/`      | `war.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                            |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                  |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`              |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`) |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                       |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
-`/api/campaigns/:id/{invite/reset,me,leave,kick}`, `/api/campaigns/:id/bots` (add) and `…/bots/:botId` (level), `/api/campaigns/:id/players/:userId/stand-in` (put in, take back),
+`/api/campaigns/:id/{invite/reset,me,members/:userId,leave,kick}`, `/api/campaigns/:id/bots` (add) and `…/bots/:botId` (level), `/api/campaigns/:id/players/:userId/stand-in` (put in, take back),
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
 `…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,

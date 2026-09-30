@@ -1,6 +1,6 @@
 {
-  "id": "aafb6c65-c4f5-4782-a106-fb2d07d1ec03",
-  "prevId": "78416ad9-3f33-4e5a-8d80-bc0cb6cb2b58",
+  "id": "d2a02708-afbe-489c-9c20-2c77c48c08d0",
+  "prevId": "aafb6c65-c4f5-4782-a106-fb2d07d1ec03",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1011,6 +1011,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "bot_level": {
+          "name": "bot_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bot_round": {
+          "name": "bot_round",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

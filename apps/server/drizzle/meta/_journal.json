@@ -68,8 +68,15 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1790708971327,
-      "tag": "0009_bots",
+      "when": 1790806243919,
+      "tag": "0009_declaration_turns",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790810717413,
+      "tag": "0010_bots",
       "breakpoints": true
     }
   ]

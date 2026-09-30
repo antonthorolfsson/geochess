@@ -9,5 +9,6 @@ export * from './graph';
 export * from './openings';
 export * from './protocol';
 export * from './stats';
+export * from './turns';
 export * from './victory';
 export * from './war';

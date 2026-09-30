@@ -13,6 +13,7 @@ import {
   type MissionHistory,
   type SecretOption,
   type TerritoryId,
+  type TurnState,
   type UserId,
 } from '@empire/rules';
 import type { Answer } from './bots';
@@ -56,6 +57,8 @@ export interface LiveCampaign {
   /** Pending claims. */
   claims: Claim[];
   awards: Award[];
+  /** Declaring in turns this round, or null where anyone declares whenever they like. */
+  turns: TurnState | null;
 }
 
 export function liveState(c: LiveCampaign): SimState {
@@ -121,6 +124,7 @@ export function liveState(c: LiveCampaign): SimState {
     nextId: 1,
     log: [],
     actions: [],
+    turns: c.turns,
   };
 }
 

@@ -189,6 +189,15 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
           ),
         ),
         accords: (await visibleAccords(tx, campaignId, viewerId)).map(toAccordView),
+        turns:
+          c.status === 'active' && c.turnOrder
+            ? {
+                order: c.turnOrder,
+                current: c.turnUserId,
+                deadline: c.turnDeadline?.toISOString() ?? null,
+                passed: c.turnPassed,
+              }
+            : null,
         victory,
         mySecret,
       };
@@ -237,7 +246,7 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
 
 /**
  * Per campaign: wars, peace offers and accord proposals waiting for the player's answer, plus games
- * waiting for their move.
+ * waiting for their move and their turn to declare.
  */
 async function attentionCounts(ctx: AppContext, userId: string, campaignIds: string[]): Promise<Map<string, number>> {
   const answers = await ctx.db
@@ -301,8 +310,13 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
       ),
     )
     .groupBy(peaceOffers.campaignId);
+  const turns = await ctx.db
+    .select({ campaignId: campaigns.id, n: count() })
+    .from(campaigns)
+    .where(and(inArray(campaigns.id, campaignIds), eq(campaigns.status, 'active'), eq(campaigns.turnUserId, userId)))
+    .groupBy(campaigns.id);
   const out = new Map<string, number>();
-  for (const { campaignId, n } of [...answers, ...moves, ...proposals, ...secrets, ...peace]) {
+  for (const { campaignId, n } of [...answers, ...moves, ...proposals, ...secrets, ...peace, ...turns]) {
     out.set(campaignId, (out.get(campaignId) ?? 0) + n);
   }
   return out;

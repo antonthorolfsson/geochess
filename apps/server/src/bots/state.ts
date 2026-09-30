@@ -27,6 +27,7 @@ import { and, asc, eq, gte, max, ne, or } from 'drizzle-orm';
 import type { CampaignRow, MemberRow } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import { accords, campaigns, events, holdings, members, peaceOffers, wars } from '../db/schema';
+import { turnState } from '../wars/turns';
 import {
   loadAwards,
   loadHistory,
@@ -246,6 +247,7 @@ export function botState(ctx: AppContext, snap: Snapshot, botId: string, seed: n
     history: snap.history,
     claims,
     awards,
+    turns: turnState(campaign),
   });
 }
 
@@ -286,5 +288,6 @@ export function draftState(
     history: EMPTY_HISTORY,
     claims: [],
     awards: [],
+    turns: null,
   });
 }

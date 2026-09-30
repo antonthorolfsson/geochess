@@ -108,8 +108,9 @@ export async function listen(app: FastifyInstance, c: Client): Promise<{ message
 export const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * The original game's answers to a declaration (a free raise, redirects anywhere, tribute), which
- * campaigns stored before the revised answers still play: for tests of those rules.
+ * The original game's answers to a declaration (a free raise, redirects anywhere, tribute), with
+ * declarations whenever players like, which campaigns stored before the revised answers still
+ * play: for tests of those rules.
  */
 export const ORIGINAL_ANSWERS = {
   raise: 'free',
@@ -118,6 +119,7 @@ export const ORIGINAL_ANSWERS = {
   fortify: false,
   peaceTerms: false,
   recall: false,
+  turns: false,
 } as const;
 
 /** A chess engine for tests, and what it was asked. */

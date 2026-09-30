@@ -54,7 +54,15 @@ export type CampaignEvent =
       type: 'draft.ended';
       payload: { unclaimed: number; autoPicked?: number; picks?: { userId: string; territoryId: TerritoryId }[] };
     }
-  | { type: 'round.started'; payload: { round: number } }
+  /** A round started. `order` is who takes their turn when, in campaigns that declare war in turns. */
+  | { type: 'round.started'; payload: { round: number; order?: string[] } }
+  /**
+   * A player passed: they're done declaring war and fortifying for the round. `auto` when their
+   * time ran out; the host passing a turn for them is logged with the host as the actor.
+   */
+  | { type: 'turn.passed'; payload: { userId: string; auto: boolean } }
+  /** Everyone has passed or has nothing left to do: declaring is over for the round. */
+  | { type: 'turns.ended'; payload: { round: number } }
   | {
       type: 'war.declared';
       payload: {
@@ -270,10 +278,32 @@ export interface CampaignView {
    * the two players see.
    */
   accords: AccordView[];
+  /**
+   * Declaring in turns this round: null in campaigns where anyone declares whenever they like, and
+   * until the campaign's first round starts.
+   */
+  turns: TurnsView | null;
   /** Victory missions and points, in Objectives campaigns; null in open-ended ones. Public. */
   victory: VictoryView | null;
   /** The viewer's own secret mission (or options to choose from). Private: nobody else sees it. */
   mySecret: MySecretView | null;
+}
+
+/** Declaring in turns during the current round. */
+export interface TurnsView {
+  /** The round's order. */
+  order: string[];
+  /** Whose turn it is to declare war or fortify, or null once declaring is over for the round. */
+  current: string | null;
+  /** When the current turn passes, if its player hasn't acted. */
+  deadline: string | null;
+  /** Players done declaring for the round. */
+  passed: string[];
+}
+
+/** Passing a turn: your own, or (the host) the player whose turn it is. */
+export interface PassTurnInput {
+  userId: string;
 }
 
 /** A mission a campaign plays with: public ones are keyed by slot (`p0`…), a secret one `secret`. */
@@ -761,7 +791,10 @@ export interface CampaignSummary {
   maxPlayers: number;
   myColor: number;
   currentPicker: string | null;
-  /** Wars, peace offers and accord proposals waiting for the viewer's answer, plus games waiting for their move. */
+  /**
+   * Wars, peace offers and accord proposals waiting for the viewer's answer, plus games waiting for
+   * their move and their turn to declare.
+   */
   attention: number;
   /** Private messages the viewer hasn't read. */
   unread: number;

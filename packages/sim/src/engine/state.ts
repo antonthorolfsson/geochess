@@ -95,6 +95,7 @@ export function createState(cfg: SimConfig, idx: DatasetIndex, seed: number): Si
     round: 0,
     status: 'lobby',
     holdings: new Map(),
+    turns: null,
     wars: [],
     peaceOffers: [],
     accords: [],

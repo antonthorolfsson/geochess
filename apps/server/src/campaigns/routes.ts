@@ -1,4 +1,4 @@
-import { AUTODRAFT_FALLBACKS, DRAFT_LIST_LIMIT, campaignNameSchema } from '@empire/rules';
+import { AUTODRAFT_FALLBACKS, DRAFT_LIST_LIMIT, EMPIRE_COLORS, campaignNameSchema } from '@empire/rules';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/session';
@@ -13,6 +13,7 @@ import {
   removeMember,
   resetInvite,
   setDraftList,
+  setMemberColor,
   startDraft,
   updateCampaign,
   updateMembership,
@@ -20,6 +21,8 @@ import {
 import { campaignView, invitePreview, listCampaigns } from './views';
 
 const idParams = z.object({ id: z.string().min(1).max(40) });
+const memberParams = z.object({ id: z.string().min(1).max(40), userId: z.string().min(1).max(80) });
+const colorInput = z.object({ color: z.number().int().min(0).lt(EMPIRE_COLORS.length) });
 const codeParams = z.object({ code: z.string().min(1).max(40) });
 /** Partial rules; the service merges them over the current (or default) rules and validates. */
 const rulesInput = z.record(z.string(), z.unknown());
@@ -73,6 +76,14 @@ export function registerCampaignRoutes(app: FastifyInstance, ctx: AppContext): v
       req.body,
     );
     await updateMembership(ctx, id, user.id, input);
+    return { ok: true };
+  });
+
+  app.patch('/api/campaigns/:id/members/:userId', async (req) => {
+    const user = requireUser(req);
+    const { id, userId } = parse(memberParams, req.params);
+    const { color } = parse(colorInput, req.body);
+    await setMemberColor(ctx, id, user.id, userId, color);
     return { ok: true };
   });
 

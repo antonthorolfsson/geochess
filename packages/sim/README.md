@@ -25,20 +25,24 @@ Runs write one JSON line per campaign to `packages/sim/out/<name>/shard-*.jsonl`
 pick up where they stopped if interrupted. `--workers` sets the number of child processes (default:
 cores − 2); `--out` names the directory.
 
-Campaigns play what a new campaign plays: the current mission rules version, a last round of 25 and
+Campaigns play what a new campaign plays: the current mission rules version, a last round of 25,
 the revised war answers (a matched raise, nearby redirects that cost a token, fortifying, calling a
-declaration off, and peace terms in place of tribute). `--mission-rules 2` plays an earlier version
+declaration off, and peace terms in place of tribute) and declaring in turns. `--mission-rules 2` plays an earlier version
 (the balance report's first runs were version 2), and `--last-round 30` or `--last-round none`
 another season length (`trace` takes both too). The report's runs also played the original answers:
-add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to compare with them.
+add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to compare with them, and
+`whatif:no-turns` for declaring whenever players like.
 
 ## What a campaign does
 
 1. Public missions: the default set, a random draw, or given kinds, generated as in the lobby.
 2. A full-map snake draft in a random seat order, then accords may be signed (round 0).
 3. Baselines, secret options dealt with each player's own seed, and a choice.
-4. Rounds: tokens, `round.started`, accords paid and kept, missions settled; then diplomacy and
-   `waves` rounds of declarations, answers, replies and the games that are due. A war stays open
+4. Rounds: tokens, `round.started`, accords paid and kept, the round's turns, missions settled;
+   then diplomacy and `waves` rounds of declarations, answers, replies and the games that are due.
+   With turns, the first wave's declarations go round the table (each player fortifies on their
+   first turn if they want, then declares one war a turn, or passes) until everyone is done, and
+   later waves only answer and fight. A war stays open
    0, 1, 2… rounds past its declaration with the chances in `latency` (live: always 0;
    correspondence: 20/50/30%), holding up claims it could break.
 5. The campaign ends at 7 points (`normal`), or when the host moves on from the last round, on points

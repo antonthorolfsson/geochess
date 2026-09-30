@@ -9,6 +9,7 @@ import {
   MATCHED_RAISE_MIN_PCT,
   type DraftMode,
   type DrawRule,
+  type MemberView,
   type Pace,
   type RaiseStyle,
   type TerritoryId,
@@ -59,7 +60,8 @@ export function LobbyPanel({
     onError: (err) => setError(errorMessage(err)),
   });
 
-  const takenBy = new Map(campaign.members.map((m) => [m.color, m]));
+  // The player whose color the host is choosing.
+  const [coloring, setColoring] = useState<string | null>(null);
   const enough = campaign.members.length >= MIN_PLAYERS;
   const missionsReady = !campaign.victory || campaign.victory.publicMissions.length === 4;
 
@@ -88,21 +90,46 @@ export function LobbyPanel({
         </h2>
         <ul className="divide-y divide-line rounded-[3px] border border-line">
           {campaign.members.map((m) => (
-            <li key={m.userId} className="flex min-h-12 items-center gap-2 px-3">
-              <span className="min-w-0 flex-1">
-                <PlayerName member={m} you={m.userId === me.userId} />
-              </span>
-              {m.userId === campaign.hostId && <span className="label">Host</span>}
-              {isHost && m.userId !== me.userId && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    if (confirm(`Remove ${m.name} from the campaign?`)) run(() => api.kick(campaign.id, m.userId));
-                  }}
-                >
-                  Remove
-                </button>
+            <li key={m.userId}>
+              <div className="flex min-h-12 items-center gap-2 px-3">
+                <span className="min-w-0 flex-1">
+                  <PlayerName member={m} you={m.userId === me.userId} />
+                </span>
+                {m.userId === campaign.hostId && <span className="label">Host</span>}
+                {isHost && m.userId !== me.userId && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-expanded={coloring === m.userId}
+                      onClick={() => setColoring(coloring === m.userId ? null : m.userId)}
+                    >
+                      Color
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        if (confirm(`Remove ${m.name} from the campaign?`)) run(() => api.kick(campaign.id, m.userId));
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
+              {isHost && coloring === m.userId && (
+                <div className="px-3 pb-3">
+                  <ColorChoices
+                    model={model}
+                    member={m}
+                    label={`${m.name}’s color`}
+                    onPick={(color) => {
+                      setColoring(null);
+                      run(() => api.setMemberColor(campaign.id, m.userId, color));
+                    }}
+                  />
+                </div>
               )}
             </li>
           ))}
@@ -111,29 +138,12 @@ export function LobbyPanel({
 
       <section>
         <h2 className="label mb-2">Your color</h2>
-        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Empire color">
-          {EMPIRE_COLORS.map((c) => {
-            const holder = takenBy.get(c.index);
-            const mine = holder?.userId === me.userId;
-            return (
-              <button
-                key={c.index}
-                type="button"
-                role="radio"
-                aria-checked={mine}
-                aria-label={`${c.name}${holder && !mine ? `, taken by ${holder.name}` : ''}`}
-                disabled={Boolean(holder) && !mine}
-                onClick={() => run(() => api.updateMembership(campaign.id, { color: c.index }))}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-[3px] border text-xs ${
-                  mine ? 'border-paper bg-raised' : 'border-line hover:border-line-strong'
-                } disabled:cursor-not-allowed disabled:opacity-35`}
-              >
-                <EmpireSwatch color={c.index} size={24} />
-                <span className="truncate">{holder && !mine ? holder.name : c.name}</span>
-              </button>
-            );
-          })}
-        </div>
+        <ColorChoices
+          model={model}
+          member={me}
+          label="Empire color"
+          onPick={(color) => run(() => api.updateMembership(campaign.id, { color }))}
+        />
       </section>
 
       <RulesSection model={model} onSave={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))} />
@@ -185,6 +195,46 @@ export function LobbyPanel({
           {isHost ? 'Delete campaign' : 'Leave campaign'}
         </button>
       </section>
+    </div>
+  );
+}
+
+/** The eight empire colors for one player to pick from; colors other players hold are taken. */
+function ColorChoices({
+  model,
+  member,
+  label,
+  onPick,
+}: {
+  model: CampaignModel;
+  member: MemberView;
+  label: string;
+  onPick(color: number): void;
+}) {
+  const takenBy = new Map(model.campaign.members.map((m) => [m.color, m]));
+  return (
+    <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={label}>
+      {EMPIRE_COLORS.map((c) => {
+        const holder = takenBy.get(c.index);
+        const theirs = holder?.userId === member.userId;
+        return (
+          <button
+            key={c.index}
+            type="button"
+            role="radio"
+            aria-checked={theirs}
+            aria-label={`${c.name}${holder && !theirs ? `, taken by ${holder.name}` : ''}`}
+            disabled={Boolean(holder) && !theirs}
+            onClick={() => onPick(c.index)}
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-[3px] border text-xs ${
+              theirs ? 'border-paper bg-raised' : 'border-line hover:border-line-strong'
+            } disabled:cursor-not-allowed disabled:opacity-35`}
+          >
+            <EmpireSwatch color={c.index} size={24} />
+            <span className="truncate">{holder && !theirs ? holder.name : c.name}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

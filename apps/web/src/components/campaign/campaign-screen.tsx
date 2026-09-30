@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Topology } from 'topojson-specification';
 import { ApiError, errorMessage } from '@/lib/api';
-import { buildModel, type CampaignModel } from '@/lib/campaign';
+import { buildModel, nextAnswer, type CampaignModel } from '@/lib/campaign';
 import { useCampaign, useMapData, useMe, useWar } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
 import { useDocumentTitle } from '@/lib/use-document-title';
@@ -189,7 +189,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const openWar = warInView ?? olderWar.data;
   const myGames = useMyGames(model);
   const myMoves = myGames.filter((g) => g.myMove).length;
-  const answers = model.answersNeeded;
+  const answers = model.answers.length;
   const unread = useUnread(campaign.id);
   // A finished Objectives campaign opens on its results.
   const [side, setSide] = useState<Side>(campaign.status === 'finished' && objectives ? 'missions' : 'main');
@@ -476,6 +476,38 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (!isDesktop) setTab('wars');
   };
 
+  // The header's call to action takes the player to it: the draft, the mission options, a game
+  // waiting for a move, or what needs an answer (the soonest deadline first), which lights up.
+  // Pressing again moves on to the next game or answer.
+  const [spotlight, setSpotlight] = useState<{ id: string; nonce: number } | null>(null);
+  const lastAnswer = useRef<string | null>(null);
+  // The light is for that press, not for the next time the war or proposal is opened by hand.
+  useEffect(() => {
+    if (!spotlight) return;
+    const timer = setTimeout(() => setSpotlight(null), 3000);
+    return () => clearTimeout(timer);
+  }, [spotlight]);
+  const act = () => {
+    if (model.myTurn || mustChoose) {
+      if (overPage) router.push(`/c/${campaign.id}`);
+      if (isDesktop) setSide('main');
+      else setTab(model.myTurn ? 'draft' : 'missions');
+      return;
+    }
+    if (myMoves > 0) {
+      const moves = myGames.filter((g) => g.myMove);
+      const next = moves[(moves.findIndex((g) => g.gameId === panels.gameId) + 1) % moves.length];
+      if (next) openGame(next.gameId);
+      return;
+    }
+    const next = nextAnswer(model.answers, lastAnswer.current);
+    if (!next) return;
+    lastAnswer.current = next.id;
+    setSpotlight({ id: next.id, nonce: Date.now() });
+    if (next.kind === 'accord') panels.set('accord', next.id);
+    else showWarFromDiplo(next.id);
+  };
+
   const fortifiedIds = useMemo(() => Object.keys(model.campaign.fortified), [model.campaign.fortified]);
   const mapWars: MapWar[] = useMemo(
     () =>
@@ -509,6 +541,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       onOpenGame={openGame}
       onClose={closeWar}
       onPreview={setPreview}
+      spotlight={spotlight?.id === openWar.id ? spotlight.nonce : null}
     />
   );
   const gamePanel = panels.gameId && (
@@ -529,6 +562,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       onOpenChat={openChat}
       onCloseChat={closeChat}
       focusAccordId={accordId}
+      spotlight={spotlight}
       onSelect={flyTo}
       onOpenWar={showWarFromDiplo}
     />
@@ -572,6 +606,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         myMoves={myMoves}
         answers={answers}
         mustChoose={mustChoose}
+        onAct={act}
         back={
           overPage
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
@@ -794,6 +829,7 @@ function CampaignHeader({
   myMoves,
   answers,
   mustChoose,
+  onAct,
   back,
   rules,
 }: {
@@ -803,6 +839,8 @@ function CampaignHeader({
   answers: number;
   /** A secret mission is waiting to be chosen. */
   mustChoose: boolean;
+  /** Takes the player to whatever the call to action names. */
+  onAct(): void;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
   back: { href: string; label: string };
   /** The rules page, always a tap away; `open` while it's showing. */
@@ -826,6 +864,16 @@ function CampaignHeader({
         : 'Finished',
   }[campaign.status];
   const wars = model.activeWars.length;
+  // The call to action, most pressing first. Pressing it goes there.
+  const action = model.myTurn
+    ? { label: 'Your pick', title: 'Go to the draft' }
+    : mustChoose
+      ? { label: 'Choose mission', title: 'Go to your mission options' }
+      : myMoves > 0
+        ? { label: 'Your move', title: 'Open the next game waiting for your move' }
+        : answers > 0
+          ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
+          : null;
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-line bg-gunmetal px-2 pt-[env(safe-area-inset-top)]">
       <Link
@@ -850,10 +898,17 @@ function CampaignHeader({
           {wars} {wars === 1 ? 'war' : 'wars'} ⚑
         </span>
       )}
-      {(model.myTurn || mustChoose || myMoves > 0 || answers > 0) && (
-        <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
-          {model.myTurn ? 'Your pick' : mustChoose ? 'Choose mission' : myMoves > 0 ? 'Your move' : 'Answer needed'}
-        </span>
+      {action && (
+        <button
+          type="button"
+          onClick={onAct}
+          title={action.title}
+          className="group flex min-h-11 shrink-0 items-center"
+        >
+          <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase group-hover:bg-[#efb940]">
+            {action.label}
+          </span>
+        </button>
       )}
       <Link
         href={rules.href}

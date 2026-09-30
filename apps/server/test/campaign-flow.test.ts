@@ -134,6 +134,34 @@ describe('lobby', () => {
     expect(view.body.members.map((m) => m.userId)).toEqual(['dev_ann']);
   });
 
+  it('lets the host give any player a free color, in the lobby', async () => {
+    const ann = await signIn(server.app, 'Ann');
+    const bo = await signIn(server.app, 'Bo');
+    const cy = await signIn(server.app, 'Cy');
+    const c = await createCampaign(ann, { name: 'Colors', rules: { victory: { mode: 'open' } } });
+    await bo.post(`/api/invites/${c.inviteCode}/join`);
+    await cy.post(`/api/invites/${c.inviteCode}/join`);
+    const color = (userId: string, body: object, as = ann) =>
+      as.patch(`/api/campaigns/${c.id}/members/${userId}`, body);
+    const colors = async () =>
+      (await bo.get<CampaignView>(`/api/campaigns/${c.id}`)).body.members.map((m) => [m.userId, m.color]);
+
+    expect((await color('dev_bo', { color: 7 })).status).toBe(200);
+    expect((await color('dev_bo', { color: 7 })).status).toBe(200);
+    expect((await color('dev_bo', { color: 2 })).status).toBe(409);
+    expect((await color('dev_cy', { color: 4 }, bo)).status).toBe(403);
+    expect((await color('dev_bo', { color: 8 })).status).toBe(400);
+    expect((await color('dev_zed', { color: 4 })).status).toBe(404);
+    expect(await colors()).toEqual([
+      ['dev_ann', 0],
+      ['dev_bo', 7],
+      ['dev_cy', 2],
+    ]);
+
+    expect((await ann.post(`/api/campaigns/${c.id}/draft/start`)).status).toBe(200);
+    expect((await color('dev_bo', { color: 4 })).status).toBe(409);
+  });
+
   it('invalidates old invite links on reset', async () => {
     const ann = await signIn(server.app, 'Ann');
     const bo = await signIn(server.app, 'Bo');

@@ -41,7 +41,7 @@ import {
   tokensText,
   warStatusText,
 } from '@/lib/wars';
-import { Notice } from '../ui';
+import { Notice, Spotlight } from '../ui';
 import { PlayerName } from './player-name';
 import { useEmpireHref } from './room-context';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
@@ -61,6 +61,7 @@ export function WarDetail({
   onOpenGame,
   onClose,
   onPreview,
+  spotlight,
 }: {
   model: CampaignModel;
   war: WarView;
@@ -70,6 +71,8 @@ export function WarDetail({
   onOpenGame(gameId: string): void;
   onClose(): void;
   onPreview(preview: StakePreview | null): void;
+  /** Set a new nonce to call out what the viewer must answer: their answer, or peace terms to them. */
+  spotlight?: number | null;
 }) {
   const { idx } = model;
   const target = idx.byId.get(war.targetId);
@@ -80,6 +83,8 @@ export function WarDetail({
   const added = stakedByRaise(war);
   const pending = war.status === 'declared' || war.status === 'countered';
   const party = war.attackerId === me || war.defenderId === me;
+  const answering =
+    (war.status === 'declared' && war.defenderId === me) || (war.status === 'countered' && war.attackerId === me);
 
   const country = (id: TerritoryId) => (
     <button
@@ -164,19 +169,25 @@ export function WarDetail({
       <p className="text-[0.95rem]">{warStatusText(model, war)}.</p>
 
       {war.status === 'declared' && war.defenderId === me && (
-        <DefenderAnswer model={model} war={war} onFocusCountry={onFocusCountry} />
+        <Spotlight nonce={spotlight} label="Your answer">
+          <DefenderAnswer model={model} war={war} onFocusCountry={onFocusCountry} />
+        </Spotlight>
       )}
       {war.status === 'declared' && war.attackerId === me && rules.recall && <Recall model={model} war={war} />}
       {war.status === 'countered' && (
         <>
           <Notice tone="amber">{counterText(model, war)}</Notice>
-          {war.attackerId === me && <AttackerReply model={model} war={war} onPreview={onPreview} />}
+          {war.attackerId === me && (
+            <Spotlight nonce={spotlight} label="Your answer">
+              <AttackerReply model={model} war={war} onPreview={onPreview} />
+            </Spotlight>
+          )}
         </>
       )}
       {pending && war.respondBy && <Deadline war={war} model={model} />}
 
       {rules.peaceTerms && party && war.status !== 'resolved' && (
-        <PeacePanel model={model} war={war} onFocusCountry={onFocusCountry} />
+        <PeacePanel model={model} war={war} onFocusCountry={onFocusCountry} spotlight={answering ? null : spotlight} />
       )}
 
       {war.games.length > 0 && (
@@ -708,10 +719,13 @@ function PeacePanel({
   model,
   war,
   onFocusCountry,
+  spotlight,
 }: {
   model: CampaignModel;
   war: WarView;
   onFocusCountry(id: TerritoryId): void;
+  /** Calls out terms offered to the viewer. */
+  spotlight: number | null | undefined;
 }) {
   const me = model.me.userId;
   const other = playerName(model, war.attackerId === me ? war.defenderId : war.attackerId);
@@ -731,7 +745,11 @@ function PeacePanel({
           </button>
         )}
       </div>
-      {theirs && <OfferToMe model={model} war={war} offer={theirs} />}
+      {theirs && (
+        <Spotlight nonce={spotlight} label="Peace terms offered to you">
+          <OfferToMe model={model} war={war} offer={theirs} />
+        </Spotlight>
+      )}
       {mine && <MyOffer model={model} war={war} offer={mine} other={other} />}
       {!mine && lastMine && (
         <p className="text-sm text-muted">

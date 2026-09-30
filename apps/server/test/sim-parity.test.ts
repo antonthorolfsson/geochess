@@ -4,7 +4,14 @@
  * both agree on everything the balance report depends on: which missions scored for whom and in
  * which round, reveals, the winners, and the map at the end.
  */
-import { valueOfSet, type AccordView, type CampaignView, type SecretOption, type WarView } from '@empire/rules';
+import {
+  turnOrder,
+  valueOfSet,
+  type AccordView,
+  type CampaignView,
+  type SecretOption,
+  type WarView,
+} from '@empire/rules';
 import { loadDataset, runScenarioCampaign, scenarioConfig, type SimAction, type SimState } from '@empire/sim';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -42,9 +49,13 @@ async function replay(s: SimState, label: string) {
   const { inviteCode } = (await host.get<{ inviteCode: string }>(`/api/campaigns/${campaignId}`)).body;
   for (const c of clients.slice(1)) expect((await c.post(`/api/invites/${inviteCode}/join`)).status).toBe(200);
 
-  // The end of the draft, as the simulator had it: the map, the public missions, one option each.
+  // The end of the draft, as the simulator had it: the seats (which set the order of turns), the
+  // map, the public missions, one option each.
   const db = server.app.ctx.db;
-  await db.update(campaigns).set({ status: 'selection', round: 0, rules: s.rules }).where(eq(campaigns.id, campaignId));
+  await db
+    .update(campaigns)
+    .set({ status: 'selection', round: 0, rules: s.rules, draftOrder: s.order.map((id) => idOf.get(id)!) })
+    .where(eq(campaigns.id, campaignId));
   await db
     .insert(holdings)
     .values(
@@ -73,6 +84,15 @@ async function replay(s: SimState, label: string) {
   const warIds = new Map<string, string>();
   const accordIds = new Map<string, string>();
   const offerIds = new Map<string, string>();
+  /** Where turns are played, each round must begin them in the simulator's order. */
+  const checkTurnsBegin = async () => {
+    const view = (await host.get<CampaignView>(`/api/campaigns/${campaignId}`)).body;
+    if (view.status !== 'active') return;
+    const seats = s.order.map((id) => idOf.get(id)!);
+    expect(view.turns?.order ?? null, `turns in round ${view.round}`).toEqual(
+      s.rules.war.turns ? turnOrder(seats, view.round) : null,
+    );
+  };
   const warView = async (simWar: string) =>
     (await host.get<WarView>(`/api/campaigns/${campaignId}/wars/${warIds.get(simWar)}`)).body;
   const ok = (res: { status: number; body: unknown }, what: string) =>
@@ -101,10 +121,12 @@ async function replay(s: SimState, label: string) {
       case 'open':
         for (const p of s.players)
           if (p.secret) ok(await as(p.id).post(`/api/campaigns/${campaignId}/secret`, { optionId: 'o1' }), 'choose');
+        await checkTurnsBegin();
         break;
       case 'round':
         server.clock.advance(25 * HOUR);
         ok(await host.post(`/api/campaigns/${campaignId}/round/next`), 'next round');
+        await checkTurnsBegin();
         break;
       case 'end':
         // After the last round, moving on ends the campaign.
@@ -166,6 +188,9 @@ async function replay(s: SimState, label: string) {
           await as(action.by).post(`/api/campaigns/${campaignId}/fortify`, { territoryId: action.territoryId }),
           'fortify',
         );
+        break;
+      case 'pass':
+        ok(await as(action.by).post(`/api/campaigns/${campaignId}/turn/pass`, { userId: idOf.get(action.by) }), 'pass');
         break;
       case 'peace': {
         const res = await as(action.by).post<{ id: string }>(

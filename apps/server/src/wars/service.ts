@@ -1,4 +1,5 @@
 import {
+  DECLARE_COST,
   FORTIFY_COST,
   FORTIFY_REJECTION_MESSAGES,
   INITIAL_FEN,
@@ -54,6 +55,7 @@ import type { Notice } from '../notifications/notifier';
 import { endSeason } from '../victory/finish';
 import { loadBoard, type WarRow } from './board';
 import { armFlag, publishGame } from './games';
+import { beginTurns, declaring, requireTurn, roundTurnOrder, turnTaken } from './turns';
 
 /** Live games open with a countdown, so both players can get to the board. */
 export const LIVE_COUNTDOWN_MS = 15_000;
@@ -108,7 +110,8 @@ export async function declareWar(
   return mutate(ctx, campaignId, async (scope) => {
     const me = requireMember(scope, userId);
     requireActive(scope);
-    if (me.tokens < 1) throw conflict('You have no war tokens. The next round brings one.', 'no-tokens');
+    await requireTurn(scope, userId);
+    if (me.tokens < DECLARE_COST) throw conflict('You have no war tokens. The next round brings one.', 'no-tokens');
     const board = await loadBoard(ctx, scope.tx, scope.campaign);
     const targetRejection = checkTarget(board, userId, input.targetId);
     if (targetRejection) throw conflict(TARGET_REJECTION_MESSAGES[targetRejection], targetRejection);
@@ -137,7 +140,7 @@ export async function declareWar(
         declaredAt: ctx.now(),
       })
       .returning();
-    await addTokens(scope, userId, -1);
+    await addTokens(scope, userId, -DECLARE_COST);
     await scope.log.add(
       {
         type: 'war.declared',
@@ -167,6 +170,7 @@ export async function declareWar(
       tag: `war:${war!.id}`,
       email: true,
     });
+    await turnTaken(ctx, scope, userId);
     return { id: war!.id };
   });
 }
@@ -430,6 +434,7 @@ export async function fortifyCountry(
   return mutate(ctx, campaignId, async (scope) => {
     const me = requireMember(scope, userId);
     requireActive(scope);
+    await requireTurn(scope, userId);
     const board = await loadBoard(ctx, scope.tx, scope.campaign);
     const rejection = checkFortify(board, userId, territoryId);
     if (rejection) {
@@ -452,6 +457,7 @@ export async function fortifyCountry(
       userId,
       scope.campaign.round,
     );
+    await turnTaken(ctx, scope, userId);
     return { untilRound };
   });
 }
@@ -460,7 +466,7 @@ export async function fortifyCountry(
 // Fighting
 
 /** Players in a game that's underway in this campaign; each plays one live game at a time. */
-async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
+export async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
   const rows = await scope.tx
     .select({ whiteId: games.whiteId, blackId: games.blackId })
     .from(games)
@@ -470,7 +476,7 @@ async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
 
 /**
  * Sets up the war's game (or its Armageddon tiebreak). Live games wait until neither player is in
- * another game; correspondence games start at once.
+ * another game, and while players are taking turns to declare; correspondence games start at once.
  */
 async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow, armageddon = false): Promise<void> {
   const board = await loadBoard(ctx, scope.tx, scope.campaign);
@@ -495,7 +501,7 @@ async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow,
     })
     .returning();
   const busy = tc.kind === 'live' ? await busyPlayers(scope) : new Set<string>();
-  if (busy.has(whiteId) || busy.has(blackId)) {
+  if (busy.has(whiteId) || busy.has(blackId) || (tc.kind === 'live' && declaring(scope.campaign))) {
     await updateWar(scope, war, { status: 'ready', respondBy: null });
     return;
   }
@@ -552,8 +558,12 @@ async function startGame(ctx: AppContext, scope: MutationScope, gameId: string):
   }
 }
 
-/** Starts queued live games, oldest first, whose players are both free. */
+/**
+ * Starts queued live games, oldest first, whose players are both free, once nobody is taking turns
+ * to declare.
+ */
 export async function startQueuedGames(ctx: AppContext, scope: MutationScope): Promise<void> {
+  if (declaring(scope.campaign)) return;
   const queued = await scope.tx
     .select({ id: games.id, whiteId: games.whiteId, blackId: games.blackId })
     .from(games)
@@ -721,9 +731,9 @@ export async function resolveWar(
 // Rounds and deadlines
 
 /**
- * The host starts the next round: everyone's tokens refill, locks and truces count down, and
- * accords whose time is up run their course. After the season's last round, the campaign ends
- * instead (see `endSeason`).
+ * The host starts the next round: everyone's tokens refill, locks and truces count down, accords
+ * whose time is up run their course, and turns to declare begin where the rules have them. After
+ * the season's last round, the campaign ends instead (see `endSeason`).
  */
 export async function nextRound(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
@@ -744,10 +754,13 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
         .update(members)
         .set({ tokens })
         .where(and(eq(members.campaignId, campaignId), eq(members.userId, m.userId)));
+      m.tokens = tokens;
     }
     scope.campaign = { ...scope.campaign, round, roundStartedAt };
-    await scope.log.add({ type: 'round.started', payload: { round } }, userId, round);
+    const order = roundTurnOrder(scope.campaign, scope.members);
+    await scope.log.add({ type: 'round.started', payload: { round, ...(order ? { order } : {}) } }, userId, round);
     await startRoundForAccords(ctx, scope);
+    await beginTurns(ctx, scope);
   });
 }
 

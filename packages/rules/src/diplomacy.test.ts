@@ -175,6 +175,8 @@ describe('feed filters', () => {
   it('sort dispatches and messages', () => {
     expect(feedShows('wars', event('war.declared'))).toBe(true);
     expect(feedShows('wars', event('round.started'))).toBe(true);
+    expect(feedShows('wars', event('turn.passed'))).toBe(true);
+    expect(feedShows('wars', event('turns.ended'))).toBe(true);
     expect(feedShows('wars', event('accord.signed'))).toBe(false);
     expect(feedShows('accords', event('reputation.changed'))).toBe(true);
     expect(feedShows('accords', event('reputation.earned'))).toBe(true);

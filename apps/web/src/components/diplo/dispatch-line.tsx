@@ -57,12 +57,31 @@ export function DispatchLine({
     return war ? (model.idx.byId.get(war.targetId)?.name ?? war.targetId) : 'the frontier';
   };
   switch (event.type) {
-    case 'round.started':
-      return event.payload.round === 1 ? (
-        <strong>Round 1 began: to war. Everyone has their first war token.</strong>
+    case 'round.started': {
+      const { round, order } = event.payload;
+      const turns = order?.length ? ` Declaring in turns: ${order.map(name).join(', ')}.` : '';
+      return round === 1 ? (
+        <strong>Round 1 began: to war. Everyone has their first war token.{turns}</strong>
       ) : (
-        <strong>Round {event.payload.round} began. War tokens refilled.</strong>
+        <strong>
+          Round {round} began. War tokens refilled.{turns}
+        </strong>
       );
+    }
+    case 'turn.passed': {
+      const { userId, auto } = event.payload;
+      if (auto) return <span>{name(userId)} ran out of time and passed.</span>;
+      if (event.actorId && event.actorId !== userId) {
+        return (
+          <span>
+            {name(event.actorId)} passed for {name(userId)}.
+          </span>
+        );
+      }
+      return <span>{name(userId)} passed.</span>;
+    }
+    case 'turns.ended':
+      return <span>Declaring is over for round {event.payload.round}.</span>;
     case 'war.declared': {
       const { attackerId, defenderId, targetId, stake, reserves } = event.payload;
       return (

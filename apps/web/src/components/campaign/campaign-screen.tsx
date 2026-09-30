@@ -275,7 +275,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     };
   }, [missionFocus, model, me]);
 
-  // Tell the player when their pick comes up.
+  // Tell the player when their pick comes up, or their turn to declare.
   const wasMyTurn = useRef(model.myTurn);
   useEffect(() => {
     if (model.myTurn && !wasMyTurn.current) {
@@ -284,6 +284,15 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     }
     wasMyTurn.current = model.myTurn;
   }, [model.myTurn]);
+  const declareTurn = Boolean(model.turns?.mine);
+  const wasDeclareTurn = useRef(declareTurn);
+  useEffect(() => {
+    if (declareTurn && !wasDeclareTurn.current) {
+      setToast('Your turn to declare');
+      navigator.vibrate?.(120);
+    }
+    wasDeclareTurn.current = declareTurn;
+  }, [declareTurn]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 4000);
@@ -398,11 +407,13 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       ? '(Choose a mission) '
       : myMoves > 0
         ? '(Your move) '
-        : answers > 0
-          ? '(Answer needed) '
-          : unread.direct > 0
-            ? '(New message) '
-            : '';
+        : declareTurn
+          ? '(Your turn) '
+          : answers > 0
+            ? '(Answer needed) '
+            : unread.direct > 0
+              ? '(New message) '
+              : '';
   const page = empireOf
     ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · `
     : pageSegment === 'rules'
@@ -538,7 +549,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   );
   // Badges: amber when something needs the player, plain for unread channel messages and for
   // rivals' claims waiting to score.
-  const warsNeedMe = new Set([...model.awaitingMe, ...model.peaceToMe.map(({ war }) => war)]).size + myMoves;
+  const warsNeedMe =
+    new Set([...model.awaitingMe, ...model.peaceToMe.map(({ war }) => war)]).size + myMoves + (declareTurn ? 1 : 0);
   const diploNeedsMe = model.proposalsToMe.length + unread.direct;
   const rivalsClaiming = objectives ? rivalClaims(model).length : 0;
   const leftPanel =
@@ -572,6 +584,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         myMoves={myMoves}
         answers={answers}
         mustChoose={mustChoose}
+        declareTurn={declareTurn}
         back={
           overPage
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
@@ -794,6 +807,7 @@ function CampaignHeader({
   myMoves,
   answers,
   mustChoose,
+  declareTurn,
   back,
   rules,
 }: {
@@ -803,6 +817,8 @@ function CampaignHeader({
   answers: number;
   /** A secret mission is waiting to be chosen. */
   mustChoose: boolean;
+  /** It's the player's turn to declare war (or fortify, or pass). */
+  declareTurn: boolean;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
   back: { href: string; label: string };
   /** The rules page, always a tap away; `open` while it's showing. */
@@ -850,9 +866,17 @@ function CampaignHeader({
           {wars} {wars === 1 ? 'war' : 'wars'} ⚑
         </span>
       )}
-      {(model.myTurn || mustChoose || myMoves > 0 || answers > 0) && (
+      {(model.myTurn || mustChoose || myMoves > 0 || declareTurn || answers > 0) && (
         <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
-          {model.myTurn ? 'Your pick' : mustChoose ? 'Choose mission' : myMoves > 0 ? 'Your move' : 'Answer needed'}
+          {model.myTurn
+            ? 'Your pick'
+            : mustChoose
+              ? 'Choose mission'
+              : myMoves > 0
+                ? 'Your move'
+                : declareTurn
+                  ? 'Your turn'
+                  : 'Answer needed'}
         </span>
       )}
       <Link

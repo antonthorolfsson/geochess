@@ -1,7 +1,7 @@
 /**
  * A campaign from the lobby to round 1, and each round start after that, in the server's order:
  * public missions in the lobby (apps/server/src/victory/lobby.ts), the snake draft, baselines and
- * secret options (victory/selection.ts), then rounds (wars/service.ts `nextRound`).
+ * secret options (victory/selection.ts), then rounds (wars/service.ts `nextRound`) and their turns.
  */
 import {
   PUBLIC_MISSION_KINDS,
@@ -28,6 +28,7 @@ import {
 } from '@empire/rules';
 import { startRoundForAccords } from './diplomacy';
 import { heldBy, nextSeq, note, valueOfPlayer } from './state';
+import { beginTurns } from './turns';
 import type { SimPlayer, SimState } from './types';
 import { settle, slotsFor } from './victory';
 import { missionWorld } from './world';
@@ -210,6 +211,7 @@ function startRound(s: SimState, round: number): void {
   }
   s.history.roundStarts.push({ round, seq: nextSeq(s) });
   startRoundForAccords(s);
+  beginTurns(s);
 }
 
 /** Everyone is ready: round 1 begins, and drafted positions start their claims. */

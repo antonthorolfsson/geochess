@@ -824,6 +824,39 @@ campaigns per cell, players 2 / 4 / 6.
 To rerun: `pnpm sim --scenario baseline,whatif:original-answers --players 2-8 --paces live --seeds 200`
 (also `whatif:raise-token` and `whatif:raise-off`).
 
+## Declaring in turns
+
+_Added 30 September 2026. Players could declare whenever they liked, so whoever acted first when a
+round began took the best targets and tied up the countries around them: scripted players declared
+before anyone else had looked. New campaigns now take turns (`rules.war.turns`): one declaration
+or fortification a turn, round the table in an order that moves on a seat each round, until
+everyone has passed; campaigns stored before keep declaring freely. The simulator plays turns as
+its baseline now; `whatif:no-turns` is the old way._
+
+The same bots on the same seeds: mission rules version 3 with a last round of 25, 100 campaigns
+per cell, players 2 / 4 / 6 / 8.
+
+| Pace, declaring                   | Declarations per player-round | Raised             | Attacker wins the game | Median win round  | Won on points      |
+| --------------------------------- | ----------------------------- | ------------------ | ---------------------- | ----------------- | ------------------ |
+| Live, in turns                    | 0.96 / 0.95 / 0.92 / 0.92     | 22 / 22 / 24 / 26% | 50 / 50 / 50 / 49%     | 13 / 14 / 10 / 9  | 22 / 24 / 9 / 3%   |
+| Live, whenever you like           | 0.96 / 0.93 / 0.93 / 0.92     | 22 / 22 / 25 / 26% | 51 / 51 / 50 / 50%     | 12 / 13 / 9 / 9   | 27 / 14 / 3 / 2%   |
+| Correspondence, in turns          | 0.98 / 0.95 / 0.95 / 0.93     | 24 / 23 / 24 / 25% | 50 / 50 / 50 / 49%     | 24 / 16 / 12 / 12 | 45 / 27 / 14 / 8%  |
+| Correspondence, whenever you like | 0.98 / 0.95 / 0.95 / 0.94     | 22 / 22 / 24 / 25% | 50 / 50 / 49 / 49%     | 20 / 16 / 14 / 13 | 40 / 20 / 20 / 10% |
+
+- **The game is the same game.** The bots declare as often, raise as often and win as often; the
+  median round a campaign is won in and the share ended on points move by a round or a few points
+  either way, within what 100 campaigns can tell apart.
+- **What turns fix, the simulator can't show.** Its bots never race: declaring whenever they like,
+  they go in a random order each round, which is fair on average. At a real table the quickest
+  player goes first every round. Turns make the order a rotation, so each seat goes first equally
+  often.
+- **A round takes longer to declare.** Turns are serial: at 24 hours a turn in correspondence, a
+  table that dawdles can spend days declaring. The host can pass a turn for someone who is away,
+  and silence passes it when the time runs out.
+
+To rerun: `pnpm sim --scenario baseline,whatif:no-turns --players 2-8 --seeds 100 --out turns`, then
+`pnpm sim:report turns --compare baseline`.
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,

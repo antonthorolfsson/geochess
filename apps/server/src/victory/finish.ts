@@ -161,8 +161,11 @@ export async function finishCampaign(
     holdings: Object.fromEntries(owners),
   };
   await tx.update(campaignResults).set({ snapshot }).where(eq(campaignResults.campaignId, campaign.id));
-  await tx.update(campaigns).set({ status: 'finished', finishedAt: now }).where(eq(campaigns.id, campaign.id));
-  scope.campaign = { ...campaign, status: 'finished', finishedAt: now };
+  await tx
+    .update(campaigns)
+    .set({ status: 'finished', finishedAt: now, turnUserId: null, turnDeadline: null })
+    .where(eq(campaigns.id, campaign.id));
+  scope.campaign = { ...campaign, status: 'finished', finishedAt: now, turnUserId: null, turnDeadline: null };
   await scope.log.add(
     {
       type: 'campaign.won',

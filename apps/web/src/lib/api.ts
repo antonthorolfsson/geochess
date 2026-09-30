@@ -115,6 +115,8 @@ export const api = {
   fortify: (id: string, territoryId: string) =>
     request<{ untilRound: number }>('POST', `/campaigns/${id}/fortify`, { territoryId }),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
+  /** Pass the turn: your own, or (the host) whoever's it is. */
+  passTurn: (id: string, userId: string) => request('POST', `/campaigns/${id}/turn/pass`, { userId }),
 
   proposeAccord: (id: string, input: ProposeAccordInput) =>
     request<{ id: string }>('POST', `/campaigns/${id}/accords`, input),

@@ -43,6 +43,20 @@ export function resultText(result: GameResult, reason: GameEndReason | null): st
   return winner ? `${winner === 'white' ? 'White' : 'Black'} wins${how}` : `Draw${how}`;
 }
 
+/**
+ * Why the viewer must wait to declare war or fortify, in a line, where the campaign takes turns:
+ * "Bo's turn to declare. You're next." Null when they needn't wait.
+ */
+export function turnWaitText(model: CampaignModel): string | null {
+  const { turns, turnRejection } = model;
+  if (!turns || !turnRejection) return null;
+  if (turnRejection === 'turns-over') return 'Declaring is over for this round. The next round brings new turns.';
+  if (turns.passed.has(model.me.userId)) return "You passed: you're done declaring for this round.";
+  const who = turns.current ? `${turns.current.name}'s turn to declare.` : '';
+  const wait = turns.before === 1 ? "You're next." : turns.before === null ? '' : `${turns.before} turns before yours.`;
+  return `${who} ${wait}`.trim();
+}
+
 /** Where a war stands, in a line, and any peace terms waiting for the viewer's answer. */
 export function warStatusText(model: CampaignModel, war: WarView): string {
   const offer = war.peace.find((o) => o.status === 'proposed' && o.recipientId === model.me.userId);
@@ -64,7 +78,10 @@ function warStanding(model: CampaignModel, war: WarView): string {
         ? `Waiting for your answer to ${defender} ${war.counter?.kind ?? 'offer'}`
         : `Waiting for ${attacker} to answer ${defender} ${war.counter?.kind ?? 'offer'}`;
     case 'ready':
-      return 'Accepted. The game starts when both players are free';
+      // Live games wait for everyone to finish declaring, where the campaign takes turns.
+      return model.campaign.rules.war.pace === 'live' && model.turns?.current
+        ? 'Accepted. The game starts once declaring is over'
+        : 'Accepted. The game starts when both players are free';
     case 'playing':
       return war.games.at(-1)?.armageddon ? 'Armageddon tiebreak underway' : 'The game is on';
     case 'resolved':

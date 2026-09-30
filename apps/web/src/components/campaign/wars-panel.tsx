@@ -1,6 +1,6 @@
 'use client';
 
-import { lastRoundOf, type WarView } from '@empire/rules';
+import { TURN_WINDOW_TEXT, lastRoundOf, type WarView } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
@@ -30,6 +30,7 @@ export function WarsPanel({
   return (
     <div className="space-y-6">
       <RoundStatus model={model} />
+      <Declaring model={model} />
       {waiting.length > 0 && (
         <section>
           <h2 className="label mb-2 text-amber">Waiting for your answer</h2>
@@ -43,7 +44,7 @@ export function WarsPanel({
           <WarList model={model} wars={others} onOpenWar={onOpenWar} />
         ) : (
           <p className="text-[0.95rem] text-muted">
-            {model.targets.size > 0
+            {model.targets.size > 0 && !model.turnRejection
               ? `No wars underway. ${model.targets.size} enemy ${model.targets.size === 1 ? 'country borders' : 'countries border'} your empire: pick one on the map to declare war.`
               : 'No wars underway.'}
           </p>
@@ -75,6 +76,10 @@ function RoundStatus({ model }: { model: CampaignModel }) {
   const last = lastRoundOf(rules);
   const final = last !== null && campaign.round >= last;
   const underway = model.activeWars.length;
+  // Players still to take their turns this round, which a new round cuts short.
+  const stillDeclaring = model.turns?.current
+    ? model.turns.order.filter((m) => !model.turns!.passed.has(m.userId))
+    : [];
   return (
     <section className="space-y-3">
       <div>
@@ -118,7 +123,13 @@ function RoundStatus({ model }: { model: CampaignModel }) {
                   }`
                 : `Start round ${campaign.round + 1}? Everyone gains ${rules.war.tokensPerRound} war ${
                     rules.war.tokensPerRound === 1 ? 'token' : 'tokens'
-                  }, up to ${rules.war.tokenCap}.`;
+                  }, up to ${rules.war.tokenCap}.${
+                    stillDeclaring.length > 0
+                      ? ` ${stillDeclaring.map((m) => m.name).join(', ')} ${
+                          stillDeclaring.length === 1 ? "hasn't" : "haven't"
+                        } finished declaring this round.`
+                      : ''
+                  }`;
               if (confirm(question)) next.mutate();
             }}
           >
@@ -128,6 +139,124 @@ function RoundStatus({ model }: { model: CampaignModel }) {
         </div>
       )}
       <NotificationsToggle />
+    </section>
+  );
+}
+
+/** Declaring in turns: the round's order, whose turn it is and for how long, and passing. */
+function Declaring({ model }: { model: CampaignModel }) {
+  const { campaign, turns, isHost } = model;
+  const queryClient = useQueryClient();
+  const pass = useMutation({
+    mutationFn: (userId: string) => api.passTurn(campaign.id, userId),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) }),
+  });
+  const now = useNow(1000, Boolean(turns?.deadline));
+  if (!turns) return null;
+  const { current } = turns;
+  const left = turns.deadline ? timeLeft(Date.parse(turns.deadline) - now) : null;
+  const { fortify, pace } = campaign.rules.war;
+  const actions = fortify ? 'Declare war on a country, fortify one of yours, or pass' : 'Declare war, or pass';
+  const me = model.me.userId;
+  const nothingToDo =
+    model.tokens < 1 ? 'You have no war tokens left' : 'You have nothing to declare war on or fortify';
+  const mine = turns.passed.has(me)
+    ? "You're done declaring for this round."
+    : !turns.canAct
+      ? `${nothingToDo}, so your turns are passed over.`
+      : turns.before === 1
+        ? "You're next."
+        : turns.before
+          ? `${turns.before} turns before yours.`
+          : '';
+  const passMine = () => {
+    const question =
+      model.tokens > 0
+        ? `Pass? You're done declaring war${fortify ? ' and fortifying' : ''} for this round. Unused tokens carry over, up to ${campaign.rules.war.tokenCap}.`
+        : "Pass? You're done declaring for this round.";
+    if (confirm(question)) pass.mutate(me);
+  };
+  const passFor = (userId: string, name: string) => {
+    if (confirm(`Pass ${name}'s turn? They're done declaring for this round.`)) pass.mutate(userId);
+  };
+  return (
+    <section className="space-y-3" aria-label="Declaring">
+      <h2 className="label">Declaring in turns</h2>
+      <ol className="flex flex-wrap items-center gap-1.5" aria-label="Order of turns">
+        {turns.order.map((m, i) => {
+          const done = turns.passed.has(m.userId);
+          const up = current?.userId === m.userId;
+          return (
+            <li key={m.userId} className="flex items-center gap-1.5">
+              {i > 0 && (
+                <span aria-hidden="true" className="text-faint">
+                  ›
+                </span>
+              )}
+              <span
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-[3px] border px-2 text-sm ${
+                  up ? 'border-amber bg-amber/10 font-bold' : done ? 'border-line text-faint' : 'border-line-strong'
+                }`}
+                aria-current={up ? 'step' : undefined}
+              >
+                <EmpireSwatch color={m.color} size={12} />
+                <span className={done ? 'line-through' : ''}>{m.userId === me ? 'You' : m.name}</span>
+                {done && <span className="sr-only">(passed)</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {turns.mine ? (
+        <div className="space-y-2 rounded-[3px] border border-amber/70 bg-amber/10 px-3 py-2">
+          <div className="font-stencil text-xl tracking-wide text-amber">Your turn</div>
+          <p className="text-[0.95rem]">
+            {turns.canAct ? `${actions}.` : `${nothingToDo}, so pass to let the next player go.`}{' '}
+            {left && (
+              <>
+                <strong className="tabular-nums">{left}</strong> left, then your turn passes.
+              </>
+            )}
+          </p>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pass.isPending} onClick={passMine}>
+            Pass
+          </button>
+        </div>
+      ) : current ? (
+        <div className="space-y-2">
+          <p className="text-[0.95rem] text-muted">
+            <strong className="text-paper">{current.name}</strong> is declaring
+            {left && (
+              <>
+                {' '}
+                · <span className="tabular-nums">{left}</span> left
+              </>
+            )}
+            . {mine}
+          </p>
+          {isHost && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={pass.isPending}
+              onClick={() => passFor(current.userId, current.name)}
+            >
+              Pass for {current.name}
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="text-[0.95rem] text-muted">
+          Declaring is over for this round. Answers and games carry on; the next round brings new turns.
+        </p>
+      )}
+      {pass.error && <Notice tone="error">{errorMessage(pass.error)}</Notice>}
+      {(turns.mine || current) && (
+        <p className="text-sm text-muted">
+          One declaration{fortify ? ' or fortification' : ''} a turn, round the table; passing ends your declaring for
+          the round. Each turn lasts up to {TURN_WINDOW_TEXT[pace]}.
+        </p>
+      )}
     </section>
   );
 }

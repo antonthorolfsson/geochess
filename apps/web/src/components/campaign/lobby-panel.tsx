@@ -7,6 +7,7 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   MATCHED_RAISE_MIN_PCT,
+  TURN_WINDOW_TEXT,
   type DraftMode,
   type DrawRule,
   type Pace,
@@ -415,6 +416,13 @@ function WarRulesFields({
           </select>
         )}
       </label>
+      <Toggle
+        checked={rules.turns}
+        disabled={disabled}
+        onChange={(turns) => onSave({ turns })}
+        label="Take turns declaring"
+        description={`Each round, players declare war or fortify one at a time, round the table, with ${TURN_WINDOW_TEXT[rules.pace]} a turn; passing ends a player's declaring for the round. Off: anyone declares whenever they like, so the quickest get first pick.`}
+      />
       <div className="space-y-1">
         <span className="block text-sm font-semibold text-muted">Draws</span>
         {DRAW_OPTIONS.map((d) => (

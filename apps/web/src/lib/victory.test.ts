@@ -58,6 +58,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
     draft: null,
     myDraftList: [],
     myAutodraftFallback: 'best',
+    turns: null,
     events: [],
     wars: [],
     truces: [],

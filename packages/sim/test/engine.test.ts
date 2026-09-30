@@ -8,6 +8,7 @@ import {
   seededRandom,
   suggestStake,
   tributeCountries,
+  turnOrder,
   type TerritoryId,
 } from '@empire/rules';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +17,7 @@ import { answer, propose, renounce } from '../src/engine/diplomacy';
 import { runCampaign } from '../src/engine/engine';
 import { nextRound } from '../src/engine/lifecycle';
 import { heldBy } from '../src/engine/state';
+import { pass } from '../src/engine/turns';
 import { warBoard } from '../src/engine/board';
 import { finish } from '../src/engine/victory';
 import { answerPeace, declare, fight, fortify, offerPeace, recall, reply, respond } from '../src/engine/wars';
@@ -336,6 +338,60 @@ describe('the revised answers', () => {
     finish(s, ['p3']);
     expect(p2.tokens).toBe(1);
     expect(w.outcome).toBe('cancelled');
+  });
+});
+
+describe('declaring in turns', () => {
+  const inTurns = () => scripted({ players: 3, publics: () => [EUROPE], config: { war: { turns: true } } });
+  /** The cheapest declaration `attacker` could make on one of `defender`'s countries. */
+  const planOn = (s: ReturnType<typeof inTurns>, attacker: string, defender: string) => {
+    const targetId = targetOf(s, attacker, defender);
+    const plan = suggestStake(warBoard(s), attacker, targetId)!;
+    return { targetId, launchId: plan.launchId, stake: plan.stake };
+  };
+
+  it('take one declaration or fortification a turn, in an order that moves on a seat a round', () => {
+    const s = inTurns();
+    const order = turnOrder(s.order, 1) as [string, string, string];
+    expect(s.turns).toEqual({ order, passed: [], current: order[0] });
+    const [first, second, third] = order;
+    expect(declare(s, second, planOn(s, second, third))).toBe('not-your-turn');
+    expect(fortify(s, second, [...heldBy(s, second)][0]!)).toBe('not-your-turn');
+    expect(pass(s, second)).toBe('not-your-turn');
+
+    expect(pass(s, first)).toBeNull();
+    expect(s.actions.at(-1)).toEqual({ t: 'pass', by: first });
+    expect(s.turns).toMatchObject({ passed: [first], current: second });
+    expect(fortify(s, second, [...heldBy(s, second)].sort()[0]!)).toBeNull();
+    expect(s.turns!.current).toBe(third);
+    const w = declare(s, third, planOn(s, third, second));
+    expect(typeof w).not.toBe('string');
+    // The first passed, and the others have spent their token: declaring is over.
+    expect(s.turns!.current).toBeNull();
+    expect(declare(s, first, planOn(s, first, second))).toBe('turns-over');
+
+    nextRound(s);
+    expect(s.turns).toEqual({ order: turnOrder(s.order, 2), passed: [], current: turnOrder(s.order, 2)[0] });
+  });
+
+  it('run whole campaigns with every declaration on its player’s turn', () => {
+    const cfg = baseConfig({ players: 4, debug: true });
+    const s = runCampaign(cfg, 3, { bots: makeBots(cfg.bots), idx });
+    expect(s.rules.war.turns).toBe(true);
+    let done = new Set<string>();
+    let passes = 0;
+    for (const a of s.actions) {
+      if (a.t === 'open' || a.t === 'round') done = new Set();
+      if (a.t !== 'pass' && a.t !== 'declare' && a.t !== 'fortify') continue;
+      // Nobody declares or fortifies after passing in the same round.
+      expect(done.has(a.by)).toBe(false);
+      if (a.t === 'pass') {
+        done.add(a.by);
+        passes++;
+      }
+    }
+    // Bots mostly spend every token, and a player without one is passed over, so passes are few.
+    expect(passes).toBeGreaterThan(0);
   });
 });
 

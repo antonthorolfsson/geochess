@@ -38,6 +38,11 @@ when starting new work.**
   like accord proposals, until accepted. Anything that stops a game from a campaign change updates
   the game row before touching anything a move also updates (peace offers), so the two can't
   deadlock.
+- New campaigns declare war in turns (`rules.war.turns`; absent means anyone declares whenever they
+  like, as campaigns stored before do). The rules are in `packages/rules/src/turns.ts`, the
+  round's state on the campaign row (`apps/server/src/wars/turns.ts`). Declaring and fortifying
+  check the turn (`requireTurn`) and pass it on (`turnTaken`); anything new that should cost a turn
+  must do the same. Live games wait until declaring is over.
 - Empire statistics are derived on each request, never stored: `apps/server/src/stats/` gathers the
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target

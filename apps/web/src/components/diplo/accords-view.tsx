@@ -28,7 +28,7 @@ import { useNow } from '@/lib/use-now';
 import { playerName, timeLeft } from '@/lib/wars';
 import { PlayerName } from '../campaign/player-name';
 import { useEmpireHref } from '../campaign/room-context';
-import { Notice } from '../ui';
+import { Notice, useSpotlight } from '../ui';
 
 const roundsText = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
 
@@ -46,11 +46,14 @@ function keepingText(model: CampaignModel, rounds: number, partnerId: string | n
 export function AccordsView({
   model,
   focusId,
+  spotlight,
   onOpenChat,
 }: {
   model: CampaignModel;
   /** An accord to bring into view, e.g. from a notification. */
   focusId: string | null;
+  /** A proposal to call out, with a new nonce each time. */
+  spotlight?: { id: string; nonce: number } | null;
   onOpenChat(userId: string): void;
 }) {
   const { campaign } = model;
@@ -85,7 +88,12 @@ export function AccordsView({
         <section className="space-y-2">
           <h2 className="label text-amber">Waiting for your answer</h2>
           {model.proposalsToMe.map((a) => (
-            <Focusable key={a.id} focused={a.id === focusId}>
+            <Focusable
+              key={a.id}
+              focused={a.id === focusId}
+              spotlight={spotlight?.id === a.id ? spotlight.nonce : null}
+              label={`${playerName(model, a.proposerId)}’s proposal`}
+            >
               <ProposalToMe model={model} accord={a} />
             </Focusable>
           ))}
@@ -157,14 +165,34 @@ export function AccordsView({
   );
 }
 
-/** Scrolls itself into view and glows when a notification or link points at it. */
-function Focusable({ focused, children }: { focused: boolean; children: ReactNode }) {
+/**
+ * Scrolls itself into view and glows when a notification or link points at it, and lights up
+ * whenever `spotlight` changes (the header's "Answer needed").
+ */
+function Focusable({
+  focused,
+  spotlight,
+  label,
+  children,
+}: {
+  focused: boolean;
+  spotlight?: number | null;
+  label?: string;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [focused]);
+  useSpotlight(ref, spotlight);
   return (
-    <div ref={ref} className={focused ? 'rounded-[4px] ring-2 ring-amber/70 ring-offset-2 ring-offset-gunmetal' : ''}>
+    <div
+      ref={ref}
+      tabIndex={spotlight === undefined ? undefined : -1}
+      role={label ? 'group' : undefined}
+      aria-label={label}
+      className={`rounded-[4px] ${focused ? 'ring-2 ring-amber/70 ring-offset-2 ring-offset-gunmetal' : ''}`}
+    >
       {children}
     </div>
   );

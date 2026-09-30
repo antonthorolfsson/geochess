@@ -1,7 +1,14 @@
-import { DEFAULT_RULES, indexDataset, type AccordView, type CampaignView, type WarView } from '@empire/rules';
+import {
+  DEFAULT_RULES,
+  indexDataset,
+  type AccordView,
+  type CampaignView,
+  type PeaceOfferView,
+  type WarView,
+} from '@empire/rules';
 import { lineDataset } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
-import { buildModel, totalValue } from './campaign';
+import { buildModel, nextAnswer, totalValue } from './campaign';
 
 const idx = indexDataset(lineDataset());
 const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null, hasPassword: false });
@@ -217,11 +224,112 @@ describe('accords in the model', () => {
     const proposal = accord({ status: 'proposed', signedRound: null, signedAt: null, endsRound: null });
     const bo = buildModel(underway([proposal]), user('bo'), idx)!;
     expect(bo.proposalsToMe.map((a) => a.id)).toEqual(['a1']);
-    expect(bo.answersNeeded).toBe(1);
+    expect(bo.answers).toEqual([{ kind: 'accord', id: 'a1', respondBy: null }]);
     expect(bo.proposalWith.get('ann')?.id).toBe('a1');
     const ann = buildModel(underway([proposal]), user('ann'), idx)!;
     expect(ann.proposalsToMe).toEqual([]);
     expect(ann.proposalWith.get('bo')?.id).toBe('a1');
-    expect(ann.answersNeeded).toBe(0);
+    expect(ann.answers).toEqual([]);
+  });
+});
+
+describe('answers I owe', () => {
+  const holdings = { A: 'ann', B: 'ann', C: 'ann', D: 'bo', E: 'bo', F: 'bo' };
+  const at = (hour: number) => `2026-01-02T${String(hour).padStart(2, '0')}:00:00.000Z`;
+  const war = (overrides: Partial<WarView>): WarView => ({
+    id: 'w1',
+    attackerId: 'ann',
+    defenderId: 'bo',
+    targetId: 'D',
+    launchId: 'C',
+    stake: ['C'],
+    redirectedFrom: null,
+    status: 'declared',
+    counter: null,
+    outcome: null,
+    declaredRound: 1,
+    resolvedRound: null,
+    respondBy: null,
+    declaredAt: at(0),
+    resolvedAt: null,
+    games: [],
+    reserves: [],
+    peace: [],
+    ...overrides,
+  });
+  const peace = (id: string, respondBy: string): PeaceOfferView => ({
+    id,
+    warId: 'w1',
+    proposerId: 'ann',
+    recipientId: 'bo',
+    terms: { toAttacker: [], toDefender: [], tokensToAttacker: 0, tokensToDefender: 0, accordRounds: null },
+    status: 'proposed',
+    createdAt: at(0),
+    respondBy,
+    endedAt: null,
+  });
+  const proposal: AccordView = {
+    id: 'a1',
+    proposerId: 'ann',
+    recipientId: 'bo',
+    status: 'proposed',
+    rounds: 3,
+    terms: null,
+    proposedRound: 1,
+    proposedAt: at(0),
+    respondBy: at(11),
+    signedRound: null,
+    signedAt: null,
+    endsRound: null,
+    endedRound: null,
+    endedAt: null,
+    brokenBy: null,
+    renews: null,
+  };
+  const view = campaign({
+    status: 'active',
+    round: 1,
+    draft: null,
+    holdings,
+    wars: [
+      // Ann's declaration on Bo, due at noon, with peace terms from her that lapse at nine.
+      war({ respondBy: at(12), peace: [peace('p1', at(9))] }),
+      // Bo's own attack, which Ann answered with a tribute offer: due at ten.
+      war({
+        id: 'w2',
+        attackerId: 'bo',
+        defenderId: 'ann',
+        targetId: 'C',
+        launchId: 'D',
+        stake: ['D'],
+        status: 'countered',
+        counter: { kind: 'tribute', territoryId: 'A', tokens: 0 },
+        respondBy: at(10),
+      }),
+      // Waiting on Ann, not Bo.
+      war({ id: 'w3', targetId: 'E', respondBy: at(8), status: 'countered', counter: { kind: 'raise', minValue: 9 } }),
+    ],
+    accords: [proposal],
+  });
+
+  it('lists each war and proposal once, the soonest deadline first', () => {
+    expect(buildModel(view, user('bo'), idx)!.answers).toEqual([
+      { kind: 'war', id: 'w1', respondBy: at(9) },
+      { kind: 'war', id: 'w2', respondBy: at(10) },
+      { kind: 'accord', id: 'a1', respondBy: at(11) },
+    ]);
+    expect(buildModel(view, user('ann'), idx)!.answers).toEqual([{ kind: 'war', id: 'w3', respondBy: at(8) }]);
+  });
+
+  it('goes round them, one press at a time', () => {
+    const { answers } = buildModel(view, user('bo'), idx)!;
+    const next = (last: string | null) => nextAnswer(answers, last)?.id;
+    expect(next(null)).toBe('w1');
+    expect(next('w1')).toBe('w2');
+    expect(next('w2')).toBe('a1');
+    expect(next('a1')).toBe('w1');
+    // Once the last one is answered, it starts over at the top.
+    expect(next('w3')).toBe('w1');
+    expect(nextAnswer([], null)).toBeNull();
   });
 });

@@ -22,6 +22,17 @@ import {
   type WarView,
 } from '@empire/rules';
 
+/**
+ * Something waiting for my answer: a war (a declaration on me, a counter-offer to my attack, or
+ * peace terms offered to me) or an accord proposal.
+ */
+export interface Answer {
+  kind: 'war' | 'accord';
+  id: string;
+  /** When time runs out on it; for a war with more than one thing to answer, the soonest. */
+  respondBy: string | null;
+}
+
 /** Everything the campaign screen derives from the server's view of a campaign. */
 export interface CampaignModel {
   campaign: CampaignView;
@@ -79,8 +90,8 @@ export interface CampaignModel {
   accordWith: Map<string, AccordView>;
   /** The proposal waiting between me and each other player, whichever way it goes, by their id. */
   proposalWith: Map<string, AccordView>;
-  /** Everything waiting for my answer: wars, peace terms and accord proposals. */
-  answersNeeded: number;
+  /** Everything waiting for my answer, one entry per war or proposal, the soonest deadline first. */
+  answers: Answer[];
 }
 
 export function buildModel(campaign: CampaignView, user: SessionUser, idx: DatasetIndex): CampaignModel | null {
@@ -141,6 +152,19 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
   const peaceToMe = activeWars.flatMap((war) =>
     war.peace.filter((o) => o.status === 'proposed' && o.recipientId === me.userId).map((offer) => ({ war, offer })),
   );
+  const warAnswers = new Map<string, Answer>();
+  for (const [war, respondBy] of [
+    ...awaitingMe.map((w) => [w, w.respondBy] as const),
+    ...peaceToMe.map(({ war, offer }) => [war, offer.respondBy] as const),
+  ]) {
+    const earlier = warAnswers.get(war.id);
+    if (!earlier || due(respondBy) < due(earlier.respondBy))
+      warAnswers.set(war.id, { kind: 'war', id: war.id, respondBy });
+  }
+  const answers: Answer[] = [
+    ...warAnswers.values(),
+    ...proposalsToMe.map((a): Answer => ({ kind: 'accord', id: a.id, respondBy: a.respondBy })),
+  ].sort((a, b) => due(a.respondBy) - due(b.respondBy) || 0);
 
   return {
     campaign,
@@ -177,8 +201,19 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
     proposalsToMe,
     accordWith,
     proposalWith,
-    answersNeeded: awaitingMe.length + peaceToMe.length + proposalsToMe.length,
+    answers,
   };
+}
+
+const due = (respondBy: string | null) => (respondBy ? Date.parse(respondBy) : Infinity);
+
+/**
+ * Where "Answer needed" takes me: the most pressing answer, or the one after `last`, where it took
+ * me the time before, so pressing again goes round them all.
+ */
+export function nextAnswer(answers: readonly Answer[], last: string | null): Answer | null {
+  const at = answers.findIndex((a) => a.id === last);
+  return answers[(at + 1) % answers.length] ?? null;
 }
 
 export function totalValue(idx: DatasetIndex, ids: readonly TerritoryId[]): number {

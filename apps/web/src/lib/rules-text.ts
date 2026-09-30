@@ -1,6 +1,7 @@
 import {
   MATCHED_RAISE_MIN_PCT,
   RESPONSE_WINDOW_TEXT,
+  TURN_WINDOW_TEXT,
   durationText,
   holdMs,
   missionRules,
@@ -93,6 +94,10 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Draft', value: rules.draft.mode === 'contiguous' ? 'Contiguous' : 'Free' },
     { label: 'Pace', value: war.pace === 'live' ? 'Live' : 'Correspondence' },
     { label: 'Time control', value: timeControlText(rules) },
+    {
+      label: 'Declaring',
+      value: war.turns ? `In turns, ${TURN_WINDOW_TEXT[war.pace]} each` : 'Whenever you like',
+    },
     { label: 'Time to answer', value: RESPONSE_WINDOW_TEXT[war.pace] },
     { label: 'Draws', value: war.draws === 'armageddon' ? 'Armageddon' : 'Defender holds' },
     { label: 'Clock modifiers', value: war.clockModifiers ? 'On' : 'Off' },

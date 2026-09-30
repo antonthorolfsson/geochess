@@ -508,3 +508,15 @@ VARIANTS['raise-off'] = {
     war: { raise: 'off', stakeFloorPct: 100 },
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Declaring. Campaigns take turns to declare, as new campaigns do; this plays the original rule.
+
+VARIANTS['no-turns'] = {
+  variant: {
+    name: 'no-turns',
+    description:
+      'Declaring whenever you like (the original rule): each player in a random order declares all they want.',
+    war: { turns: false },
+  },
+};

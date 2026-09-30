@@ -41,6 +41,7 @@ describe('rules in words', () => {
       'Claims are held': '24 hours after the next round starts',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
+      Declaring: 'In turns, 24 hours each',
       'Time to answer': '24 hours',
       'War tokens': '1 a round, up to 3',
       'Truce after a war': '1 round',
@@ -61,6 +62,8 @@ describe('rules in words', () => {
     expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',
+      // Rules stored before turns keep declaring whenever players like.
+      Declaring: 'Whenever you like',
       'Time to answer': '5 minutes',
       Draws: 'Armageddon',
       'Clock modifiers': 'Off',

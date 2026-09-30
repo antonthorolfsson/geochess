@@ -2,6 +2,9 @@ import {
   accordsInForce,
   activeWar,
   attackableTargets,
+  canTakeTurn,
+  checkTurn,
+  turnsBefore,
   warLocks,
   draftListStatus,
   legalPicks,
@@ -18,9 +21,31 @@ import {
   type PeaceOfferView,
   type SessionUser,
   type TerritoryId,
+  type TurnRejection,
   type WarBoard,
   type WarView,
 } from '@empire/rules';
+
+/** Declaring in turns this round, as the campaign screen shows it. */
+export interface TurnsModel {
+  /** The round's order. */
+  order: MemberView[];
+  /** Whose turn it is, or null once declaring is over for the round. */
+  current: MemberView | null;
+  /** It's my turn to declare war, fortify or pass. */
+  mine: boolean;
+  /** When the current turn passes on its own. */
+  deadline: string | null;
+  /** Players done declaring for the round. */
+  passed: Set<string>;
+  /** Whether I have anything to do with a turn: a token, and something to declare war on or fortify. */
+  canAct: boolean;
+  /**
+   * Turns to come before mine, passing over players with nothing to do as things stand; null once
+   * I've passed, or when I have nothing to do myself.
+   */
+  before: number | null;
+}
 
 /**
  * Something waiting for my answer: a war (a declaration on me, a counter-offer to my attack, or
@@ -92,6 +117,10 @@ export interface CampaignModel {
   proposalWith: Map<string, AccordView>;
   /** Everything waiting for my answer, one entry per war or proposal, the soonest deadline first. */
   answers: Answer[];
+  /** Declaring in turns this round; null where anyone declares whenever they like. */
+  turns: TurnsModel | null;
+  /** Why I can't declare war or fortify right now, as far as turns go; null if I can. */
+  turnRejection: TurnRejection | null;
 }
 
 export function buildModel(campaign: CampaignView, user: SessionUser, idx: DatasetIndex): CampaignModel | null {
@@ -152,6 +181,18 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
   const peaceToMe = activeWars.flatMap((war) =>
     war.peace.filter((o) => o.status === 'proposed' && o.recipientId === me.userId).map((offer) => ({ war, offer })),
   );
+  const turnView = campaign.status === 'active' ? campaign.turns : null;
+  const canAct = (userId: string) => canTakeTurn(board, userId, membersById.get(userId)?.tokens ?? 0);
+  const iCanAct = turnView !== null && canAct(me.userId);
+  const turns: TurnsModel | null = turnView && {
+    order: turnView.order.flatMap((id) => membersById.get(id) ?? []),
+    current: turnView.current ? (membersById.get(turnView.current) ?? null) : null,
+    mine: turnView.current === me.userId,
+    deadline: turnView.deadline,
+    passed: new Set(turnView.passed),
+    canAct: iCanAct,
+    before: turnView.current === me.userId ? 0 : iCanAct ? turnsBefore(turnView, me.userId, canAct) : null,
+  };
   const warAnswers = new Map<string, Answer>();
   for (const [war, respondBy] of [
     ...awaitingMe.map((w) => [w, w.respondBy] as const),
@@ -202,6 +243,8 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
     accordWith,
     proposalWith,
     answers,
+    turns,
+    turnRejection: checkTurn(turnView, me.userId),
   };
 }
 

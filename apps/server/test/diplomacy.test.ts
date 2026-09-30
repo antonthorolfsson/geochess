@@ -51,7 +51,8 @@ async function setup({ status = 'active' }: { status?: 'lobby' | 'active' } = {}
   const cy = await signIn(server.app, 'Cy');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Diplomacy',
-    rules: { victory: { mode: 'open' } },
+    // Declarations here test accords, so anyone declares whenever they like (turns.test.ts has turns).
+    rules: { victory: { mode: 'open' }, war: { turns: false } },
   });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

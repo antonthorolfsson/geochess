@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, REVISED_WAR_RULES, lastRoundOf, parseRules } from './config';
 import { EMPIRE_COLORS, firstFreeColor } from './colors';
 
-/** The answers of the original game, which rules stored before the revised ones read as. */
+/**
+ * The answers of the original game, and declaring whenever you like: what rules stored before the
+ * revised ones read as.
+ */
 const ORIGINAL_ANSWERS = {
   raise: 'free',
   redirect: 'anywhere',
@@ -10,6 +13,7 @@ const ORIGINAL_ANSWERS = {
   fortify: false,
   peaceTerms: false,
   recall: false,
+  turns: false,
 };
 
 describe('campaign rules', () => {
@@ -35,6 +39,7 @@ describe('campaign rules', () => {
         fortify: true,
         peaceTerms: true,
         recall: true,
+        turns: true,
       },
       victory: {
         mode: 'objectives',
@@ -71,6 +76,13 @@ describe('campaign rules', () => {
     expect(parseRules(stored).war).toMatchObject(ORIGINAL_ANSWERS);
     expect(parseRules({ war: { raise: 'token' } }).war.raise).toBe('token');
     expect(() => parseRules({ war: { raise: 'double' } })).toThrow();
+  });
+
+  it('keeps campaigns stored before turns declaring whenever they like', () => {
+    // A campaign underway doesn't start taking turns: only new campaigns do.
+    expect(parseRules({ war: { ...REVISED_WAR_RULES, turns: undefined } }).war.turns).toBe(false);
+    expect(parseRules({ war: { pace: 'live' } }).war.turns).toBe(false);
+    expect(DEFAULT_RULES.war.turns).toBe(true);
   });
 
   it('reads rules stored before victory missions as open-ended, never as Objectives', () => {

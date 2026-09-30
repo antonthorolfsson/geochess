@@ -27,6 +27,7 @@ import { parse } from '../lib/http';
 import { newId, newInviteCode } from '../lib/ids';
 import { checkPublicMissions, withDefaultMissions } from '../victory/lobby';
 import { beginSelection } from '../victory/selection';
+import { beginTurns } from '../wars/turns';
 import { openCampaign } from './lifecycle';
 import {
   EventLog,
@@ -337,8 +338,9 @@ async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: Draf
 
 /**
  * The draft is over. An open-ended campaign goes to war: round 1 begins and everyone gets their
- * first war tokens, and accords signed during the draft that end with it run their course. An
- * Objectives campaign first deals secret missions; round 1 waits until everyone has one.
+ * first war tokens, accords signed during the draft that end with it run their course, and turns
+ * to declare begin where the rules have them. An Objectives campaign first deals secret missions;
+ * round 1 waits until everyone has one.
  */
 async function finishDraft(
   ctx: AppContext,
@@ -355,6 +357,7 @@ async function finishDraft(
   await openCampaign(ctx, scope);
   await scope.log.add(event, actorId, 0);
   await startRoundForAccords(ctx, scope);
+  await beginTurns(ctx, scope);
 }
 
 export async function startDraft(ctx: AppContext, campaignId: string, userId: string): Promise<void> {

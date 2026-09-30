@@ -9,6 +9,7 @@ import {
 import { lineDataset } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
 import { buildModel, nextAnswer, totalValue } from './campaign';
+import { turnWaitText } from './wars';
 
 const idx = indexDataset(lineDataset());
 const user = (id: string) => ({ id, name: id, email: null, lichessUsername: null, hasPassword: false });
@@ -45,6 +46,7 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     acquired: {},
     fortified: {},
     accords: [],
+    turns: null,
     victory: null,
     mySecret: null,
     ...overrides,
@@ -177,6 +179,66 @@ describe('wars in the model', () => {
     expect(model.activeWars).toEqual([]);
     expect(model.pastWars.map((w) => w.id)).toEqual(['w1']);
     expect(model.targets.size).toBe(0);
+  });
+});
+
+describe('turns in the model', () => {
+  // Cy holds only F, with nothing to attack, but can fortify it while they have a token.
+  const holdings = { A: 'ann', B: 'ann', C: 'ann', D: 'bo', E: 'bo', F: 'cy' };
+  const members = [member('ann', 0), member('bo', 3), member('cy', 5)];
+  const underway = (turns: CampaignView['turns'], cyTokens = 1) =>
+    campaign({
+      status: 'active',
+      round: 2,
+      draft: null,
+      holdings,
+      members: members.map((m) => (m.userId === 'cy' ? { ...m, tokens: cyTokens } : m)),
+      turns,
+    });
+  const turns = (overrides: Partial<NonNullable<CampaignView['turns']>> = {}) => ({
+    order: ['bo', 'cy', 'ann'],
+    current: 'bo',
+    deadline: '2026-01-02T00:00:00.000Z',
+    passed: [],
+    ...overrides,
+  });
+
+  it('knows whose turn it is to declare, and how many come before mine', () => {
+    const bo = buildModel(underway(turns()), user('bo'), idx)!;
+    expect(bo.turns).toMatchObject({ mine: true, before: 0, current: { userId: 'bo' } });
+    expect(bo.turns!.order.map((m) => m.userId)).toEqual(['bo', 'cy', 'ann']);
+    expect(bo.turnRejection).toBeNull();
+    expect(turnWaitText(bo)).toBeNull();
+
+    const ann = buildModel(underway(turns()), user('ann'), idx)!;
+    expect(ann.turns).toMatchObject({ mine: false, before: 2 });
+    expect(ann.turnRejection).toBe('not-your-turn');
+    expect(turnWaitText(ann)).toBe("bo's turn to declare. 2 turns before yours.");
+    // Targets still light up for planning ahead.
+    expect([...ann.targets]).toEqual(['D']);
+    const next = buildModel(underway(turns({ passed: ['cy'] })), user('ann'), idx)!;
+    expect(turnWaitText(next)).toBe("bo's turn to declare. You're next.");
+    // Out of tokens, Cy will be passed over.
+    const skipped = buildModel(underway(turns(), 0), user('ann'), idx)!;
+    expect(skipped.turns!.before).toBe(1);
+    const cy = buildModel(underway(turns(), 0), user('cy'), idx)!;
+    expect(cy.turns).toMatchObject({ canAct: false, before: null });
+  });
+
+  it('says when I have passed, and when declaring is over', () => {
+    const passed = buildModel(underway(turns({ passed: ['ann'] })), user('ann'), idx)!;
+    expect(passed.turns!.before).toBeNull();
+    expect(turnWaitText(passed)).toBe("You passed: you're done declaring for this round.");
+    const over = buildModel(underway(turns({ current: null, deadline: null })), user('bo'), idx)!;
+    expect(over.turnRejection).toBe('turns-over');
+    expect(turnWaitText(over)).toBe('Declaring is over for this round. The next round brings new turns.');
+  });
+
+  it('has no turns where anyone declares whenever they like', () => {
+    const free = buildModel(underway(null), user('ann'), idx)!;
+    expect(free.turns).toBeNull();
+    expect(free.turnRejection).toBeNull();
+    expect(turnWaitText(free)).toBeNull();
   });
 });
 

@@ -275,7 +275,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     };
   }, [missionFocus, model, me]);
 
-  // Tell the player when their pick comes up.
+  // Tell the player when their pick comes up, or their turn to declare.
   const wasMyTurn = useRef(model.myTurn);
   useEffect(() => {
     if (model.myTurn && !wasMyTurn.current) {
@@ -284,6 +284,15 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     }
     wasMyTurn.current = model.myTurn;
   }, [model.myTurn]);
+  const declareTurn = Boolean(model.turns?.mine);
+  const wasDeclareTurn = useRef(declareTurn);
+  useEffect(() => {
+    if (declareTurn && !wasDeclareTurn.current) {
+      setToast('Your turn to declare');
+      navigator.vibrate?.(120);
+    }
+    wasDeclareTurn.current = declareTurn;
+  }, [declareTurn]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 4000);
@@ -398,11 +407,13 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       ? '(Choose a mission) '
       : myMoves > 0
         ? '(Your move) '
-        : answers > 0
-          ? '(Answer needed) '
-          : unread.direct > 0
-            ? '(New message) '
-            : '';
+        : declareTurn
+          ? '(Your turn) '
+          : answers > 0
+            ? '(Answer needed) '
+            : unread.direct > 0
+              ? '(New message) '
+              : '';
   const page = empireOf
     ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · `
     : pageSegment === 'rules'
@@ -477,7 +488,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   };
 
   // The header's call to action takes the player to it: the draft, the mission options, a game
-  // waiting for a move, or what needs an answer (the soonest deadline first), which lights up.
+  // waiting for a move, the war room on their turn to declare, or what needs an answer (the soonest deadline first), which lights up.
   // Pressing again moves on to the next game or answer.
   const [spotlight, setSpotlight] = useState<{ id: string; nonce: number } | null>(null);
   const lastAnswer = useRef<string | null>(null);
@@ -498,6 +509,12 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       const moves = myGames.filter((g) => g.myMove);
       const next = moves[(moves.findIndex((g) => g.gameId === panels.gameId) + 1) % moves.length];
       if (next) openGame(next.gameId);
+      return;
+    }
+    if (declareTurn) {
+      if (overPage) router.push(`/c/${campaign.id}`);
+      if (isDesktop) setSide('main');
+      else setTab('wars');
       return;
     }
     const next = nextAnswer(model.answers, lastAnswer.current);
@@ -572,7 +589,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   );
   // Badges: amber when something needs the player, plain for unread channel messages and for
   // rivals' claims waiting to score.
-  const warsNeedMe = new Set([...model.awaitingMe, ...model.peaceToMe.map(({ war }) => war)]).size + myMoves;
+  const warsNeedMe =
+    new Set([...model.awaitingMe, ...model.peaceToMe.map(({ war }) => war)]).size + myMoves + (declareTurn ? 1 : 0);
   const diploNeedsMe = model.proposalsToMe.length + unread.direct;
   const rivalsClaiming = objectives ? rivalClaims(model).length : 0;
   const leftPanel =
@@ -606,6 +624,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         myMoves={myMoves}
         answers={answers}
         mustChoose={mustChoose}
+        declareTurn={declareTurn}
         onAct={act}
         back={
           overPage
@@ -829,6 +848,7 @@ function CampaignHeader({
   myMoves,
   answers,
   mustChoose,
+  declareTurn,
   onAct,
   back,
   rules,
@@ -839,6 +859,8 @@ function CampaignHeader({
   answers: number;
   /** A secret mission is waiting to be chosen. */
   mustChoose: boolean;
+  /** It's the player's turn to declare war (or fortify, or pass). */
+  declareTurn: boolean;
   /** Takes the player to whatever the call to action names. */
   onAct(): void;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
@@ -871,9 +893,11 @@ function CampaignHeader({
       ? { label: 'Choose mission', title: 'Go to your mission options' }
       : myMoves > 0
         ? { label: 'Your move', title: 'Open the next game waiting for your move' }
-        : answers > 0
-          ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
-          : null;
+        : declareTurn
+          ? { label: 'Your turn', title: 'Go to the war room to declare war or pass' }
+          : answers > 0
+            ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
+            : null;
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-line bg-gunmetal px-2 pt-[env(safe-area-inset-top)]">
       <Link

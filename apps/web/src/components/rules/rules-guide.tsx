@@ -23,6 +23,7 @@ import {
   RESPONSE_WINDOW_TEXT,
   SUPPLY_LINE_PCT,
   TERRAIN_PCT,
+  TURN_WINDOW_TEXT,
   durationText,
   holdMs,
   isLongMission,
@@ -122,7 +123,7 @@ export function RulesGuide(props: RulesGuideProps) {
         <Idea rules={rules} />
         <StartToFinish rules={rules} />
         <EachRound rules={rules} standard={standard} />
-        <DeclaringWar rules={rules} />
+        <DeclaringWar rules={rules} standard={standard} />
         <Answers rules={rules} standard={standard} />
         <Battle rules={rules} standard={standard} />
         <AfterWar rules={rules} standard={standard} />
@@ -149,6 +150,14 @@ function answerTime(rules: CampaignRules, standard: boolean): string {
   if (!standard) return time;
   const other = rules.war.pace === 'live' ? 'correspondence' : 'live';
   return `${time} (${RESPONSE_WINDOW_TEXT[other]} in ${other} campaigns)`;
+}
+
+/** How long a turn to declare lasts, for this campaign or (standard) both paces. */
+function turnTime(rules: CampaignRules, standard: boolean): string {
+  const time = TURN_WINDOW_TEXT[rules.war.pace];
+  if (!standard) return time;
+  const other = rules.war.pace === 'live' ? 'correspondence' : 'live';
+  return `${time} (${TURN_WINDOW_TEXT[other]} in ${other} campaigns)`;
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -354,14 +363,21 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
     },
     {
       title: 'Declare war',
-      who: 'Any player',
+      who: war.turns ? 'Each player in turn' : 'Any player',
       text: (
         <>
-          Turn on <UI>Targets</UI> to light up every country you can attack. Select one, press <UI>Declare war</UI>,
-          choose the country you attack from and build your stake
+          {war.turns ? 'On your turn, switch' : 'Turn'} on <UI>Targets</UI> to light up every country you can attack.
+          Select one, press <UI>Declare war</UI>, choose the country you attack from and build your stake
           {reservesAllowed(rules) ? ', with any countries you want to set aside in reserve to meet a raise' : ''}. It
           costs a war token, and a dashed arrow goes up on the map.
           {war.recall && ' Until the defender answers, you can still call it off, though the token stays spent.'}
+          {war.turns && (
+            <>
+              {' '}
+              Then the turn moves on round the table. When it comes back, declare again
+              {war.fortify ? ', fortify a country' : ''} or <UI>Pass</UI>, which ends your declaring for the round.
+            </>
+          )}
         </>
       ),
     },
@@ -434,10 +450,20 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
   ];
   return (
     <Section id="rounds" title="Each round, step by step">
-      <p>
-        Rounds have no turns. Within a round, everyone acts whenever they like: declare as many wars as your tokens
-        allow, and answer the ones declared on you. Here is how a round, and each war in it, plays out.
-      </p>
+      {war.turns ? (
+        <p>
+          Players take turns to declare war, round the table: on your turn, declare one war
+          {war.fortify ? ', fortify one of your countries' : ''} or pass, within {turnTime(rules, standard)}. Passing
+          ends your declaring for the round, and the turns go round until everyone has passed or has no tokens left.
+          Everything else (answering, playing your games, diplomacy) happens whenever you like. Here is how a round, and
+          each war in it, plays out.
+        </p>
+      ) : (
+        <p>
+          Rounds have no turns. Within a round, everyone acts whenever they like: declare as many wars as your tokens
+          allow, and answer the ones declared on you. Here is how a round, and each war in it, plays out.
+        </p>
+      )}
       <ol role="list">
         {steps.map((step, i) => (
           <li key={step.title} className="relative flex gap-4 pb-6 last:pb-0">
@@ -466,8 +492,8 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
         {war.fortify && (
           <>
             {' '}
-            Spend a war token to fortify a country a neighbor might want: see{' '}
-            <InlineLink href="#fortifying">Fortifying</InlineLink>.
+            {war.turns ? 'On your turn, you can instead spend' : 'Spend'} a war token to fortify a country a neighbor
+            might want: see <InlineLink href="#fortifying">Fortifying</InlineLink>.
           </>
         )}
       </p>
@@ -483,11 +509,28 @@ function InlineLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-function DeclaringWar({ rules }: { rules: CampaignRules }) {
+function DeclaringWar({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
   const example = stakeFloor(rules, 6);
   return (
     <Section id="declaring" title="Declaring war">
+      {war.turns && (
+        <Part title="Taking turns">
+          <p>
+            Players declare one at a time, so nobody gets the best targets just by being quickest. The order follows the
+            draft&apos;s seats round the table, and each round it starts one seat further along: round 1 with whoever
+            drafted last, round 2 with whoever drafted first, and so on. On your turn, declare one war
+            {war.fortify ? ', fortify one of your countries' : ''} or pass; then the turn moves on. Passing ends your
+            declaring for the round, and anyone with no tokens left
+            {war.fortify ? ', or nothing to attack or fortify,' : ' or nothing to attack'} is passed over. Once everyone
+            is done, declaring is over until the next round.
+          </p>
+          <p className="text-muted">
+            A turn lasts up to {turnTime(rules, standard)}; after that it passes for you. The host can pass the turn for
+            a player who is away. The war room shows the order and whose turn it is.
+          </p>
+        </Part>
+      )}
       <Part title="What you can attack">
         <p>A country held by another player, when:</p>
         <Bullets>
@@ -552,7 +595,8 @@ function DeclaringWar({ rules }: { rules: CampaignRules }) {
       {war.fortify && (
         <Part title="Fortifying" id="fortifying">
           <p>
-            Any player can spend {warTokens(FORTIFY_COST)} to fortify one of their countries, from its panel. Until{' '}
+            {war.turns ? 'On your turn, instead of declaring war, you' : 'Any player'} can spend{' '}
+            {warTokens(FORTIFY_COST)} to fortify one of {war.turns ? 'your' : 'their'} countries, from its panel. Until{' '}
             {FORTIFY_ROUNDS === 2 ? 'the round after next' : `${FORTIFY_ROUNDS} more rounds`} starts, a war on it needs
             a stake of at least {war.raisePct}% of its value instead of {war.stakeFloorPct}% (the table&apos;s second
             row). Fortified countries carry a rampart on the map, so everyone knows before declaring. Fortifying again
@@ -774,8 +818,8 @@ function Battle({ rules, standard }: { rules: CampaignRules; standard: boolean }
   );
   const live = (clock: typeof war.liveClock) => (
     <>
-      Blitz at {clock}: {liveClockText(clock)}. The board opens by itself after a short countdown. You play one live
-      game at a time; any others wait their turn.
+      Blitz at {clock}: {liveClockText(clock)}. {war.turns ? 'Once everyone has finished declaring, the' : 'The'} board
+      opens by itself after a short countdown. You play one live game at a time; any others wait their turn.
     </>
   );
   // An example worth reading: a mountain or island target with three of the attacker's countries on its border.
@@ -1139,6 +1183,15 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
   const { war } = rules;
   const answer = RESPONSE_WINDOW_TEXT[war.pace];
   const rows: [who: string, time: string, silence: string][] = [
+    ...(war.turns
+      ? [
+          [
+            'A player takes their turn to declare',
+            TURN_WINDOW_TEXT[war.pace],
+            'They pass, and are done declaring for the round.',
+          ] as [string, string, string],
+        ]
+      : []),
     ['The defender answers a declaration', answer, 'The war goes ahead as declared.'],
     [
       war.raise === 'off' ? 'The attacker replies to a redirect' : 'The attacker replies to a raise or redirect',
@@ -1165,7 +1218,7 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
       <p>
         Silence is an answer too.{' '}
         {standard &&
-          `The times below are for correspondence campaigns; in live ones, answers are due within ${RESPONSE_WINDOW_TEXT.live} and moves on the clock.`}
+          `The times below are for correspondence campaigns; in live ones, ${war.turns ? 'turns and answers' : 'answers'} are due within ${RESPONSE_WINDOW_TEXT.live} and moves on the clock.`}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[20rem] text-left text-[0.95rem] leading-snug">

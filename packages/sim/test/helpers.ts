@@ -19,7 +19,10 @@ import { baseConfig, type ConfigOverrides } from '../src/scenarios';
 
 export const idx = loadDataset();
 
-/** The original game's answers (a free raise, redirects anywhere, tribute), for tests of those rules. */
+/**
+ * The original game's answers (a free raise, redirects anywhere, tribute), with declarations
+ * whenever players like, for tests of those rules.
+ */
 export const ORIGINAL_ANSWERS = {
   raise: 'free',
   redirect: 'anywhere',
@@ -27,11 +30,13 @@ export const ORIGINAL_ANSWERS = {
   fortify: false,
   peaceTerms: false,
   recall: false,
+  turns: false,
 } as const;
 
 /**
  * A campaign on the real map set up by hand: an auto-draft for the given number of players, then
  * countries moved as asked (counted as drafted), these public missions and secrets, at round 1.
+ * Players declare whenever the test likes, unless its config asks for turns.
  */
 export function scripted(opts: {
   players: number;
@@ -40,7 +45,12 @@ export function scripted(opts: {
   secrets?: (s: SimState) => Record<UserId, SecretMissionSpec>;
   config?: ConfigOverrides;
 }): SimState {
-  const cfg: SimConfig = baseConfig({ players: opts.players, debug: true, ...opts.config });
+  const cfg: SimConfig = baseConfig({
+    players: opts.players,
+    debug: true,
+    ...opts.config,
+    war: { turns: false, ...opts.config?.war },
+  });
   const s = createState(cfg, idx, 1);
   runDraft(s, (st, userId) => {
     const owners = new Map([...st.holdings].map(([id, h]) => [id, h.ownerId]));

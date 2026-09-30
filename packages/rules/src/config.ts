@@ -56,8 +56,9 @@ export type RedirectRule = (typeof REDIRECT_RULES)[number];
 
 /**
  * War settings. Rules stored before a setting existed read as the original game (a free raise,
- * redirects anywhere and free, tribute, no fortifying or recall), so no campaign underway
- * changes; new campaigns start from `DEFAULT_RULES`, which plays the revised answers.
+ * redirects anywhere and free, tribute, no fortifying or recall, declaring whenever you like), so
+ * no campaign underway changes; new campaigns start from `DEFAULT_RULES`, which plays the revised
+ * answers and turns.
  */
 export const warRulesSchema = z.object({
   pace: z.enum(PACES).default('correspondence'),
@@ -94,9 +95,15 @@ export const warRulesSchema = z.object({
   peaceTerms: z.boolean().default(false),
   /** The attacker may call off a declaration until the defender answers. */
   recall: z.boolean().default(false),
+  /**
+   * Players take turns declaring war each round, one declaration or fortification a turn, in an
+   * order that moves on a seat each round; passing ends a player's declaring for the round. Off:
+   * anyone declares whenever they like (the original rule).
+   */
+  turns: z.boolean().default(false),
 });
 
-/** The war settings new campaigns start with, over the original game's. */
+/** The war settings new campaigns start with, over the original game's: the revised answers, and turns. */
 export const REVISED_WAR_RULES = {
   raise: 'matched',
   redirect: 'nearby',
@@ -104,6 +111,7 @@ export const REVISED_WAR_RULES = {
   fortify: true,
   peaceTerms: true,
   recall: true,
+  turns: true,
 } as const satisfies Partial<z.input<typeof warRulesSchema>>;
 
 /**

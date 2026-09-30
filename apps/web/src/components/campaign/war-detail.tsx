@@ -207,7 +207,9 @@ export function WarDetail({
                           ? 'Called off: the war ended in peace'
                           : 'Called off: the campaign ended first'
                         : g.status === 'waiting'
-                          ? 'Waiting for both players to be free'
+                          ? model.turns?.current
+                            ? 'Waiting for declaring to end'
+                            : 'Waiting for both players to be free'
                           : 'In progress'}
                   </span>
                 </span>

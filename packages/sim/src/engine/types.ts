@@ -17,6 +17,7 @@ import type {
   SecretOption,
   TerritoryId,
   Transfer,
+  TurnState,
   UserId,
   WarCounter,
   WarOutcome,
@@ -57,7 +58,10 @@ export interface SimConfig {
   pace: 'live' | 'correspondence';
   /** Chance a war stays open 0, 1, 2… rounds past the one it's declared in. */
   latency: readonly number[];
-  /** Rounds to declaration waves: each wave declares, answers and fights what's due. */
+  /**
+   * Declaration waves a round: each wave declares, answers and fights what's due. With turns, the
+   * first wave's turns are the round's only declarations; later waves answer and fight.
+   */
   waves: number;
   /** `normal` ends at the points to win; `horizon` never ends early, to measure the missions alone. */
   mode: 'normal' | 'horizon';
@@ -219,6 +223,8 @@ export type SimAction =
   | { t: 'reply'; war: string; reply: Reply }
   | { t: 'recall'; war: string }
   | { t: 'fortify'; by: UserId; territoryId: TerritoryId }
+  /** A player passes their turn: done declaring for the round. */
+  | { t: 'pass'; by: UserId }
   | { t: 'peace'; war: string; offer: string; by: UserId; terms: PeaceTerms }
   /** `accord`: the accord the accepted terms signed, if they named one. */
   | { t: 'peace-answer'; war: string; offer: string; accept: boolean; accord?: string }
@@ -241,6 +247,8 @@ export interface SimState {
   round: number;
   status: 'lobby' | 'draft' | 'selection' | 'active' | 'finished';
   holdings: Map<TerritoryId, Holding>;
+  /** Declaring in turns this round, where the rules have it (the server's campaign row keeps it). */
+  turns: TurnState | null;
   wars: SimWar[];
   peaceOffers: SimPeaceOffer[];
   accords: SimAccord[];

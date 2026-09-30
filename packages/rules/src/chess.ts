@@ -6,6 +6,7 @@ import { Chess, castlingSide, normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
 import { makeFen, parseFen } from 'chessops/fen';
 import { makeSanAndPlay, parseSan } from 'chessops/san';
+import { SquareSet } from 'chessops/squareSet';
 import type { NormalMove } from 'chessops/types';
 import { kingCastlesTo, makeSquare, makeUci, parseSquare, parseUci } from 'chessops/util';
 
@@ -121,6 +122,22 @@ export class ChessGame {
     return chessgroundDests(this.pos);
   }
 
+  /** Every legal move in UCI: castling as the king's two-square move, a promotion once per piece. */
+  legalMoves(): string[] {
+    const out: string[] = [];
+    for (const [from, dests] of this.pos.allDests()) {
+      const pawn = this.pos.board.getRole(from) === 'pawn';
+      for (const to of dests) {
+        if (pawn && SquareSet.backranks().has(to)) {
+          for (const promotion of PROMOTIONS) out.push(makeUci({ from, to, promotion }));
+        } else {
+          out.push(standardUci(this.pos, { from, to }));
+        }
+      }
+    }
+    return out;
+  }
+
   /** Whether moving from `from` to `to` (square names) takes a pawn to its last rank. */
   isPromotion(from: string, to: string): boolean {
     const square = parseSquare(from);
@@ -155,6 +172,8 @@ export class ChessGame {
     this.seen.set(key, (this.seen.get(key) ?? 0) + 1);
   }
 }
+
+const PROMOTIONS = ['queen', 'rook', 'bishop', 'knight'] as const;
 
 /** Board, turn, castling rights and a capturable en passant square: what repetition compares. */
 function positionKey(pos: Chess): string {

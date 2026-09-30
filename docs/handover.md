@@ -8,8 +8,8 @@ first, then the plan._
 1. Read, in order: this file, [CLAUDE.md](../CLAUDE.md), and the plan
    [empire-chess-implementation-plan.md](../empire-chess-implementation-plan.md), especially
    section 8 (Phase 5, the playtest) and section 11 (risks).
-2. Run `pnpm install && pnpm test` to confirm a green baseline (537 tests as of 2026-09-29, after
-   the revised war answers).
+2. Run `pnpm install && pnpm test` to confirm a green baseline (573 tests as of 2026-09-29, after
+   the bots).
 3. Phases 1 and 2 are committed (`4955ca2`), Phase 3 too (`896c7fd`). Phase 4 is not: the user
    hasn't asked for a commit. Don't commit or push unless asked.
 4. Before planning the playtest, go through [what still needs the user](#what-still-needs-the-user).
@@ -481,6 +481,163 @@ through `DEFAULT_RULES`.
 Tests since: rules 254, data 66, web 41, sim 25, server 151 (537 in all; the new server file is
 `test/war-answers.test.ts`).
 
+**Bots** (2026-09-29, at the user's request; not committed yet): players the host adds in the
+lobby, each with a chess level from 1 to 8. The user's calls, asked before building (all four were my
+recommendations): Stockfish's lite WASM build committed to the repo, rather than the 205 MB npm
+package or a hand-written engine; levels 1 to 8 like Lichess's computer, each with a short
+description and a rough rating checked by a round robin; bots act at once (correspondence answers
+and moves within seconds, a short clock-aware pause in live games); and the level changes only the
+chess, every bot playing the map with the simulator's standard strategy.
+
+- **Lobby.** "Add a bot" (host only, in the lobby, with a seat free) with a level select that shows
+  what the level plays like. A bot takes the first call sign nobody uses (Alpha, Bravo, Charlie,
+  Delta, Echo, Foxtrot, Tango, Victor; none is a place on the map, which `datasets.test.ts` checks)
+  and the first free color. The host can change a bot's level until the draft starts
+  (`PATCH /api/campaigns/:id/bots/:botId`) and removes one with the usual Remove (`…/kick`), which
+  deletes its user too; deleting the campaign deletes its bots. `member.joined` carries
+  `bot: { level }` ("Field Marshal added Alpha, a level 4 bot (club player).").
+- **Identity.** Each bot is a user of its own, `bot_` and 12 letters drawn from `ctx.random` (so a
+  seeded test deals the same secrets every run), a member of one campaign with `members.bot_level`
+  (migration `0009_bots`, which also adds `members.bot_round`). No person's id can start with `bot_`,
+  so `isBotId` is a prefix test and SQL uses `starts_with`. `MemberView.bot` is `{ level }` or null;
+  levels are public.
+- **How they act.** `BotRunner` (`bots/runner.ts`) hears from `mutate()` of every change to a
+  campaign with a bot in it (private ones too), and from `changeGame` and `startGame` of every change
+  to a game with a bot in it. A pass loads a snapshot (`bots/state.ts`, one repeatable-read
+  transaction) and asks `nextAction` (`bots/decide.ts`) for one action at a time: first anything
+  waiting on a bot (accord proposals, a secret mission to choose, peace offers, declarations,
+  counters), then each bot's round (breaking an accord, proposing one, fortifying; once a round,
+  recorded in `members.bot_round` through a private `mutate()`), then declarations while it has
+  tokens and a war worth it. Every
+  action goes through the ordinary service (`declareWar`, `respondToWar`, `answerAccord`…), so the
+  rules are checked for bots as for anyone. A refused action is logged and falls back to what
+  silence would do (accept a declaration, withdraw from a raise, decline an offer). Bots draft through
+  auto-draft (`autodraft: true`), with the simulator's mission-aware picker (`bots/draft.ts`).
+- **Strategy** is the simulator's standard bot, unchanged. `packages/sim/src/live.ts`
+  (`@empire/sim/live`, now a server dependency) builds a `SimState` from a live campaign
+  (`liveState`) and asks for one decision at a time (`liveBots`). The simulator's `diplomacy()` was
+  split into `breaksAccord`, `proposalPartner` and `accepts`, drawing random numbers in the same
+  order: traced campaigns before and after compare byte for byte. Strategy assumes an even game
+  against anyone (every rating 1500), so a bot's level changes only its chess.
+- **Privacy.** A bot's view (`botState`) holds its own secret, options, proposals and peace offers;
+  rivals' secrets only once revealed; proposals and offers only where it's one of the two players.
+  `bots-campaign.test.ts` builds a view in the middle of a campaign and checks.
+- **Chess.** Stockfish 19 lite, single-threaded (Stockfish.js by Chess.com, in
+  `apps/server/engine/` with its license, hashes and how to update it in the README; a nested
+  `package.json` marks the folder CommonJS) runs as a child process speaking UCI (`bots/engine.ts`).
+  One process serves every bot, one search at a time, at the lowest CPU priority so the game
+  server's clocks and sockets come first. It starts on the first search, stops after 10 idle
+  minutes (it takes about 100 MB), and restarts if it dies; a search it died under gets one retry. A search that overruns is told to stop, then the process is killed. Without the files, bots
+  play random moves and the server warns at startup; a failed search plays a random move.
+  `STOCKFISH_PATH` points elsewhere. The Dockerfile copies `engine/` into the image.
+- **Levels** (`bots/chess.ts`). Levels 3 to 7 play at Stockfish's `UCI_Elo` 1400, 1500, 1900, 2400
+  and 2700, searching only as deep as a limited Stockfish chooses its move (1 plus its skill level),
+  so they take milliseconds and don't depend on the server's CPU. Levels 1 and 2 play the lowest
+  `UCI_Elo` (1320) with 35% and 12% random moves. Level 8 is full strength for up to 1.5 s a move (less
+  when its live clock is low), its first 10 plies varied among lines within 30 centipawns. The
+  ratings `BOT_LEVELS` quotes come from the ladder (`pnpm --filter @empire/server bot-ladder`): 1,335
+  games (150 between neighbouring levels, 75 two apart, 30 in each pairing with level 8), fitted by
+  Bradley–Terry and pinned at level 3 = 1400, gave 768, 1097, 1400, 1634, 1964, 2293 and 2570, steps
+  of 230 to 330, rounded to 750, 1100, 1400, 1650, 1950, 2300 and 2550. Level 8 won all 60 of its
+  games, so its "about 3000" is a floor rather than a measurement. An earlier ladder showed why the
+  levels aren't evenly spaced `UCI_Elo`s: strength goes by the depth a limited Stockfish picks at,
+  so 1650 and 1900 came out only 100 apart while 1400 and 1650 were 413.
+- **Timing.** Correspondence: bots answer and move at once, and the board says "Thinking…" rather
+  than the time per move. Live: the bot works its move out as soon as its turn begins (after the
+  countdown, for the first) and plays it once its pause since then is up, so the search is part of
+  the pause (`thinkingMs`: at most
+  1.3 s for the first 8 plies, then about a hundredth of the clock plus a third of the increment,
+  varied by half either way, at most 6 s and never more than a fifteenth of the clock, and quick
+  under 20 s). Bots can play several live games at once: `busyPlayers` and `startQueuedGames` leave
+  them out, so a queued game with a bot starts as soon as the person in it is free.
+- **Draws.** A bot takes a draw that wins it the war (Black in Armageddon) and refuses one that loses
+  it (White in Armageddon). Otherwise it looks (depth 12, full strength): with defender-holds it takes
+  a draw unless 0.3 pawns better; in a first game that would go to Armageddon, the attacker takes it
+  unless 1.5 pawns better and the defender only when 1.5 pawns worse. Bots never offer draws, resign
+  or call a declaration off.
+- **Peace terms.** A bot defender that prefers terms offers them and answers the declaration with
+  its fallback straight away (the simulator has terms answered first, which a person may take hours
+  over). Moving would pass over terms offered to a bot, so it answers them before its move.
+- **Messages and notices.** Bots don't read messages: the server refuses private messages to them
+  (a bot's user must stay deletable) and the Messages list leaves them out. Notices to bots are
+  dropped (`skippingBots` wraps the notifier).
+- **The sweep.** `runDueWork` ends with `ctx.bots.sweep()`, which finds answers, secrets, rounds and
+  moves owed by bots that nothing announced (after a restart), leaving a campaign whose pass failed
+  alone for a minute. It stops after one query when no campaign underway has a bot.
+- **Deploys.** `render.yaml` now redeploys the server when `packages/sim/**` changes, since the
+  server bundles the simulator's bots.
+- **Checked in the browser** on the dev server: lobby (desktop and phone), the draft, secrets, a
+  correspondence game against a level 4 bot, and a live 3+2 game against a level 3 bot (first move
+  about a second after the countdown, then about a second a move in the opening and four at move 8).
+  A review of the finished diff found two bugs (a queued live game with a bot waited behind the bot's
+  other game; the build filter above) and five smaller things (priority, the sweep's queries, the
+  bookkeeping outside `mutate()`, the pause after the search, the guide's wording), all fixed. It
+  also noted that each action reloads the whole history; left as is, since a bot's actions add to
+  it anyway.
+- **Web.** The lobby's players list (bot rows with a level select for the host and the level in
+  words for everyone else, and "Add a bot"); `BotTag` ("BOT 4", spelled out for screen readers and on
+  hover) beside every `PlayerName` and on the empire page, with the level in the page's facts; bot
+  picks read "claimed" in the dispatches and bots lose the draft panel's "auto-draft" note; the
+  rules guide's "Playing with bots" section, whose level table reads `BOT_LEVELS`.
+- **Dev database:** Field Marshal's "Bot Check" (with Alpha, level 4, and Bravo, level 2): round 1,
+  Alpha's war on Greece being played with Field Marshal to move, Alpha's accord proposal to Field
+  Marshal waiting, and a finished bot-against-bot war over Iran; "Bot Lobby Check" (a lobby with
+  Alpha, level 1); and "Live Bot Check" (live 3+2, open-ended, with Alpha at level 3, whose war on
+  China Field Marshal left to run out on the clock).
+
+**Bots standing in for players** (2026-09-29, the user's answer to the open question below). When
+a player goes quiet, the host opens their empire page and chooses **Hand to a bot** (with a level),
+from the draft on. The bot plays that seat as its own: the countries, wars, accords, secret mission
+and points stay the player's, and so does the user id, which the bot acts under.
+
+- **Model.** A seat is played by a bot when `members.bot_level` is set: a bot of its own (user id
+  `bot_…`) or, with the player's own id, a stand-in. Everything that asks "is this a bot?" now asks
+  the seat (`botSeats`, `playedByBot` in SQL); `isBotId` is only for bots' own users (deleting them,
+  refusing messages to them, the notifier's safety net). `MemberView.bot.standIn` tells the two
+  apart.
+- **Service** (`bots/standins.ts`): `PUT /api/campaigns/:id/players/:userId/stand-in` (host; not in
+  the lobby, where the host removes a player and adds a bot instead; not the host's own empire or a
+  bot) sets the level and `bot_round` to the current round, so the round's accords and fortifying
+  wait for the next round while answers, moves and declarations start at once; in the draft, the
+  bot picks straight away if it's the player's turn (`advanceDraft` now counts bot seats as
+  auto-drafters). `DELETE` (the player, or the host) hands it back. Events `standin.began` and
+  `standin.ended`; the player is told at the handover, and when the host hands it back.
+- **The player meanwhile** sees a banner with **Take it back**, can read everything and chat, and
+  gets no notices (`mutate()` drops notices to bot seats; the correspondence "Your move" checks the
+  seat). Their own requests to act are refused with `stood-in` by `registerStandInGuard`
+  (`bots/guard.ts`), a pre-handler on every write under `/api/campaigns/:id/…` and
+  `/api/games/:gameId/…` except chat and the stand-in route; the bot's actions go through the
+  services directly, so they're not affected.
+- **Checked in the browser:** Field Marshal handed Bo's empire to a level 3 bot, which declared war on
+  Russia at once; Bo saw the banner, was refused a fortify, took the empire back; the dispatches read
+  "Field Marshal handed Bo's empire to a level 3 bot." and "Bo took the empire back from its bot."
+- **Dev database:** Field Marshal's "Stand-in Check" (with Bo, round 1, Bo's bot-declared war on
+  Russia waiting for Field Marshal's answer).
+
+Tests since: rules 260, data 67, web 41, sim 25, server 180 (573 in all; the new server files are
+`test/bots.test.ts` (bots of their own and stand-ins), `test/bots-campaign.test.ts` on the real map,
+and `test/stockfish.test.ts`, which plays the shipped engine).
+
+### Bot defaults taken while building (not asked; easy to change)
+
+- **Call signs** rather than names chosen by the host; **level 3** as the add-bot default; levels
+  locked once the draft starts, like the rules.
+- **Strategy at the simulator's knobs** (`DEFAULT_KNOBS`): bots propose 3-round accords, sign or
+  refuse proposals by the simulator's rule, raise a third of the time when it pays, and so on.
+- **Every rating 1500 to the strategy**, so a strong bot doesn't attack more for knowing it'll win
+  the game, and a weak one doesn't hide.
+- **One engine process**, searches queued. A pass re-weighs declarations on every change to the
+  campaign: on the real map with seven bots holding three tokens each, a snapshot took about 3 ms
+  (embedded database) and each bot's declaration 1 to 2 ms on a laptop.
+
+### Bots: the user's answers (2026-09-29)
+
+- **Replacing an inactive player:** yes, built as stand-ins (above). Defaults taken: the player can
+  take the empire back without the host; the host can hand it back too; the bot doesn't redo the
+  round's accords and fortifying; a stand-in's level is fixed until it's handed back.
+- **Map play by level:** no; every bot keeps the standard strategy at every level.
+- **Level 8 on Render's tenth of a CPU** playing weaker than on a laptop: fine.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -899,18 +1056,18 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                  |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                            |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                  |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications)                                                                      |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`       |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                     |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                               |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*` |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_bots` (`members.bot_level`, `bot_round`)                                         |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                    |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                          |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
-`/api/campaigns/:id/{invite/reset,me,leave,kick}`,
+`/api/campaigns/:id/{invite/reset,me,leave,kick}`, `/api/campaigns/:id/bots` (add) and `…/bots/:botId` (level), `/api/campaigns/:id/players/:userId/stand-in` (put in, take back),
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
 `…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,

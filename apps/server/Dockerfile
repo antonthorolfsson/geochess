@@ -19,6 +19,8 @@ COPY --from=build /repo/apps/server/package.json ./
 COPY --from=build /repo/apps/server/dist ./dist
 COPY --from=build /repo/apps/server/drizzle ./drizzle
 COPY --from=build /repo/apps/server/certs ./certs
+# Stockfish for the bots, run as a child process (engine/README.md).
+COPY --from=build /repo/apps/server/engine ./engine
 USER node
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

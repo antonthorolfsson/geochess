@@ -2,6 +2,7 @@
 
 import {
   CORRESPONDENCE_HOURS,
+  DEFAULT_BOT_LEVEL,
   EMPIRE_COLORS,
   LIVE_CLOCKS,
   MAX_PLAYERS,
@@ -13,6 +14,7 @@ import {
   type RaiseStyle,
   type TerritoryId,
   type WarRules,
+  botLevelText,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -24,6 +26,7 @@ import { EmpireSwatch } from '../hatch';
 import { Notice, Toggle } from '../ui';
 import { LobbyMissions } from '../victory/lobby-missions';
 import type { MissionFocus } from '../victory/missions-panel';
+import { BotLevelSelect } from './bot-level-select';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
 
@@ -88,25 +91,41 @@ export function LobbyPanel({
         </h2>
         <ul className="divide-y divide-line rounded-[3px] border border-line">
           {campaign.members.map((m) => (
-            <li key={m.userId} className="flex min-h-12 items-center gap-2 px-3">
-              <span className="min-w-0 flex-1">
-                <PlayerName member={m} you={m.userId === me.userId} />
-              </span>
-              {m.userId === campaign.hostId && <span className="label">Host</span>}
-              {isHost && m.userId !== me.userId && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    if (confirm(`Remove ${m.name} from the campaign?`)) run(() => api.kick(campaign.id, m.userId));
-                  }}
-                >
-                  Remove
-                </button>
-              )}
+            <li key={m.userId} className="px-3">
+              <div className="flex min-h-12 items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <PlayerName member={m} you={m.userId === me.userId} />
+                </span>
+                {m.userId === campaign.hostId && <span className="label">Host</span>}
+                {isHost && m.userId !== me.userId && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      if (confirm(`Remove ${m.name} from the campaign?`)) run(() => api.kick(campaign.id, m.userId));
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {m.bot &&
+                (isHost ? (
+                  <BotLevelSelect
+                    label={`${m.name}’s level`}
+                    value={m.bot.level}
+                    disabled={action.isPending}
+                    onChange={(level) => run(() => api.setBotLevel(campaign.id, m.userId, { level }))}
+                  />
+                ) : (
+                  <p className="pb-3 text-sm text-muted">{botLevelText(m.bot.level)}</p>
+                ))}
             </li>
           ))}
         </ul>
+        {isHost && campaign.members.length < campaign.rules.maxPlayers && (
+          <AddBot pending={action.isPending} onAdd={(level) => run(() => api.addBot(campaign.id, { level }))} />
+        )}
       </section>
 
       <section>
@@ -162,7 +181,7 @@ export function LobbyPanel({
             </button>
             <p className="text-sm text-muted">
               {!enough
-                ? `You need at least ${MIN_PLAYERS} players. Share the invite link to fill the table.`
+                ? `You need at least ${MIN_PLAYERS} players. Share the invite link or add a bot to fill the table.`
                 : !missionsReady
                   ? 'Choose four public missions first, or play open-ended.'
                   : 'The pick order is drawn at random and snakes back each round. Everyone can join until you start. The rules and missions lock when you do.'}
@@ -185,6 +204,23 @@ export function LobbyPanel({
           {isHost ? 'Delete campaign' : 'Leave campaign'}
         </button>
       </section>
+    </div>
+  );
+}
+
+function AddBot({ pending, onAdd }: { pending: boolean; onAdd(level: number): void }) {
+  const [level, setLevel] = useState(DEFAULT_BOT_LEVEL);
+  return (
+    <div className="mt-2 rounded-[3px] border border-line p-3">
+      <h3 className="mb-1 font-semibold">Add a bot</h3>
+      <p className="mb-2 text-sm text-muted">
+        Bots play the whole game: they draft, choose a secret mission, declare and answer wars, and make and break
+        accords, answering straight away. The level sets only how well they play chess.
+      </p>
+      <BotLevelSelect label="Level of the new bot" value={level} onChange={setLevel} />
+      <button type="button" className="btn btn-ghost w-full" disabled={pending} onClick={() => onAdd(level)}>
+        Add bot
+      </button>
     </div>
   );
 }

@@ -33,6 +33,8 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().default('mailto:no-reply@localhost'),
+  /** The Stockfish build bots play with, when not the one in the server's engine/ folder. */
+  STOCKFISH_PATH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema> & { devLogin: boolean; secureCookies: boolean };

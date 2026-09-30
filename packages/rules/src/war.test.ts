@@ -9,6 +9,7 @@ import {
   activeWar,
   afterGame,
   attackableTargets,
+  blockedLaunchers,
   canRaise,
   canRecall,
   checkFortify,
@@ -167,6 +168,15 @@ describe('war targets', () => {
     expect(checkTarget(board({ acquired: { A1: 2 }, round: 3 }), ANN, 'B1')).toBe('no-launcher');
     const busy = war({ id: 'w2', targetId: 'B2', stake: ['A3', 'A1'] });
     expect(checkTarget(board({ wars: [busy] }), ANN, 'B1')).toBe('no-launcher');
+  });
+
+  it('say why each bordering country cannot launch', () => {
+    expect(blockedLaunchers(board({ acquired: { A1: 2 }, round: 3 }), ANN, 'B1')).toEqual([
+      { id: 'A1', reason: 'newly-won', fromRound: 4 },
+    ]);
+    const busy = war({ id: 'w2', targetId: 'B2', stake: ['A3', 'A1'] });
+    expect(blockedLaunchers(board({ wars: [busy] }), ANN, 'B1')).toEqual([{ id: 'A1', reason: 'in-war', warId: 'w2' }]);
+    expect(blockedLaunchers(board(), ANN, 'B1')).toEqual([]);
   });
 
   it('need enough connected countries to reach the stake floor', () => {

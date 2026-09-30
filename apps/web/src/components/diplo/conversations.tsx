@@ -1,6 +1,6 @@
 'use client';
 
-import type { MessageView } from '@empire/rules';
+import type { MemberView, MessageView } from '@empire/rules';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
@@ -15,14 +15,17 @@ import { Notice, Spinner } from '../ui';
 import { ChatLine, continuesGroup } from './chat-line';
 import { Composer } from './composer';
 
-/** Every other player, with the latest private message and what's unread; the busiest first. */
+/** Every other player, with the latest private message and what's unread; the busiest first. Bots don't read messages. */
 export function Conversations({ model, onOpen }: { model: CampaignModel; onOpen(userId: string): void }) {
   const summary = useChatSummary(model.campaign.id);
   const now = useNow(30_000);
   const me = model.me.userId;
   const byUser = new Map(summary.data?.conversations.map((c) => [c.userId, c]));
+  // A person a bot stands in for still reads their messages.
+  const bot = (m: MemberView) => m.bot !== null && !m.bot.standIn;
+  const bots = model.campaign.members.some(bot);
   const rows = model.campaign.members
-    .filter((m) => m.userId !== me)
+    .filter((m) => m.userId !== me && !bot(m))
     .map((member) => ({ member, conversation: byUser.get(member.userId) }))
     .sort(
       (a, b) =>
@@ -35,9 +38,13 @@ export function Conversations({ model, onOpen }: { model: CampaignModel; onOpen(
 
   return (
     <div className="h-full space-y-3 overflow-y-auto p-4">
-      <p className="text-sm text-muted">Private messages. Only you and the other player can read them.</p>
+      <p className="text-sm text-muted">
+        Private messages. Only you and the other player can read them.{bots ? ' Bots don’t read messages.' : ''}
+      </p>
       {rows.length === 0 ? (
-        <p className="text-[0.95rem] text-muted">Nobody else has joined yet.</p>
+        <p className="text-[0.95rem] text-muted">
+          {bots ? 'Nobody else here reads messages.' : 'Nobody else has joined yet.'}
+        </p>
       ) : (
         <ul className="divide-y divide-line rounded-[3px] border border-line">
           {rows.map(({ member, conversation }) => (
@@ -164,7 +171,9 @@ export function ConversationThread({
         {removeError && <Notice tone="error">{removeError}</Notice>}
       </div>
 
-      {peer ? (
+      {peer?.bot && !peer.bot.standIn ? (
+        <p className="shrink-0 border-t border-line p-3 text-sm text-muted">Bots don’t read messages.</p>
+      ) : peer ? (
         <Composer
           placeholder={`Message ${peer.name}`}
           onSend={async (body) => {

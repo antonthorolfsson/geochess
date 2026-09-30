@@ -1,6 +1,6 @@
 'use client';
 
-import { missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
+import { botLevel, missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { requirementText } from '@/lib/victory';
@@ -279,7 +279,28 @@ export function DispatchLine({
     case 'campaign.created':
       return <>{name(event.actorId)} opened the campaign.</>;
     case 'member.joined':
-      return <>{event.payload.name} joined.</>;
+      return event.payload.bot ? (
+        <>
+          {name(event.actorId)} added {event.payload.name}, a level {event.payload.bot.level} bot (
+          {botLevel(event.payload.bot.level).name.toLowerCase()}).
+        </>
+      ) : (
+        <>{event.payload.name} joined.</>
+      );
+    case 'standin.began':
+      return (
+        <>
+          {name(event.actorId)} handed {name(event.payload.userId)}’s empire to a level {event.payload.level} bot.
+        </>
+      );
+    case 'standin.ended':
+      return event.actorId === event.payload.userId ? (
+        <>{name(event.payload.userId)} took the empire back from its bot.</>
+      ) : (
+        <>
+          {name(event.actorId)} handed the empire back to {name(event.payload.userId)}.
+        </>
+      );
     case 'member.left':
       return <>{event.payload.kicked ? `${event.payload.name} was removed.` : `${event.payload.name} left.`}</>;
     case 'draft.started':
@@ -312,7 +333,7 @@ export function DispatchLine({
             </>
           ) : (
             <>
-              {name(userId)} {auto ? 'auto-drafted' : 'claimed'} {country(territoryId)}
+              {name(userId)} {auto && !picker?.bot ? 'auto-drafted' : 'claimed'} {country(territoryId)}
             </>
           )}{' '}
           <span className="text-faint">({t?.value ?? '?'})</span>

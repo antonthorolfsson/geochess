@@ -5,6 +5,7 @@ import {
   RESERVE_REJECTION_MESSAGES,
   TARGET_REJECTION_MESSAGES,
   accordBetween,
+  blockedLaunchers,
   checkFortify,
   checkReserves,
   checkTarget,
@@ -103,7 +104,11 @@ export function WarAction({
               ? `You have an accord with ${owner}: no war between you until round ${accord.endsRound} starts.`
               : renounced
                 ? `You broke your accord with ${owner}, so you can't declare war on them until round ${renounced.untilRound} starts.`
-                : TARGET_REJECTION_MESSAGES[rejection]}
+                : rejection === 'no-launcher'
+                  ? noLauncherText(model, territory.id)
+                  : rejection === 'stake-too-small'
+                    ? `A war on it needs a stake worth at least ${declarationFloor(board, territory.id)}, and your countries bordering it can't raise that much.`
+                    : TARGET_REJECTION_MESSAGES[rejection]}
         </p>
       </>
     );
@@ -135,6 +140,29 @@ export function WarAction({
       onPreview={onPreview}
     />
   );
+}
+
+/**
+ * "None of your countries bordering it can launch an attack: Russia is caught up in a war; Sweden
+ * was newly won and can be staked from round 5."
+ */
+function noLauncherText(model: CampaignModel, targetId: TerritoryId): string {
+  const names = (ids: TerritoryId[]) => {
+    const list = ids.map((id) => model.board.idx.byId.get(id)?.name ?? id);
+    return list.length === 1 ? list[0]! : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
+  };
+  const blocks = blockedLaunchers(model.board, model.me.userId, targetId);
+  const busy = blocks.filter((b) => b.reason === 'in-war').map((b) => b.id);
+  const fresh = new Map<number, TerritoryId[]>();
+  for (const b of blocks)
+    if (b.reason === 'newly-won') fresh.set(b.fromRound, [...(fresh.get(b.fromRound) ?? []), b.id]);
+  const reasons: string[] = [];
+  if (busy.length)
+    reasons.push(`${names(busy)} ${busy.length === 1 ? 'is caught up in a war' : 'are caught up in wars'}`);
+  for (const [round, ids] of [...fresh].sort(([a], [b]) => a - b)) {
+    reasons.push(`${names(ids)} ${ids.length === 1 ? 'was' : 'were'} newly won and can be staked from round ${round}`);
+  }
+  return `None of your countries bordering it can launch an attack: ${reasons.join('; ')}.`;
 }
 
 function DeclareForm({

@@ -47,6 +47,20 @@ describe('chess games', () => {
     expect([...dests.values()].flat()).toHaveLength(20);
   });
 
+  it('list every legal move in UCI, as moves are stored', () => {
+    const start = new ChessGame().legalMoves();
+    expect(start).toHaveLength(20);
+    expect(start).toContain('g1f3');
+    const castling = ChessGame.fromMoves(moves('e2e4 e7e5 g1f3 b8c6 f1c4 g8f6')).legalMoves();
+    expect(castling).toContain('e1g1');
+    expect(castling).not.toContain('e1h1');
+    const promotion = new ChessGame('8/P6k/8/8/8/8/8/K7 w - - 0 1').legalMoves();
+    expect(promotion.filter((m) => m.startsWith('a7'))).toEqual(['a7a8q', 'a7a8r', 'a7a8b', 'a7a8n']);
+    const game = new ChessGame('8/P6k/8/8/8/8/8/K7 w - - 0 1');
+    for (const uci of promotion) expect(new ChessGame(game.fen).play(uci), uci).not.toBeNull();
+    expect(ChessGame.fromMoves(moves('f2f3 e7e5 g2g4 d8h4')).legalMoves()).toEqual([]);
+  });
+
   it('detect checkmate and stalemate', () => {
     expect(ChessGame.fromMoves(moves('f2f3 e7e5 g2g4 d8h4')).ending()).toEqual({ result: '0-1', reason: 'checkmate' });
     const stalemate = new ChessGame('7k/5Q2/6K1/8/8/8/8/8 w - - 0 1');

@@ -130,6 +130,10 @@ export const members = pgTable(
     /** Public standing for keeping accords. */
     reputation: integer('reputation').notNull().default(REPUTATION_START),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    /** A bot player's chess level (1 to 8); null for people. Bots' user ids start `bot_`. */
+    botLevel: integer('bot_level'),
+    /** The last round a bot has done its round's diplomacy and fortifying for. */
+    botRound: integer('bot_round'),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.userId] }),

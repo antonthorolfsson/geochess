@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { Mailer } from './auth/mailer';
+import type { BotRunner } from './bots/runner';
 import type { DatasetProvider } from './datasets';
 import type { Db } from './db/client';
 import type { Env } from './env';
@@ -33,4 +34,6 @@ export interface AppContext {
   timers: Timers;
   /** Names games' openings for the chess profiles. */
   openings: OpeningNamer;
+  /** Plays for the bot players: told of every change to a campaign or game with a bot in it. */
+  bots: BotRunner;
 }

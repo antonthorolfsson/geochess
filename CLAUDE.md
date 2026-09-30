@@ -15,6 +15,8 @@ when starting new work.**
 - `pnpm db:generate`: new SQL migration after editing `apps/server/src/db/schema.ts`
 - `pnpm sim --scenario baseline --players 2-8 --seeds 400`, then `pnpm sim:report baseline`: the
   balance simulator (`packages/sim`, see its README); findings are in `docs/balance-report.md`
+- `pnpm --filter @empire/server bot-ladder`: bot levels play each other on the shipped Stockfish,
+  and the fitted ratings are what `BOT_LEVELS` quotes
 
 ## Layout and rules of the road
 
@@ -52,6 +54,17 @@ when starting new work.**
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and
   pushes `chat.message` only to the players who can read it.
+- Bot players (`apps/server/src/bots/`) are added by the host in the lobby: a user each (ids
+  `bot_…`), with `members.bot_level`. The host can also hand a quiet player's empire to a bot
+  (`standins.ts`): the same column on the player's own membership, so "is this a bot?" means the
+  seat (`botSeats`, `playedByBot`), not the id; the player's own writes are refused meanwhile
+  (`guard.ts`). `runner.ts` hears of every change to a campaign or game with
+  a bot in it and acts through the same services players' requests use, so every rule is checked for
+  bots too. Each decision is the simulator's standard bot (`@empire/sim/live`) on a view holding only
+  what that player may see (`state.ts`): never another player's secret, proposals or peace offers
+  before the rules make them public. Chess is Stockfish's lite WASM build in `apps/server/engine/`
+  (a child process, `engine.ts`); what each level asks of it is in `chess.ts`, and `BOT_LEVELS` in
+  the rules describes the levels to players. A change to the simulator's bots changes live bots too.
 - `packages/sim` plays whole campaigns with bots for balance runs. It uses the rules package for
   every rule but mirrors the server's orchestration (round starts, the war lifecycle,
   `settleVictory`) in `src/engine/`: change one, change the other.

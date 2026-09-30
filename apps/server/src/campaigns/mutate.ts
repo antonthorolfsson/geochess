@@ -1,5 +1,6 @@
-import { parseRules, type CampaignEvent, type EventView, type ServerMessage } from '@empire/rules';
+import { firstFreeColor, parseRules, type CampaignEvent, type EventView, type ServerMessage } from '@empire/rules';
 import { eq } from 'drizzle-orm';
+import { botSeats } from '../bots/ids';
 import type { AppContext } from '../context';
 import type { Db, Tx } from '../db/client';
 import { campaigns, events, members, users } from '../db/schema';
@@ -68,6 +69,7 @@ export async function mutate<T>(
 ): Promise<T> {
   return ctx.locks.run(campaignId, async () => {
     const recipients = new Set<string>();
+    let bots = new Set<string>();
     const queued: Queued = { after: [], notices: [] };
     let logged: EventView[] = [];
     let ended = false;
@@ -91,10 +93,11 @@ export async function mutate<T>(
       await settleSafely(ctx, scope, queued);
       ended = campaign.status !== 'finished' && scope.campaign.status === 'finished';
       const current = await tx
-        .select({ userId: members.userId })
+        .select({ userId: members.userId, botLevel: members.botLevel })
         .from(members)
         .where(eq(members.campaignId, campaignId));
       for (const m of [...before, ...current]) recipients.add(m.userId);
+      bots = botSeats(current);
       logged = log.events;
       return value;
     });
@@ -103,7 +106,12 @@ export async function mutate<T>(
         ? { type: 'campaign.events', campaignId, events: logged }
         : { type: 'campaign.changed', campaignId };
     ctx.hub.send(only && logged.length === 0 ? only : recipients, message);
-    const sends = queued.notices.filter((n) => n.ending || !ended).map((n) => () => ctx.notifier.send(n.notice));
+    // Bots hear of every change, private ones too; each bot's view (`botState`) holds only what it may see.
+    if (bots.size > 0) ctx.bots.campaignChanged(campaignId);
+    // A seat a bot plays gets no notices: the bot deals with what they're about.
+    const sends = queued.notices
+      .filter((n) => (n.ending || !ended) && !bots.has(n.notice.userId))
+      .map((n) => () => ctx.notifier.send(n.notice));
     for (const f of [...queued.after, ...sends]) {
       void Promise.resolve()
         .then(f)
@@ -150,6 +158,15 @@ export function requireHost(scope: MutationScope, userId: string, action: string
 
 export function requireLobby(scope: MutationScope, message = 'The campaign has already started.'): void {
   if (scope.campaign.status !== 'lobby') throw conflict(message, 'not-in-lobby');
+}
+
+/** The color of the next seat at the table, or a refusal if every seat is taken. */
+export function nextSeatColor(scope: MutationScope): number {
+  const color = firstFreeColor(scope.members.map((m) => m.color));
+  if (scope.members.length >= scope.campaign.rules.maxPlayers || color === null) {
+    throw conflict('This campaign is full.', 'full');
+  }
+  return color;
 }
 
 export function requireActive(scope: MutationScope): void {

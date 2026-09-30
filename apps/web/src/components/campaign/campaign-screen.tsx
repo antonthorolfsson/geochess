@@ -18,6 +18,7 @@ import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
+import { StandInBanner } from './stand-in';
 import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
@@ -583,6 +584,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           open: pageSegment === 'rules',
         }}
       />
+      <StandInBanner model={model} />
 
       <div className="relative flex min-h-0 flex-1">
         {isDesktop && (
@@ -850,7 +852,8 @@ function CampaignHeader({
           {wars} {wars === 1 ? 'war' : 'wars'} ⚑
         </span>
       )}
-      {(model.myTurn || mustChoose || myMoves > 0 || answers > 0) && (
+      {/* A bot standing in for the player answers and moves for them. */}
+      {!model.me.bot && (model.myTurn || mustChoose || myMoves > 0 || answers > 0) && (
         <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase">
           {model.myTurn ? 'Your pick' : mustChoose ? 'Choose mission' : myMoves > 0 ? 'Your move' : 'Answer needed'}
         </span>

@@ -294,6 +294,31 @@ function targetCheck(
   return null;
 }
 
+/** Why one of the attacker's countries bordering a target can't launch a war on it. */
+export type LauncherBlock =
+  { id: TerritoryId; reason: 'in-war'; warId: string } | { id: TerritoryId; reason: 'newly-won'; fromRound: number };
+
+/**
+ * The attacker's countries bordering `targetId` that can't be staked now, each with the reason:
+ * what a `no-launcher` rejection is made of.
+ */
+export function blockedLaunchers(board: WarBoard, attackerId: UserId, targetId: TerritoryId): LauncherBlock[] {
+  const locks = warLocks(board.wars);
+  const out: LauncherBlock[] = [];
+  for (const id of board.idx.neighbors(targetId)) {
+    const holding = board.holdings.get(id);
+    if (holding?.ownerId !== attackerId) continue;
+    const warId = locks.get(id);
+    if (warId !== undefined) {
+      out.push({ id, reason: 'in-war', warId });
+      continue;
+    }
+    const fromRound = stakeableFromRound(board, holding);
+    if (fromRound !== null) out.push({ id, reason: 'newly-won', fromRound });
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** Every country `attackerId` can declare war on right now (tokens aside). */
 export function attackableTargets(board: WarBoard, attackerId: UserId): Set<TerritoryId> {
   const locks = warLocks(board.wars);

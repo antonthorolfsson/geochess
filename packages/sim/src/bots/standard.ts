@@ -49,7 +49,7 @@ import { oddsWithModifier, type WarOdds } from '../engine/chess';
 import { accordInForce, answer, propose, renounce } from '../engine/diplomacy';
 import type { DraftPicker } from '../engine/lifecycle';
 import { heldBy, pointsToWin } from '../engine/state';
-import type { SimPeaceOffer, SimPlayer, SimState, SimWar } from '../engine/types';
+import type { SimAccord, SimPeaceOffer, SimPlayer, SimState, SimWar } from '../engine/types';
 import { hasScored, isComplete } from '../engine/victory';
 import type { Declaration, Reply, Response } from '../engine/wars';
 import { missionWorld } from '../engine/world';
@@ -874,63 +874,99 @@ function neighboursOf(s: SimState, me: UserId): Set<UserId> {
 /** Whether the campaign has ended (read fresh: accords can end it through a settle). */
 const over = (s: SimState) => s.status === 'finished';
 
+/** Each player's appetite, worked out when first asked for; clear it when the board changes. */
+export type Appetites = (id: UserId) => Map<UserId, number>;
+
+export function appetites(s: SimState, knobs: BotKnobs): Appetites & { clear(): void } {
+  const cache = new Map<UserId, Map<UserId, number>>();
+  const of = (id: UserId) => {
+    let a = cache.get(id);
+    if (!a) cache.set(id, (a = appetite(s, knobs, id)));
+    return a;
+  };
+  return Object.assign(of, { clear: () => cache.clear() });
+}
+
+/** The length, in rounds, of every accord a bot proposes. */
+export const PROPOSED_ACCORD_ROUNDS = 3;
+
+/**
+ * Whether `id` breaks this accord now (war rounds only): for Backstab, or when the partner's best
+ * country is worth much more than any other target.
+ */
+export function breaksAccord(s: SimState, knobs: BotKnobs, id: UserId, accord: SimAccord, appetiteOf: Appetites) {
+  const p = s.byId.get(id)!;
+  const partner = accord.proposerId === id ? accord.recipientId : accord.proposerId;
+  const a = appetiteOf(id);
+  const onPartner = a.get(partner) ?? -Infinity;
+  const elsewhere = Math.max(-Infinity, ...[...a].filter(([o]) => o !== partner).map(([, u]) => u));
+  const backstab = secretIs(s, p, 'backstab') && onPartner > 0;
+  return backstab || onPartner > elsewhere + knobs.betrayMargin;
+}
+
+/**
+ * The neighbour `id` proposes an accord to this round, if any (a chance per round, unless an
+ * accord mission wants partners). `blocked` rules out players a proposal can't go to now.
+ */
+export function proposalPartner(
+  s: SimState,
+  knobs: BotKnobs,
+  id: UserId,
+  appetiteOf: Appetites,
+  blocked: (partnerId: UserId) => boolean = () => false,
+): UserId | null {
+  const p = s.byId.get(id)!;
+  const wantsTwo = secretIs(s, p, 'protected_expansion');
+  const wantsOne = secretIs(s, p, 'backstab');
+  const partners = s.accords.filter(
+    (a) => a.status === 'active' && (a.proposerId === id || a.recipientId === id) && (a.endsRound ?? 0) > s.round + 1,
+  ).length;
+  const eager = (wantsTwo && partners < 2) || (wantsOne && partners < 1);
+  if (!eager && s.rng.bots() >= knobs.proposeRate) return null;
+  const a = appetiteOf(id);
+  const candidates = [...neighboursOf(s, id)].filter((q) => {
+    const current = accordInForce(s, id, q);
+    return (
+      (!current || (current.endsRound ?? 0) <= s.round + 1) && !betrayed(s, id, q) && !betrayed(s, q, id) && !blocked(q)
+    );
+  });
+  if (candidates.length === 0) return null;
+  // A Backstab holder courts the neighbour it most wants to hit; everyone else the one it least does.
+  const ranked = candidates.sort((x, y) =>
+    wantsOne ? (a.get(y) ?? -99) - (a.get(x) ?? -99) : (a.get(x) ?? -99) - (a.get(y) ?? -99),
+  );
+  const partner = ranked[0]!;
+  const best = Math.max(-Infinity, ...a.values());
+  if (!eager && (a.get(partner) ?? -Infinity) >= best && best > knobs.declareThreshold) return null;
+  return partner;
+}
+
 function diplomacy(s: SimState, knobs: BotKnobs): void {
   if (!knobs.accords || over(s)) return;
   const order = shuffled(s.order, s.rng.bots);
-  const appetites = new Map<UserId, Map<UserId, number>>();
-  const appetiteOf = (id: UserId) => {
-    let a = appetites.get(id);
-    if (!a) appetites.set(id, (a = appetite(s, knobs, id)));
-    return a;
-  };
+  const appetiteOf = appetites(s, knobs);
 
   // Breaking accords, in war rounds only.
   if (s.round >= 1) {
     for (const id of order) {
-      const p = s.byId.get(id)!;
       for (const accord of s.accords.filter(
         (a) => a.status === 'active' && (a.proposerId === id || a.recipientId === id),
       )) {
-        const partner = accord.proposerId === id ? accord.recipientId : accord.proposerId;
-        const a = appetiteOf(id);
-        const onPartner = a.get(partner) ?? -Infinity;
-        const elsewhere = Math.max(-Infinity, ...[...a].filter(([o]) => o !== partner).map(([, u]) => u));
-        const backstab = secretIs(s, p, 'backstab') && onPartner > 0;
-        if (backstab || onPartner > elsewhere + knobs.betrayMargin) {
-          renounce(s, accord, id);
-          appetites.clear();
-          if (over(s)) return;
-        }
+        if (!breaksAccord(s, knobs, id, accord, appetiteOf)) continue;
+        renounce(s, accord, id);
+        appetiteOf.clear();
+        if (over(s)) return;
       }
     }
   }
 
   // Proposing, and answering at once.
   for (const id of order) {
-    const p = s.byId.get(id)!;
-    const wantsTwo = secretIs(s, p, 'protected_expansion');
-    const wantsOne = secretIs(s, p, 'backstab');
-    const partners = s.accords.filter(
-      (a) => a.status === 'active' && (a.proposerId === id || a.recipientId === id) && (a.endsRound ?? 0) > s.round + 1,
-    ).length;
-    const eager = (wantsTwo && partners < 2) || (wantsOne && partners < 1);
-    if (!eager && s.rng.bots() >= knobs.proposeRate) continue;
-    const a = appetiteOf(id);
-    const candidates = [...neighboursOf(s, id)].filter((q) => {
-      const current = accordInForce(s, id, q);
-      return (!current || (current.endsRound ?? 0) <= s.round + 1) && !betrayed(s, id, q) && !betrayed(s, q, id);
-    });
-    if (candidates.length === 0) continue;
-    // A Backstab holder courts the neighbour it most wants to hit; everyone else the one it least does.
-    const ranked = candidates.sort((x, y) =>
-      wantsOne ? (a.get(y) ?? -99) - (a.get(x) ?? -99) : (a.get(x) ?? -99) - (a.get(y) ?? -99),
-    );
-    const partner = ranked[0]!;
-    const best = Math.max(-Infinity, ...a.values());
-    if (!eager && (a.get(partner) ?? -Infinity) >= best && best > knobs.declareThreshold) continue;
-    const accord = propose(s, id, partner, 3);
+    const partner = proposalPartner(s, knobs, id, appetiteOf);
+    if (!partner) continue;
+    const accord = propose(s, id, partner, PROPOSED_ACCORD_ROUNDS);
     answer(s, accord, accepts(s, knobs, partner, id, appetiteOf(partner)));
-    appetites.clear();
+    appetiteOf.clear();
     if (over(s)) return;
   }
 }
@@ -942,7 +978,8 @@ const betrayed = (s: SimState, victimId: UserId, breakerId: UserId) =>
       a.status === 'broken' && a.brokenBy === breakerId && (a.proposerId === victimId || a.recipientId === victimId),
   );
 
-function accepts(s: SimState, knobs: BotKnobs, me: UserId, proposerId: UserId, a: Map<UserId, number>): boolean {
+/** Whether `me` signs `proposerId`'s proposal, given their appetite for war on each rival. */
+export function accepts(s: SimState, knobs: BotKnobs, me: UserId, proposerId: UserId, a: Map<UserId, number>): boolean {
   const p = s.byId.get(me)!;
   const proposer = s.byId.get(proposerId)!;
   if (betrayed(s, me, proposerId)) return false;

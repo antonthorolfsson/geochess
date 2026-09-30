@@ -305,6 +305,7 @@ function PlayerStrip({
   offeredDraw: boolean;
 }) {
   const low = clockMs !== null && clockMs < 20_000;
+  const member = model.membersById.get(userId);
   return (
     <div className="flex min-h-12 items-center gap-3">
       <span
@@ -312,7 +313,7 @@ function PlayerStrip({
         className={`size-3.5 shrink-0 rounded-full border border-line-strong ${color === 'white' ? 'bg-paper' : 'bg-gunmetal'}`}
       />
       <span className="min-w-0 flex-1">
-        <PlayerName member={model.membersById.get(userId)} you={userId === model.me.userId} size="sm" />
+        <PlayerName member={member} you={userId === model.me.userId} size="sm" />
         {offeredDraw && <span className="ml-2 text-xs font-bold text-amber uppercase">offers a draw</span>}
       </span>
       {clockMs !== null ? (
@@ -326,11 +327,15 @@ function PlayerStrip({
           {formatClock(clockMs)}
         </span>
       ) : (
-        toMove && (
+        toMove &&
+        (member?.bot ? (
+          // Bots reply within seconds, whatever the time per move.
+          <span className="text-sm font-bold text-amber">Thinking…</span>
+        ) : (
           <span className="text-sm font-bold text-amber">
             To move{perMoveLeft !== null ? ` · ${timeLeft(perMoveLeft)} left` : ''}
           </span>
-        )
+        ))
       )}
     </div>
   );

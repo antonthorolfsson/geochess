@@ -1,8 +1,9 @@
-import type { Dataset, ServerMessage } from '@empire/rules';
+import { ChessGame, type Dataset, type ServerMessage } from '@empire/rules';
 import { lineDataset } from '@empire/rules/testing';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildApp } from '../src/app';
 import type { Mailer } from '../src/auth/mailer';
+import type { ChessEngine, SearchRequest, Score } from '../src/bots/engine';
 import { staticDatasetProvider } from '../src/datasets';
 import { openDatabase } from '../src/db/client';
 import { loadEnv } from '../src/env';
@@ -16,8 +17,10 @@ export interface TestServer {
   notices: Notice[];
   /** The server's clock, which only moves when a test moves it. */
   clock: { now(): Date; advance(ms: number): void };
-  /** Runs the scheduler's work for the current time: expired answers, flag-falls. */
+  /** Runs the scheduler's work for the current time: expired answers, flag-falls, bots' turns. */
   runDue(): Promise<void>;
+  /** Waits until the bots have done everything they're going to do for now. */
+  bots(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -28,7 +31,7 @@ export interface TestServer {
 export async function startTestServer(
   dataset: Dataset = lineDataset(),
   env: NodeJS.ProcessEnv = {},
-  opts: { random?: () => number } = {},
+  opts: { random?: () => number; engine?: ChessEngine } = {},
 ): Promise<TestServer> {
   const database = await openDatabase({ dataDir: null });
   const mail: TestServer['mail'] = [];
@@ -44,13 +47,18 @@ export async function startTestServer(
     now: () => new Date(now),
     random: opts.random,
     scheduler: false,
+    engine: opts.engine ?? testEngine(),
   });
   return {
     app,
     mail,
     notices,
     clock: { now: () => new Date(now), advance: (ms) => void (now += ms) },
-    runDue: () => runDueWork(app.ctx),
+    async runDue() {
+      await runDueWork(app.ctx);
+      await app.ctx.bots.idle();
+    },
+    bots: () => app.ctx.bots.idle(),
     async close() {
       await app.close();
       await database.close();
@@ -111,3 +119,34 @@ export const ORIGINAL_ANSWERS = {
   peaceTerms: false,
   recall: false,
 } as const;
+
+/** A chess engine for tests, and what it was asked. */
+export interface TestEngine extends ChessEngine {
+  requests: SearchRequest[];
+  /** The line it plays while it can, from the start of each game (either colour). */
+  script: string[];
+  /** The score it reports for the side to move. */
+  score: Score;
+}
+
+/**
+ * Plays the scripted move for the position when it's legal, else the first legal move in UCI
+ * order, so games with bots come out the same every time.
+ */
+export function testEngine(script: string[] = []): TestEngine {
+  const engine: TestEngine = {
+    requests: [],
+    script,
+    score: { cp: 0 },
+    async search(req) {
+      engine.requests.push(req);
+      const game = ChessGame.fromMoves(req.moves);
+      const legal = game.legalMoves().sort();
+      const scripted = engine.script[req.moves.length];
+      const move = scripted && legal.includes(scripted) ? scripted : (legal[0] ?? null);
+      return { bestMove: move, lines: move ? [{ move, score: engine.score }] : [] };
+    },
+    async close() {},
+  };
+  return engine;
+}

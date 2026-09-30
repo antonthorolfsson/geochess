@@ -51,6 +51,7 @@ import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { Notice } from '../notifications/notifier';
+import { botSeats } from '../bots/ids';
 import { endSeason } from '../victory/finish';
 import { loadBoard, type WarRow } from './board';
 import { armFlag, publishGame } from './games';
@@ -459,13 +460,17 @@ export async function fortifyCountry(
 // ---------------------------------------------------------------------------------------------
 // Fighting
 
-/** Players in a game that's underway in this campaign; each plays one live game at a time. */
+/**
+ * Players in a game that's underway in this campaign; each person plays one live game at a time.
+ * A bot (standing in for a person, too) can play any number at once.
+ */
 async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
   const rows = await scope.tx
     .select({ whiteId: games.whiteId, blackId: games.blackId })
     .from(games)
     .where(and(eq(games.campaignId, scope.campaign.id), eq(games.status, 'playing')));
-  return new Set(rows.flatMap((r) => [r.whiteId, r.blackId]));
+  const bots = botSeats(scope.members);
+  return new Set(rows.flatMap((r) => [r.whiteId, r.blackId]).filter((id) => !bots.has(id)));
 }
 
 /**
@@ -530,7 +535,10 @@ async function startGame(ctx: AppContext, scope: MutationScope, gameId: string):
     null,
     scope.campaign.round,
   );
-  scope.afterCommit(() => armFlag(ctx, started!));
+  scope.afterCommit(() => {
+    armFlag(ctx, started!);
+    ctx.bots.gameChanged(started!);
+  });
 
   const idx = ctx.datasets.get(scope.campaign.datasetVersion);
   const target = getTerritory(idx, war!.targetId).name;
@@ -561,10 +569,11 @@ export async function startQueuedGames(ctx: AppContext, scope: MutationScope): P
     .orderBy(asc(games.createdAt));
   if (queued.length === 0) return;
   const busy = await busyPlayers(scope);
+  const bots = botSeats(scope.members);
   for (const game of queued) {
     if (busy.has(game.whiteId) || busy.has(game.blackId)) continue;
     await startGame(ctx, scope, game.id);
-    busy.add(game.whiteId).add(game.blackId);
+    for (const id of [game.whiteId, game.blackId]) if (!bots.has(id)) busy.add(id);
   }
 }
 

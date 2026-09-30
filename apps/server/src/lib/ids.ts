@@ -3,9 +3,12 @@ import { createHash, randomBytes, randomInt } from 'node:crypto';
 /** Lowercase letters and digits without the easily confused l, o, 0 and 1. */
 const ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 
-export function randomString(length: number, alphabet = ALPHABET): string {
+/** Letters from the CSPRNG, or from `random` (uniform in [0, 1)) when given. */
+export function randomString(length: number, alphabet = ALPHABET, random?: () => number): string {
   let out = '';
-  for (let i = 0; i < length; i++) out += alphabet[randomInt(alphabet.length)];
+  for (let i = 0; i < length; i++) {
+    out += alphabet[random ? Math.floor(random() * alphabet.length) : randomInt(alphabet.length)];
+  }
   return out;
 }
 

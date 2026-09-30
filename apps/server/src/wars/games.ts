@@ -96,6 +96,7 @@ async function changeGame(
         await settleGame(ctx, row.campaignId, row.id);
       } else {
         armFlag(ctx, row);
+        ctx.bots.gameChanged(row);
       }
     }
     return toGameView(row, ctx.now());
@@ -174,9 +175,16 @@ export async function playMove(
   if (passedOver) ctx.hub.send([view.whiteId, view.blackId], { type: 'campaign.changed', campaignId: view.campaignId });
   if (view.status === 'playing' && view.timeControl.kind === 'correspondence') {
     const next = colorToMove(view.moves.length);
+    const nextId = next === 'white' ? view.whiteId : view.blackId;
+    // A bot playing that side moves by itself.
+    const [seat] = await ctx.db
+      .select({ botLevel: members.botLevel })
+      .from(members)
+      .where(and(eq(members.campaignId, view.campaignId), eq(members.userId, nextId)));
+    if (seat?.botLevel != null) return view;
     await ctx.notifier
       .send({
-        userId: next === 'white' ? view.whiteId : view.blackId,
+        userId: nextId,
         title: 'Your move',
         body: `Your opponent has moved. You have ${Math.round(view.timeControl[next].perMoveMs / 3_600_000)} hours.`,
         url: `/c/${view.campaignId}?game=${view.id}`,

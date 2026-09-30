@@ -36,8 +36,13 @@ export interface MeResponse {
 
 export type CampaignEvent =
   | { type: 'campaign.created'; payload: { name: string } }
-  | { type: 'member.joined'; payload: { userId: string; name: string } }
+  /** A player joined, or (`bot`) the host added a bot. */
+  | { type: 'member.joined'; payload: { userId: string; name: string; bot?: { level: number } } }
   | { type: 'member.left'; payload: { userId: string; name: string; kicked: boolean } }
+  /** The host handed a player's empire to a bot, which plays it until the player takes it back. */
+  | { type: 'standin.began'; payload: { userId: string; level: number } }
+  /** The player took their empire back from its bot (the actor), or the host handed it back. */
+  | { type: 'standin.ended'; payload: { userId: string } }
   | { type: 'draft.started'; payload: { order: string[] } }
   | { type: 'draft.pick'; payload: { userId: string; territoryId: TerritoryId; pickNumber: number; auto: boolean } }
   | { type: 'draft.completed'; payload: Record<string, never> }
@@ -207,6 +212,19 @@ export interface MemberView {
   /** Public standing for keeping accords: starts at 100, falls when an accord is broken. */
   reputation: number;
   joinedAt: string;
+  /**
+   * A bot and its chess level (see `BOT_LEVELS`), or with `standIn`, a bot playing a person's
+   * empire while they're away; null for people playing their own. Public.
+   */
+  bot: { level: number; standIn: boolean } | null;
+}
+
+/**
+ * The host adds a bot in the lobby, changes a bot's level before the draft, or hands a player's
+ * empire to a bot at this level.
+ */
+export interface BotInput {
+  level: number;
 }
 
 export interface DraftView {

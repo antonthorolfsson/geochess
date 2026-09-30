@@ -9,6 +9,8 @@ packages/data/openings/
 packages/data/config/
 packages/data/raw/
 apps/server/drizzle/
+# Stockfish, as published (apps/server/engine/README.md).
+apps/server/engine/
 apps/server/.data/
 apps/web/public/datasets/
 apps/web/next-env.d.ts

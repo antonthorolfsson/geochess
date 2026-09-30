@@ -1,19 +1,15 @@
 'use client';
 
 import { EMPIRE_COLORS, empireColor, type Dataset, type TerritoryId } from '@empire/rules';
-import { geoGraticule10, geoNaturalEarth1, geoPath } from 'd3-geo';
 import { select } from 'd3-selection';
 // Adds selection.transition(), used for animated zooms.
 import 'd3-transition';
 import { zoom as d3Zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { feature, mesh } from 'topojson-client';
-import type { GeometryCollection, Topology } from 'topojson-specification';
+import type { Topology } from 'topojson-specification';
+import { W, buildGeometry, frameAround, union, type Bounds, type Geometry, type Shape } from '@/lib/map-geometry';
 import { HATCH_TILE, HatchTile, patternRotation, svgId } from '../hatch';
 
-/** Map width in viewBox units; the height follows from the projection. */
-const W = 1000;
-const PAD = 4;
 const MAX_ZOOM = 40;
 const OCEAN = '#16232b';
 const UNCLAIMED = '#4b5320';
@@ -21,18 +17,6 @@ const INK = '#161b1e';
 const PAPER = '#e4e2d8';
 const AMBER = '#e3a92b';
 const GREASE = '#c8372d';
-
-type Bounds = [[number, number], [number, number]];
-
-interface Shape {
-  id: TerritoryId;
-  name: string;
-  value: number;
-  micro: boolean;
-  d: string;
-  bounds: Bounds;
-  anchor: [number, number];
-}
 
 export interface WorldMapProps {
   topo: Topology;
@@ -84,50 +68,6 @@ export interface MapWar {
   mine: boolean;
 }
 
-function buildGeometry(topo: Topology, dataset: Dataset) {
-  const object = topo.objects.territories as GeometryCollection<{ name: string }>;
-  const projection = geoNaturalEarth1().fitWidth(W - 2 * PAD, { type: 'Sphere' });
-  // Antarctica isn't played, so crop the map just south of Cape Horn.
-  const north = projection([0, 84.5])![1];
-  const south = projection([0, -57])![1];
-  const [tx, ty] = projection.translate();
-  projection.translate([tx + PAD, ty - north + PAD]);
-  const H = Math.ceil(south - north + 2 * PAD);
-  const path = geoPath(projection);
-
-  const territories = new Map(dataset.territories.map((t) => [t.id, t]));
-  const shapes: Shape[] = [];
-  for (const f of feature(topo, object).features) {
-    const t = territories.get(String(f.id));
-    if (!t) continue;
-    shapes.push({
-      id: t.id,
-      name: t.name,
-      value: t.value,
-      micro: t.micro,
-      d: path(f) ?? '',
-      bounds: path.bounds(f),
-      anchor: (projection(t.anchor) ?? path.centroid(f)) as [number, number],
-    });
-  }
-  return {
-    H,
-    shapes,
-    byId: new Map(shapes.map((s) => [s.id, s])),
-    ocean: path({ type: 'Sphere' }) ?? '',
-    graticule: path(geoGraticule10()) ?? '',
-    borders: path(mesh(topo, object, (a, b) => a !== b)) ?? '',
-    coast: path(mesh(topo, object, (a, b) => a === b)) ?? '',
-    lanes: dataset.seaLanes.map((l) => ({
-      a: l.a,
-      b: l.b,
-      d: path({ type: 'LineString', coordinates: [l.from, l.to] }) ?? '',
-    })),
-  };
-}
-
-type Geometry = ReturnType<typeof buildGeometry>;
-
 /** The visible area in viewBox units: the whole map, widened or heightened to the container's shape. */
 function viewBoxFor(width: number, height: number, H: number): [number, number, number, number] {
   if (width <= 0 || height <= 0) return [0, 0, W, H];
@@ -138,21 +78,6 @@ function viewBoxFor(width: number, height: number, H: number): [number, number, 
   }
   const vh = W / aspect;
   return [0, (H - vh) / 2, W, vh];
-}
-
-function union(boxes: Bounds[]): Bounds | null {
-  if (boxes.length === 0) return null;
-  let [[x0, y0], [x1, y1]] = boxes[0]!;
-  for (const [[a0, b0], [a1, b1]] of boxes) {
-    x0 = Math.min(x0, a0);
-    y0 = Math.min(y0, b0);
-    x1 = Math.max(x1, a1);
-    y1 = Math.max(y1, b1);
-  }
-  return [
-    [x0, y0],
-    [x1, y1],
-  ];
 }
 
 /** Zoom transform that fits `bounds` inside the visible view box. */
@@ -334,14 +259,7 @@ export function WorldMap(props: WorldMapProps) {
   useEffect(() => {
     const svg = svgRef.current;
     const behavior = zoomRef.current;
-    const bounds =
-      fit &&
-      union(
-        fit.ids.flatMap((id) => {
-          const b = geo.byId.get(id)?.bounds;
-          return b ? [b] : [];
-        }),
-      );
+    const bounds = fit && frameAround(geo, fit.ids);
     if (!svg || !behavior || !bounds) return;
     const next = clamp(frame(bounds, visibleBox(), 8));
     if (prefersReducedMotion()) select(svg).call(behavior.transform, next);

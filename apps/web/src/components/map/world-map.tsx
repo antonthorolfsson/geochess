@@ -510,26 +510,8 @@ export function WorldMap(props: WorldMapProps) {
             pointerEvents="none"
           />
           <path d={geo.coast} className="nss" fill="none" stroke="#0c1114" strokeWidth={0.9} pointerEvents="none" />
-          <path
-            d={lanePaths.all}
-            className="nss"
-            fill="none"
-            stroke="rgba(228,226,216,0.28)"
-            strokeWidth={1}
-            strokeDasharray="2 4"
-            pointerEvents="none"
-          />
-          {lanePaths.active && (
-            <path
-              d={lanePaths.active}
-              className="nss"
-              fill="none"
-              stroke={PAPER}
-              strokeWidth={1.6}
-              strokeDasharray="4 4"
-              pointerEvents="none"
-            />
-          )}
+          <SeaLanes d={lanePaths.all} />
+          {lanePaths.active && <SeaLanes d={lanePaths.active} active />}
           {highlightPath && (
             <path
               d={highlightPath}
@@ -763,6 +745,36 @@ function MicroDots({
             </g>
           );
         })}
+    </g>
+  );
+}
+
+/**
+ * Sea lanes, the crossings that count as borders: dashes of map-room white on a dark casing, so
+ * they read over open sea, over land at their ends, and over any empire's hatching. `active`
+ * draws the selected country's lanes stronger.
+ */
+function SeaLanes({ d, active = false }: { d: string; active?: boolean }) {
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      <path
+        d={d}
+        className="nss"
+        fill="none"
+        stroke={INK}
+        strokeOpacity={active ? 0.85 : 0.6}
+        strokeWidth={active ? 4.6 : 3.4}
+        strokeLinecap="round"
+      />
+      <path
+        d={d}
+        className="nss"
+        fill="none"
+        stroke={PAPER}
+        strokeOpacity={active ? 1 : 0.75}
+        strokeWidth={active ? 2.2 : 1.5}
+        strokeDasharray={active ? '7 4' : '5 4'}
+      />
     </g>
   );
 }

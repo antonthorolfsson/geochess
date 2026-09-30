@@ -72,6 +72,12 @@ second DMARC record would break it.
 - **Deploys** start the new server before stopping the old one. For a few seconds two schedulers
   run; the database row locks keep them from doing anything twice, and sockets reconnect to the
   new server. Avoid deploying the server during a live game anyway.
+- **Bots** play chess with Stockfish (`apps/server/engine/`, copied into the image): one child
+  process, started on a bot's first move and stopped after 10 idle minutes, which takes about 100 MB
+  beside the server (the free plan has 512 MB). On a tenth of a CPU, levels 1 to 7 play as they do
+  anywhere, since they search to a fixed depth, but level 8 fits less thinking into its 1.5 seconds
+  a move. While a deploy has two servers running, both may act for a bot; every action is checked as
+  a player's is, so the second of anything done twice is refused.
 - **Supabase's free plan** allows 500 MB of data and 5 GB of egress a month, keeps no backups,
   and pauses a project after a week without database activity (the server's 5-second deadline
   check counts). Watch the usage page during the playtest; Pro is $25/month.

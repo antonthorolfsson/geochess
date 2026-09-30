@@ -18,6 +18,7 @@ import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
+import { StandInBanner } from './stand-in';
 import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
@@ -637,6 +638,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           open: pageSegment === 'rules',
         }}
       />
+      <StandInBanner model={model} />
 
       <div className="relative flex min-h-0 flex-1">
         {isDesktop && (
@@ -886,18 +888,21 @@ function CampaignHeader({
         : 'Finished',
   }[campaign.status];
   const wars = model.activeWars.length;
-  // The call to action, most pressing first. Pressing it goes there.
-  const action = model.myTurn
-    ? { label: 'Your pick', title: 'Go to the draft' }
-    : mustChoose
-      ? { label: 'Choose mission', title: 'Go to your mission options' }
-      : myMoves > 0
-        ? { label: 'Your move', title: 'Open the next game waiting for your move' }
-        : declareTurn
-          ? { label: 'Your turn', title: 'Go to the war room to declare war or pass' }
-          : answers > 0
-            ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
-            : null;
+  // The call to action, most pressing first. Pressing it goes there. A bot standing in for the
+  // player answers and moves for them.
+  const action = model.me.bot
+    ? null
+    : model.myTurn
+      ? { label: 'Your pick', title: 'Go to the draft' }
+      : mustChoose
+        ? { label: 'Choose mission', title: 'Go to your mission options' }
+        : myMoves > 0
+          ? { label: 'Your move', title: 'Open the next game waiting for your move' }
+          : declareTurn
+            ? { label: 'Your turn', title: 'Go to the war room to declare war or pass' }
+            : answers > 0
+              ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
+              : null;
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-line bg-gunmetal px-2 pt-[env(safe-area-inset-top)]">
       <Link

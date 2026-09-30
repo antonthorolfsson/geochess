@@ -7,7 +7,6 @@ import {
   campaignRulesSchema,
   checkPick,
   empireColor,
-  firstFreeColor,
   holdTimeIssue,
   isDraftComplete,
   normalizeDraftList,
@@ -19,6 +18,8 @@ import {
   type TerritoryId,
 } from '@empire/rules';
 import { and, eq } from 'drizzle-orm';
+import { botDraftPick } from '../bots/draft';
+import { deleteBotUsers } from '../bots/lobby';
 import type { AppContext } from '../context';
 import { campaigns, holdings, members } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
@@ -32,6 +33,7 @@ import { openCampaign } from './lifecycle';
 import {
   EventLog,
   mutate,
+  nextSeatColor,
   requireHost,
   requireLobby,
   requireMember,
@@ -148,9 +150,7 @@ export async function joinCampaign(ctx: AppContext, inviteCode: string, userId: 
     if (campaign.inviteCode !== inviteCode) throw notFound('This invite link is no longer valid.');
     if (scope.members.some((m) => m.userId === userId)) return { id: campaign.id };
     requireLobby(scope);
-    if (scope.members.length >= campaign.rules.maxPlayers) throw conflict('This campaign is full.', 'full');
-    const color = firstFreeColor(scope.members.map((m) => m.color));
-    if (color === null) throw conflict('This campaign is full.', 'full');
+    const color = nextSeatColor(scope);
     await tx.insert(members).values({ campaignId: campaign.id, userId, color });
     await scope.log.add({ type: 'member.joined', payload: { userId, name: await userName(tx, userId) } }, userId, 0);
     return { id: campaign.id };
@@ -175,6 +175,7 @@ export async function removeMember(
       actorId,
       0,
     );
+    await deleteBotUsers(scope.tx, [targetId]);
   });
 }
 
@@ -186,7 +187,9 @@ export async function deleteCampaign(ctx: AppContext, campaignId: string, userId
       if (c.hostId !== userId) throw forbidden('Only the host can delete the campaign.');
       const rows = await tx.select({ userId: members.userId }).from(members).where(eq(members.campaignId, campaignId));
       await tx.delete(campaigns).where(eq(campaigns.id, campaignId));
-      return rows.map((r) => r.userId);
+      const memberIds = rows.map((r) => r.userId);
+      await deleteBotUsers(tx, memberIds);
+      return memberIds;
     });
     ctx.hub.send(memberIds, { type: 'campaign.deleted', campaignId });
   });
@@ -309,10 +312,13 @@ async function claim(
 /**
  * The pick made on a player's behalf, working through their draft list first. Auto-draft honors
  * the player's choice to wait once the list runs out; an explicit "pick for me" or host pick
- * always picks.
+ * always picks. A bot picks for itself.
  */
-function pickFor(run: DraftRun, userId: string, by: 'auto-draft' | 'request'): TerritoryId | null {
+function pickFor(ctx: AppContext, run: DraftRun, userId: string, by: 'auto-draft' | 'request'): TerritoryId | null {
   const member = run.scope.members.find((m) => m.userId === userId);
+  if (member?.botLevel != null) {
+    return botDraftPick(ctx, run.idx, run.scope.campaign, run.scope.members, run.owners, userId);
+  }
   const fallback = by === 'auto-draft' ? (member?.autodraftFallback ?? 'best') : 'best';
   return autoPick(run.idx, run.scope.campaign.rules, run.owners, userId, member?.draftList ?? [], fallback);
 }
@@ -321,13 +327,14 @@ function pickFor(run: DraftRun, userId: string, by: 'auto-draft' | 'request'): T
  * Makes the picks of every player on auto-draft whose turn comes up, saves the draft position,
  * and opens the campaign once every territory is claimed.
  */
-async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: DraftRun): Promise<void> {
+export async function advanceDraft(ctx: AppContext, scope: MutationScope, loaded?: DraftRun): Promise<void> {
   const run = loaded ?? (await loadDraft(ctx, scope));
-  const autodrafters = new Set(scope.members.filter((m) => m.autodraft).map((m) => m.userId));
+  // Bots pick for themselves, standing in for a person too.
+  const autodrafters = new Set(scope.members.filter((m) => m.autodraft || m.botLevel !== null).map((m) => m.userId));
   while (!isDraftComplete(run.idx, run.pickIndex)) {
     const picker = pickerAt(run.order, run.pickIndex);
     if (!autodrafters.has(picker)) break;
-    const choice = pickFor(run, picker, 'auto-draft');
+    const choice = pickFor(ctx, run, picker, 'auto-draft');
     if (!choice) break; // Waiting for the player: nothing on their list can be claimed.
     await claim(run, picker, choice, true, null);
   }
@@ -402,7 +409,7 @@ export async function makePick(
       if (picker !== userId && scope.campaign.hostId !== userId) {
         throw forbidden('Only the host can pick for another player.');
       }
-      const choice = pickFor(run, picker, 'request');
+      const choice = pickFor(ctx, run, picker, 'request');
       if (!choice) throw conflict('Nothing is left to claim.', 'draft-complete');
       await claim(run, picker, choice, true, userId);
     } else {
@@ -430,7 +437,7 @@ export async function endDraft(ctx: AppContext, campaignId: string, userId: stri
     const picks: { userId: string; territoryId: TerritoryId }[] = [];
     while (!isDraftComplete(run.idx, run.pickIndex)) {
       const picker = pickerAt(run.order, run.pickIndex);
-      const choice = pickFor(run, picker, 'request');
+      const choice = pickFor(ctx, run, picker, 'request');
       if (!choice) break;
       await claim(run, picker, choice, true, null, { log: false });
       picks.push({ userId: picker, territoryId: choice });

@@ -1,3 +1,4 @@
+export * from './bots';
 export * from './chess';
 export * from './colors';
 export * from './config';

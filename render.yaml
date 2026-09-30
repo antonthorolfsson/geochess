@@ -18,6 +18,8 @@ services:
         - apps/server/**
         - packages/rules/**
         - packages/data/**
+        # The server bundles the simulator's bots (@empire/sim/live).
+        - packages/sim/**
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

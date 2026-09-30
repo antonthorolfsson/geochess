@@ -5,6 +5,11 @@ import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import { createMailer, type Mailer } from './auth/mailer';
 import { registerAuthRoutes } from './auth/routes';
 import { SESSION_COOKIE, loadSessionUser } from './auth/session';
+import { createEngine, type ChessEngine } from './bots/engine';
+import { registerStandInGuard } from './bots/guard';
+import { skippingBots } from './bots/ids';
+import { registerBotRoutes } from './bots/routes';
+import { BotRunner } from './bots/runner';
 import { registerCampaignRoutes } from './campaigns/routes';
 import type { AppContext } from './context';
 import type { DatasetProvider } from './datasets';
@@ -41,6 +46,8 @@ export interface AppDeps {
    * `runDueWork` themselves.
    */
   scheduler?: boolean;
+  /** The chess engine bots play with. Tests pass their own. */
+  engine?: ChessEngine;
 }
 
 declare module 'fastify' {
@@ -64,13 +71,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const mailer = deps.mailer ?? createMailer(deps.env, app.log);
   const scheduling = deps.scheduler ?? true;
   const timers = new Timers(scheduling);
-  const ctx: AppContext = {
+  const engine = deps.engine ?? createEngine(app.log, deps.env.STOCKFISH_PATH);
+  const ctx = {
     db: deps.db,
     env: deps.env,
     datasets: deps.datasets,
     hub,
     mailer,
-    notifier: deps.notifier ?? createNotifier({ db: deps.db, env: deps.env, mailer, log: app.log }),
+    notifier: skippingBots(deps.notifier ?? createNotifier({ db: deps.db, env: deps.env, mailer, log: app.log })),
     log: app.log,
     now: deps.now ?? (() => new Date()),
     random: deps.random ?? cryptoRandom,
@@ -80,13 +88,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     openings: new OpeningNamer({
       onError: (err) => app.log.error({ err }, 'could not read the opening names; games go unnamed'),
     }),
-  };
+  } satisfies Omit<AppContext, 'bots'> as AppContext;
+  // Live games pause over bots' moves; tests move them on through the scheduler's sweep instead.
+  ctx.bots = new BotRunner(ctx, engine, { pausing: scheduling });
   app.decorate('ctx', ctx);
   const scheduler = scheduling ? startScheduler(ctx) : null;
   app.addHook('onClose', async () => {
     scheduler?.stop();
     timers.clearAll();
     hub.close();
+    await ctx.bots.close();
+    await engine.close();
   });
 
   await app.register(cookie);
@@ -121,6 +133,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.code(status).send({ error: { message } } satisfies ApiError);
   });
 
+  registerStandInGuard(app, ctx);
   app.get('/api/health', async () => ({ ok: true }));
   registerAuthRoutes(app, ctx);
   registerCampaignRoutes(app, ctx);
@@ -128,6 +141,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerDiplomacyRoutes(app, ctx);
   registerStatsRoutes(app, ctx);
   registerVictoryRoutes(app, ctx);
+  registerBotRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);
   registerRealtimeRoutes(app, ctx);
   return app;

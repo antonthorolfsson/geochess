@@ -1,4 +1,4 @@
-import { STAT_KEYS, validateGraph, type Dataset } from '@empire/rules';
+import { BOT_NAMES, STAT_KEYS, validateGraph, type Dataset } from '@empire/rules';
 import { geoArea } from 'd3-geo';
 import type { Geometry } from 'geojson';
 import { readFileSync } from 'node:fs';
@@ -94,6 +94,12 @@ describe(`dataset ${index.latest} (latest)`, () => {
         expect(lanes.has(t.id < n ? `${t.id}|${n}` : `${n}|${t.id}`), `${t.id}–${n} lane`).toBe(true);
       }
     }
+  });
+
+  it('names no country after a bot call sign', () => {
+    const names = dataset.territories.flatMap((t) => [t.name, ...t.members.map((m) => m.name)]);
+    const words = names.flatMap((n) => n.toLowerCase().split(/[^a-z]+/));
+    for (const name of BOT_NAMES) expect(words, name).not.toContain(name.toLowerCase());
   });
 
   it.each(EXPECTED_LAND_BORDERS)('has the land border %s–%s', (a, b) => {

@@ -12,7 +12,7 @@ const POLL_MS = 5_000;
 /**
  * Everything due by now: unanswered declarations and counter-offers, turns to declare nobody
  * took, flag-falls, half-settled games, accord proposals and peace offers nobody answered, secret
- * missions not chosen in time, and claims whose holding time is up.
+ * missions not chosen in time, claims whose holding time is up, and anything a bot still has to do.
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
@@ -21,6 +21,7 @@ export async function runDueWork(ctx: AppContext): Promise<void> {
   await lapseProposals(ctx);
   await lapsePeaceOffers(ctx);
   await runVictoryDeadlines(ctx);
+  await ctx.bots.sweep();
 }
 
 /**

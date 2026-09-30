@@ -22,6 +22,7 @@ import {
   users,
   wars,
 } from '../db/schema';
+import { isBotId } from '../bots/ids';
 import { visibleAccords } from '../diplomacy/accords';
 import { unreadPrivateMessages } from '../diplomacy/chat';
 import { toAccordView } from '../diplomacy/views';
@@ -67,6 +68,7 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
           tokens: members.tokens,
           reputation: members.reputation,
           joinedAt: members.joinedAt,
+          botLevel: members.botLevel,
         })
         .from(members)
         .innerJoin(users, eq(users.id, members.userId))
@@ -158,7 +160,11 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         datasetVersion: c.datasetVersion,
         inviteCode: c.inviteCode,
         createdAt: c.createdAt.toISOString(),
-        members: memberRows.map((m) => ({ ...m, joinedAt: m.joinedAt.toISOString() })),
+        members: memberRows.map(({ joinedAt, botLevel, ...m }) => ({
+          ...m,
+          joinedAt: joinedAt.toISOString(),
+          bot: botLevel === null ? null : { level: botLevel, standIn: !isBotId(m.userId) },
+        })),
         holdings: Object.fromEntries(holdingRows.map((h) => [h.territoryId, h.ownerId])),
         draft: order?.length
           ? {

@@ -13,6 +13,7 @@ import { userName } from '../campaigns/mutate';
 import { toEventView } from '../campaigns/views';
 import type { AppContext } from '../context';
 import { campaigns, chatReads, events, members, messages } from '../db/schema';
+import { isBotId } from '../bots/ids';
 import { badRequest, forbidden, notFound, tooManyRequests } from '../lib/errors';
 import { RateLimiter } from '../lib/rate-limit';
 import { toMessageView, type MessageRow } from './views';
@@ -97,6 +98,8 @@ export class ChatService {
     if (to !== null && (to === userId || !memberIds.includes(to))) {
       throw badRequest('Send private messages to another player in this campaign.', 'bad-recipient');
     }
+    // Nothing reads a bot's messages (and a bot's user goes when the host removes it).
+    if (to !== null && isBotId(to)) throw badRequest('Bots don’t read messages.', 'bot-recipient');
     if (!this.sent.take(userId)) throw tooManyRequests('You are sending messages too quickly. Wait a moment.');
     const [row] = await this.ctx.db
       .insert(messages)

@@ -1,6 +1,13 @@
 'use client';
 
-import type { Acquisition, CampaignStats, StatKey, Territory, TerritoryId } from '@empire/rules';
+import {
+  botLevelText,
+  type Acquisition,
+  type CampaignStats,
+  type StatKey,
+  type Territory,
+  type TerritoryId,
+} from '@empire/rules';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { errorMessage } from '@/lib/api';
@@ -9,7 +16,9 @@ import { empireFigures, formatShare, valueRank, type EmpireFigure } from '@/lib/
 import { formatArea, formatAreaCompact, formatCount, formatUsd, ordinal } from '@/lib/format';
 import { useCampaignStats } from '@/lib/queries';
 import { playerName } from '@/lib/wars';
+import { BotTag } from '../campaign/player-name';
 import { useCampaignRoom, useEmpireHref } from '../campaign/room-context';
+import { StandInControls } from '../campaign/stand-in';
 import { EmpireSwatch } from '../hatch';
 import { Notice, Spinner, ValueBadge } from '../ui';
 import { ChessProfileView } from './chess-profile';
@@ -61,6 +70,7 @@ export function EmpireScreen({ userId }: { userId: string }) {
   return (
     <article className="mx-auto max-w-6xl space-y-6 px-4 pt-5 pb-10 lg:px-8">
       <EmpireHeader model={model} userId={userId} />
+      <StandInControls model={model} member={member} />
       <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
         <Section title="Real-world totals">
           <Totals model={model} userId={userId} />
@@ -117,6 +127,7 @@ function EmpireHeader({ model, userId }: { model: CampaignModel; userId: string 
   const { rank, of } = valueRank(model.idx, model.holdingsByUser, userId);
   const you = userId === model.me.userId;
   const facts = [
+    ...(member.bot ? [botLevelText(member.bot.level)] : []),
     `${ids.length} ${ids.length === 1 ? 'country' : 'countries'}`,
     `value ${totalValue(model.idx, ids)}`,
     ...(campaign.status === 'lobby' ? [] : [`reputation ${member.reputation}`]),
@@ -131,6 +142,7 @@ function EmpireHeader({ model, userId }: { model: CampaignModel; userId: string 
           <EmpireSwatch color={member.color} size={28} className="shrink-0" />
           <span className="truncate font-stencil text-[2rem] leading-tight tracking-wide">{member.name}</span>
           {you && <span className="shrink-0 text-xs font-bold tracking-widest text-muted uppercase">you</span>}
+          {member.bot && <BotTag level={member.bot.level} standIn={member.bot.standIn} />}
         </h1>
         <p className="text-[0.95rem] text-muted">{facts.join(' · ')}</p>
       </div>

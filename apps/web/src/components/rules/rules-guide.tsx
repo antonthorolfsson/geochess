@@ -4,6 +4,7 @@ import {
   ACCORD_MAX_ROUNDS,
   ACCORD_MIN_ROUNDS,
   ARMAGEDDON_BLACK_TIME,
+  BOT_LEVELS,
   CORRESPONDENCE_HOURS,
   DEFAULT_RULES,
   FORTIFY_COST,
@@ -98,6 +99,7 @@ export function RulesGuide(props: RulesGuideProps) {
     { id: 'battle', label: 'The battle' },
     { id: 'after', label: 'After a war' },
     { id: 'diplomacy', label: 'Diplomacy' },
+    { id: 'bots', label: 'Bots' },
     { id: 'deadlines', label: 'Deadlines' },
     { id: 'ending', label: 'Winning' },
     ...(standard ? [{ id: 'settings', label: 'Settings' }] : []),
@@ -128,6 +130,7 @@ export function RulesGuide(props: RulesGuideProps) {
         <Battle rules={rules} standard={standard} />
         <AfterWar rules={rules} standard={standard} />
         <Diplomacy rules={rules} standard={standard} />
+        <Bots />
         <Deadlines rules={rules} standard={standard} />
         <Victory rules={rules} standard={standard} />
         {standard && settings}
@@ -982,6 +985,78 @@ function Diplomacy({ rules, standard }: { rules: CampaignRules; standard: boolea
           Everyone starts with {REPUTATION_START}. Each whole round an accord holds earns both partners{' '}
           {REPUTATION_PER_ROUND}, paid when the next round starts; breaking one costs {-REPUTATION_BROKEN}. Reputation
           doesn't change what you can do. It shows everyone who keeps their word.
+        </p>
+      </Part>
+    </Section>
+  );
+}
+
+function Bots() {
+  return (
+    <Section id="bots" title="Playing with bots">
+      <p>
+        In the lobby, the host can fill seats with bots and choose each one&apos;s chess level. A bot plays the whole
+        game like anyone at the table: it drafts, chooses a secret mission, declares and answers wars, fortifies, makes
+        and breaks accords, and plays its own games. It sees only what a player in its seat would see: no one
+        else&apos;s secret mission until it&apos;s revealed, and no proposals or peace terms between other players.
+      </p>
+      <Part title="How fast">
+        <p>
+          Bots answer straight away. In a correspondence game a bot replies to your move within seconds, so you can play
+          the whole game in one sitting; in a live game it takes a few seconds a move. A bot can play several games at
+          once.
+        </p>
+      </Part>
+      <Part title="Levels">
+        <p>
+          The level sets only how well a bot plays chess; every bot plays the map the same way. The host can change a
+          level until the draft starts, and everyone sees each bot&apos;s level. Ratings are rough: the levels played
+          one another, and the results are pinned to Stockfish&apos;s own calibration of level 3, which is measured
+          against other engines. Take them as a guide rather than a match for your online rating.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[20rem] text-left text-[0.95rem] leading-snug">
+            <thead>
+              <tr className="border-b border-line-strong">
+                <th scope="col" className="label py-1.5 pr-3">
+                  Level
+                </th>
+                <th scope="col" className="label py-1.5 pr-3">
+                  Rating
+                </th>
+                <th scope="col" className="label py-1.5">
+                  Plays
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {BOT_LEVELS.map((l) => (
+                <tr key={l.level} className="align-top">
+                  <th scope="row" className="py-2 pr-3 font-semibold whitespace-nowrap">
+                    {l.level} · {l.name}
+                  </th>
+                  <td className="py-2 pr-3 whitespace-nowrap tabular-nums">about {l.rating}</td>
+                  <td className="py-2 text-muted">{l.summary}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Part>
+      <Part title="Standing in for a player">
+        <p>
+          If a player goes quiet, the host can hand their empire to a bot, from the draft on: open the player&apos;s
+          empire page (their name in the standings) and choose <UI>Hand to a bot</UI>. The bot plays the empire as its
+          own, and everything stays the player&apos;s: countries, wars, accords, secret mission and points. Meanwhile
+          the player can read everything and chat, and gets no notices the bot deals with. They take the empire back
+          with <UI>Take it back</UI> whenever they return, and the host can hand it back too.
+        </p>
+      </Part>
+      <Part title="Dealing with a bot">
+        <p>
+          Bots don&apos;t read messages. To deal with one, propose an accord or offer peace terms: it signs or accepts
+          when that&apos;s worth more to it than war. Offered a draw, a bot takes it when a draw wins it the war,
+          refuses when a draw loses it, and otherwise takes it unless it&apos;s doing better on the board.
         </p>
       </Part>
     </Section>

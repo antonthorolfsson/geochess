@@ -243,7 +243,7 @@ export function Standings({ model }: { model: CampaignModel }) {
                 />
                 <span className="block pl-6 text-xs text-muted tabular-nums">
                   {countries(count)}
-                  {member.autodraft && model.campaign.status === 'draft' && ' · auto-draft'}
+                  {member.autodraft && !member.bot && model.campaign.status === 'draft' && ' · auto-draft'}
                 </span>
               </td>
               {showPoints && <td className="py-1.5 pl-2 text-right font-bold text-amber tabular-nums">{points}</td>}

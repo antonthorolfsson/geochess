@@ -13,7 +13,7 @@ import type { SimConfig, SimPlayer, SimState, WarStats } from './types';
 
 const OUTCOMES: WarOutcome[] = ['attacker', 'defender', 'held', 'tribute', 'settled', 'withdrawn', 'cancelled'];
 
-function emptyStats(): WarStats {
+export function emptyStats(): WarStats {
   return {
     declared: 0,
     responses: { accept: 0, raise: 0, redirect: 0, 'tribute-country': 0, 'tribute-tokens': 0, peace: 0 },

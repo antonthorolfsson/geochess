@@ -1,6 +1,7 @@
 import type {
   ApiError as ApiErrorBody,
   AutodraftFallback,
+  BotInput,
   CampaignStats,
   CampaignSummary,
   CampaignView,
@@ -92,6 +93,14 @@ export const api = {
     request('PATCH', `/campaigns/${id}/members/${encodeURIComponent(userId)}`, { color }),
   leave: (id: string) => request('POST', `/campaigns/${id}/leave`),
   kick: (id: string, userId: string) => request('POST', `/campaigns/${id}/kick`, { userId }),
+  addBot: (id: string, input: BotInput) => request<{ userId: string }>('POST', `/campaigns/${id}/bots`, input),
+  setBotLevel: (id: string, botId: string, input: BotInput) =>
+    request('PATCH', `/campaigns/${id}/bots/${botId}`, input),
+  /** The host hands a player's empire to a bot. */
+  standIn: (id: string, userId: string, input: BotInput) =>
+    request('PUT', `/campaigns/${id}/players/${userId}/stand-in`, input),
+  /** The player takes their empire back from its bot, or the host hands it back. */
+  takeBack: (id: string, userId: string) => request('DELETE', `/campaigns/${id}/players/${userId}/stand-in`),
   startDraft: (id: string) => request('POST', `/campaigns/${id}/draft/start`),
   pick: (id: string, territoryId: string) => request('POST', `/campaigns/${id}/draft/pick`, { territoryId }),
   autopick: (id: string) => request('POST', `/campaigns/${id}/draft/autopick`),

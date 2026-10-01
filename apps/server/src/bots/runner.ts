@@ -16,7 +16,7 @@ import { answerAccord, proposeAccord, renounceAccord } from '../diplomacy/accord
 import { HttpError } from '../lib/errors';
 import { chooseSecret } from '../victory/selection';
 import type { GameRow } from '../wars/board';
-import { gameAction, playMove } from '../wars/games';
+import { gameAction, overTheBoardAction, playMove } from '../wars/games';
 import { answerPeace, proposePeace } from '../wars/peace';
 import { declareWar, fortifyCountry, replyToWar, respondToWar } from '../wars/service';
 import { passTurn } from '../wars/turns';
@@ -166,7 +166,11 @@ export class BotRunner {
             and(playedByBot(games.campaignId, games.whiteId), sql`jsonb_array_length(${games.moves}) % 2 = 0`),
             and(playedByBot(games.campaignId, games.blackId), sql`jsonb_array_length(${games.moves}) % 2 = 1`),
             and(
-              isNotNull(games.drawOfferBy),
+              or(
+                isNotNull(games.drawOfferBy),
+                isNotNull(games.otbOfferBy),
+                and(isNotNull(games.overTheBoardAt), isNull(games.report)),
+              ),
               or(playedByBot(games.campaignId, games.whiteId), playedByBot(games.campaignId, games.blackId)),
             ),
           ),
@@ -340,6 +344,19 @@ export class BotRunner {
     const ply = game.moves.length;
     const turn = colorToMove(ply);
     const moverId = turn === 'white' ? game.whiteId : game.blackId;
+
+    // Bots play online only. One offered a real board turns it down; one standing in for a person
+    // who was playing over the board takes the game back online, once a reported result is answered
+    // (or stands).
+    if (game.otbOfferBy) {
+      const botId = game.otbOfferBy === game.whiteId ? game.blackId : game.whiteId;
+      if (botLevel(botId) !== null) return this.act(() => overTheBoardAction(ctx, gameId, botId, 'decline'));
+    }
+    if (game.overTheBoardAt) {
+      if (game.report) return;
+      const botId = botLevel(game.whiteId) !== null ? game.whiteId : game.blackId;
+      return this.act(() => overTheBoardAction(ctx, gameId, botId, 'online'));
+    }
 
     // A draw offered to a bot: taken, turned down, or on its own move passed over by moving.
     if (game.drawOfferBy) {

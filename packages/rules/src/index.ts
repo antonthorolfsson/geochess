@@ -8,6 +8,7 @@ export * from './draft';
 export * from './graph';
 export * from './handicap';
 export * from './openings';
+export * from './over-the-board';
 export * from './protocol';
 export * from './stats';
 export * from './turns';

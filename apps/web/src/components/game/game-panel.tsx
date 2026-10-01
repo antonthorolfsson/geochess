@@ -1,6 +1,14 @@
 'use client';
 
-import { ChessGame, opposite, valueOf, type Color, type GameView, type WarView } from '@empire/rules';
+import {
+  ChessGame,
+  opposite,
+  valueOf,
+  type Color,
+  type GameView,
+  type OverTheBoardAction,
+  type WarView,
+} from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Config } from 'chessground/config';
 import type { Key } from 'chessground/types';
@@ -80,14 +88,15 @@ function GameBoard({
   const bottom: Color = flipped ? opposite(myColor ?? 'white') : (myColor ?? 'white');
   const chess = useMemo(() => ChessGame.fromMoves(game.moves), [game.moves]);
   const playing = game.status === 'playing';
+  const otb = playing && game.overTheBoard;
   const live = game.timeControl.kind === 'live';
-  const now = useNow(live ? 100 : 1000, playing);
+  const now = useNow(live && !otb ? 100 : 1000, playing);
   // The server's clock differs from ours; count from when each state arrived.
   const localStart = game.startsAt ? game.receivedAt + Date.parse(game.startsAt) - Date.parse(game.serverNow) : 0;
-  const countdown = playing ? localStart - now : 0;
+  const countdown = playing && !otb ? localStart - now : 0;
   const started = countdown <= 0;
   const turn = chess.turn;
-  const canMove = playing && started && myColor !== null;
+  const canMove = playing && !otb && started && myColor !== null;
   const myTurn = canMove && turn === myColor;
 
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +159,7 @@ function GameBoard({
 
   const clock = (color: Color) => {
     if (!game.clocks) return null;
-    const running = playing && started && color === turn;
+    const running = playing && !otb && started && color === turn;
     return game.clocks[color] - (running ? Math.max(0, now - Math.max(game.receivedAt, localStart)) : 0);
   };
   const perMoveLeft = game.deadline
@@ -158,18 +167,34 @@ function GameBoard({
     : null;
   const opponentOffered = game.drawOfferBy !== null && game.drawOfferBy !== me;
   const target = war ? model.idx.byId.get(war.targetId) : undefined;
+  const opponentId = myColor === 'white' ? game.blackId : game.whiteId;
+  // Bots, standing in for a person too, play online only.
+  const people = !model.membersById.get(game.whiteId)?.bot && !model.membersById.get(game.blackId)?.bot;
 
-  const strip = (color: Color) => (
-    <PlayerStrip
-      model={model}
-      userId={color === 'white' ? game.whiteId : game.blackId}
-      color={color}
-      clockMs={clock(color)}
-      toMove={playing && color === turn}
-      perMoveLeft={!live && playing && color === turn ? perMoveLeft : null}
-      offeredDraw={game.drawOfferBy === (color === 'white' ? game.whiteId : game.blackId)}
-    />
-  );
+  const strip = (color: Color) => {
+    const userId = color === 'white' ? game.whiteId : game.blackId;
+    const note =
+      otb && game.report?.by === userId
+        ? game.report.result === '1/2-1/2'
+          ? 'reports a draw'
+          : 'reports a win'
+        : !otb && game.overTheBoardOfferBy === userId
+          ? 'offers a real board'
+          : game.drawOfferBy === userId
+            ? 'offers a draw'
+            : null;
+    return (
+      <PlayerStrip
+        model={model}
+        userId={userId}
+        color={color}
+        clockMs={clock(color)}
+        toMove={playing && !otb && color === turn}
+        perMoveLeft={!live && playing && !otb && color === turn ? perMoveLeft : null}
+        note={note}
+      />
+    );
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-3 p-3 lg:p-4">
@@ -198,6 +223,13 @@ function GameBoard({
               setResync((n) => n + 1);
             }}
           />
+        )}
+        {otb && (
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
+            <div className="rounded-[3px] bg-gunmetal/85 px-4 py-2 text-center font-stencil text-2xl tracking-wide text-paper">
+              Over the board
+            </div>
+          </div>
         )}
         {playing && !started && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gunmetal/55">
@@ -230,7 +262,38 @@ function GameBoard({
       )}
       {error && <Notice tone="error">{error}</Notice>}
 
-      {myColor && (playing || game.status === 'waiting') && (
+      {myColor && otb && (
+        <OverTheBoardControls
+          model={model}
+          game={game}
+          me={me}
+          opponentId={opponentId}
+          now={now}
+          pending={action.isPending}
+          run={(act) => action.mutate(() => api.overTheBoard(game.id, act))}
+          onResign={() => {
+            if (confirm('Report that you lost? This ends the game at once.')) action.mutate(() => api.resign(game.id));
+          }}
+          onFlip={() => setFlipped((f) => !f)}
+        />
+      )}
+      {myColor && !otb && playing && people && (
+        <OverTheBoardOffer
+          model={model}
+          game={game}
+          me={me}
+          pending={action.isPending}
+          run={(act) => action.mutate(() => api.overTheBoard(game.id, act))}
+        />
+      )}
+      {!myColor && otb && (
+        <Notice>
+          {playerName(model, game.whiteId)} and {playerName(model, game.blackId)} are playing this game over the board,
+          on a real board. The result appears here once they report it.
+        </Notice>
+      )}
+
+      {myColor && !otb && (playing || game.status === 'waiting') && (
         <div className="flex flex-wrap gap-2">
           {opponentOffered ? (
             <>
@@ -298,7 +361,7 @@ function PlayerStrip({
   clockMs,
   toMove,
   perMoveLeft,
-  offeredDraw,
+  note,
 }: {
   model: CampaignModel;
   userId: string;
@@ -306,7 +369,8 @@ function PlayerStrip({
   clockMs: number | null;
   toMove: boolean;
   perMoveLeft: number | null;
-  offeredDraw: boolean;
+  /** What the player offers or reports, if anything: "offers a draw". */
+  note: string | null;
 }) {
   const low = clockMs !== null && clockMs < 20_000;
   const member = model.membersById.get(userId);
@@ -318,7 +382,7 @@ function PlayerStrip({
       />
       <span className="min-w-0 flex-1">
         <PlayerName member={member} you={userId === model.me.userId} size="sm" />
-        {offeredDraw && <span className="ml-2 text-xs font-bold text-amber uppercase">offers a draw</span>}
+        {note && <span className="ml-2 text-xs font-bold text-amber uppercase">{note}</span>}
       </span>
       {clockMs !== null ? (
         <span
@@ -341,6 +405,145 @@ function PlayerStrip({
           </span>
         ))
       )}
+    </div>
+  );
+}
+
+/** Online: offering to play the game over the board, or answering the other player's offer. */
+function OverTheBoardOffer({
+  model,
+  game,
+  me,
+  pending,
+  run,
+}: {
+  model: CampaignModel;
+  game: BoardGame;
+  me: string;
+  pending: boolean;
+  run(action: OverTheBoardAction): void;
+}) {
+  const offerBy = game.overTheBoardOfferBy;
+  if (offerBy && offerBy !== me) {
+    return (
+      <div className="space-y-2 rounded-[3px] border border-amber/70 bg-amber/5 px-3 py-2">
+        <p className="text-[0.95rem]">
+          {playerName(model, offerBy)} wants to play this game over the board, on a real board. The clocks here stop,
+          and you report the result when the game is over.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run('accept')}>
+            Play over the board
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => run('decline')}>
+            Keep playing online
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        disabled={pending || offerBy === me}
+        onClick={() => run('offer')}
+        title="Meeting up? Play this game on a real board and report the result here."
+      >
+        {offerBy === me ? 'Real board offered' : 'Play over the board'}
+      </button>
+      {offerBy === me && (
+        <span className="text-sm text-muted">
+          The clocks keep running until {playerName(model, game.whiteId === me ? game.blackId : game.whiteId)} accepts.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Over the board: reporting the result, answering the other player's report, or going back online. */
+function OverTheBoardControls({
+  model,
+  game,
+  me,
+  opponentId,
+  now,
+  pending,
+  run,
+  onResign,
+  onFlip,
+}: {
+  model: CampaignModel;
+  game: BoardGame;
+  me: string;
+  opponentId: string;
+  now: number;
+  pending: boolean;
+  run(action: OverTheBoardAction): void;
+  onResign(): void;
+  onFlip(): void;
+}) {
+  const { report } = game;
+  const opponent = playerName(model, opponentId);
+  const left = game.deadline ? Date.parse(game.deadline) - Date.parse(game.serverNow) - (now - game.receivedAt) : null;
+  const stands = left !== null ? ` Unanswered, it stands in ${timeLeft(left)}.` : '';
+  // A reported win is always the reporter's.
+  const what = (r: NonNullable<typeof report>) => (r.result === '1/2-1/2' ? 'a draw' : 'a win');
+
+  if (report && report.by !== me) {
+    return (
+      <div className="space-y-2 rounded-[3px] border border-amber/70 bg-amber/5 px-3 py-2">
+        <p className="text-[0.95rem]">
+          <strong>{opponent}</strong> reports {what(report)} over the board.{stands}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run('confirm')}>
+            Confirm
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => run('dispute')}>
+            Dispute
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.95rem] text-muted">
+        {report
+          ? `You reported ${what(report)}. Waiting for ${opponent} to confirm it.${stands}`
+          : `You're playing this game on a real board, so the clocks here are stopped. When it's over, report the result: ${opponent} confirms it.`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={pending || (report?.by === me && report.result !== '1/2-1/2')}
+          onClick={() => run('report-win')}
+        >
+          I won
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={pending || (report?.by === me && report.result === '1/2-1/2')}
+          onClick={() => run('report-draw')}
+        >
+          Draw
+        </button>
+        <button type="button" className="btn btn-danger btn-sm" disabled={pending} onClick={onResign}>
+          I lost
+        </button>
+        {!report && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => run('online')}>
+            Play online instead
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onFlip}>
+          Flip board
+        </button>
+      </div>
     </div>
   );
 }

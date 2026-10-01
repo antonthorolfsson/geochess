@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireUser } from '../auth/session';
 import type { AppContext } from '../context';
 import { parse } from '../lib/http';
-import { gameAction, gameView, playMove } from './games';
+import { gameAction, gameView, overTheBoardAction, playMove } from './games';
 import { answerPeace, proposePeace, withdrawPeace } from './peace';
 import { declareWar, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
 import { passTurn } from './turns';
@@ -28,6 +28,10 @@ const declareInput = z.object({
 const fortifyInput = z.object({ territoryId: territory });
 
 const passInput = z.object({ userId: id });
+
+const overTheBoardInput = z.object({
+  action: z.enum(['offer', 'accept', 'decline', 'report-win', 'report-draw', 'confirm', 'dispute', 'online']),
+});
 
 const tokens = z.number().int().min(0).max(99);
 const peaceInput = z.object({
@@ -165,5 +169,12 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
     const { gameId } = parse(gameParams, req.params);
     const { action } = parse(drawInput, req.body);
     return gameAction(ctx, gameId, user.id, `${action}-draw`);
+  });
+
+  app.post('/api/games/:gameId/over-the-board', async (req) => {
+    const user = requireUser(req);
+    const { gameId } = parse(gameParams, req.params);
+    const { action } = parse(overTheBoardInput, req.body);
+    return overTheBoardAction(ctx, gameId, user.id, action);
   });
 }

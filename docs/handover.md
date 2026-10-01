@@ -787,6 +787,49 @@ starts**.
 Tests: rules `handicap.test.ts`, server `test/handicap.test.ts` (with a fake Lichess; tests never
 reach Lichess, `startTestServer`'s `lichess` option), web `rules-text.test.ts`.
 
+**Over the board** (2026-10-01, at the user's request: "Some friend groups might want to meet up and
+play the chess games over the board. Each battle should have the option of concluding otb. The
+winner can then declare victory and the loser acknowledges it"). Any game between two people can
+move to a real board, in any campaign: it needs both players' agreement, so it isn't a host
+setting, and nothing changes for players who don't use it.
+
+- **Rules** (`packages/rules/src/over-the-board.ts`, `overTheBoard()`): either player offers, the
+  other accepts (offering back accepts) or declines; a move online declines it, like a draw offer.
+  Over the board there are no moves, clocks or draw offers here. A player reports "I won" or a draw
+  and the other confirms or disputes; the reporter may change their report, the other can't report
+  over it. "I lost" is resigning, which ends the game at once. A report nobody answers in the answer
+  window (`REPORT_WINDOW_MS`, 24 h / 5 min) stands. Disputing leaves the game on the real board.
+  Either player can take it back online when no report is waiting. Games with a bot seat (stand-ins
+  too) can't move over the board.
+- **Server.** Columns `games.otb_offer_by`, `over_the_board_at` and `report` (migration
+  `0012_over_the_board`); `POST /api/games/:gameId/over-the-board` with `{ action }`
+  (`overTheBoardAction` in `wars/games.ts`). Moving over the board freezes the clocks (`clocks` as
+  they stand, `lastMoveAt` null, no deadline); a report sets `deadline`, so the scheduler and live
+  flag timers make an unanswered report stand (`flagIfDue`). Going back online starts the clocks
+  again after the live countdown (correspondence: a fresh time per move). Every result reached over
+  the board has reason `over-the-board`, which settles the war as usual. An Armageddon tiebreak
+  after a draw over the board starts over the board too. Offers, reports, disputes and returns to
+  online notify the other player (reports by email in correspondence); the home screen counts an
+  offer or a report waiting for the player, and not an over-the-board game as their move.
+- **Bots** decline offers, and a bot standing in for a player whose game was over the board takes
+  it back online (once any report is answered or stands) and plays on (`runner.ts`).
+- **Stats.** Over-the-board games count in results and endings ("Won over the board") but not in
+  the average length or openings.
+- **Web:** "Play over the board" under the board (the opponent sees the offer with "Play over the
+  board" and "Keep playing online"); over the board, "I won", "Draw", "I lost" and "Play online
+  instead", or "Confirm" and "Dispute" for a report, with how long until it stands. The player
+  strips say "offers a real board" or "reports a win"; Your games says "Over the board?", "Over the
+  board" or "Confirm result". The rules guide's battle section has an "Over the board" part, and
+  the deadlines table a row.
+- **Checked in the browser** (dev server, correspondence): Bo offered after 1. e4 e5, Ann accepted,
+  Bo reported a win, Ann confirmed, and Bo took Azerbaijan, "White wins over the board".
+
+Defaults taken while building (not asked; easy to change): a report stands if unanswered (as an
+unanswered declaration goes ahead), rather than waiting forever; either player can return the game
+online alone, as the way out of a dispute; only games underway (not queued live games) can move.
+
+Tests: rules `over-the-board.test.ts`, server `test/over-the-board.test.ts`.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

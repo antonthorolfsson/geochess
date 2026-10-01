@@ -9,6 +9,7 @@ import {
   type PeaceOfferStatus,
   type PeaceTerms,
   type PlayerRating,
+  type ResultReport,
   type SecretMissionSpec,
   type SecretOption,
   type TimeControl,
@@ -246,11 +247,17 @@ export const games = pgTable(
     result: text('result', { enum: GAME_RESULTS }),
     reason: text('reason').$type<GameEndReason>(),
     drawOfferBy: text('draw_offer_by'),
+    /** A standing offer to play the game over the board. */
+    otbOfferBy: text('otb_offer_by'),
+    /** When the game moved over the board, to a real board: no moves or clocks here meanwhile. */
+    overTheBoardAt: timestamp('over_the_board_at', { withTimezone: true }),
+    /** Over the board: a result one player reported, waiting for the other's answer until `deadline`. */
+    report: jsonb('report').$type<ResultReport>(),
     /** When play starts; live games open with a countdown. */
     startsAt: timestamp('starts_at', { withTimezone: true }),
-    /** The clock reference: the start of play, then each move. */
+    /** The clock reference: the start of play, then each move. Null while over the board, which stops the clocks. */
     lastMoveAt: timestamp('last_move_at', { withTimezone: true }),
-    /** When the side to move loses on time. */
+    /** When the side to move loses on time; over the board, when an unanswered report stands. */
     deadline: timestamp('deadline', { withTimezone: true }),
     createdAt: createdAt(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),

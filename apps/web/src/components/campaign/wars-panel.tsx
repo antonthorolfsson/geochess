@@ -309,18 +309,27 @@ function YourGames({ model, onOpenGame }: { model: CampaignModel; onOpenGame(gam
   const now = useNow(1000, mine.length > 0);
   if (mine.length === 0) return null;
   const rows = mine
-    .map(({ war, gameId, game, myMove }) => {
+    .map(({ war, gameId, game, myMove, overTheBoard }) => {
       const left = game?.deadline
         ? Date.parse(game.deadline) - Date.parse(game.serverNow) - (now - game.receivedAt)
         : null;
-      return { war, gameId, myMove, left };
+      const label = overTheBoard
+        ? myMove
+          ? 'Confirm result'
+          : 'Over the board'
+        : game?.overTheBoardOfferBy && game.overTheBoardOfferBy !== me
+          ? 'Over the board?'
+          : myMove
+            ? 'Your move'
+            : 'Their move';
+      return { war, gameId, myMove, left, label };
     })
     .sort((a, b) => Number(b.myMove) - Number(a.myMove));
   return (
     <section>
       <h2 className="label mb-2">Your games</h2>
       <ul className="space-y-1.5">
-        {rows.map(({ war, gameId, myMove, left }) => (
+        {rows.map(({ war, gameId, myMove, left, label }) => (
           <li key={gameId}>
             <button
               type="button"
@@ -338,7 +347,7 @@ function YourGames({ model, onOpenGame }: { model: CampaignModel; onOpenGame(gam
                 </span>
               </span>
               <span className={`text-sm font-bold ${myMove ? 'text-amber' : 'text-muted'}`}>
-                {myMove ? 'Your move' : 'Their move'}
+                {label}
                 {left !== null && model.campaign.rules.war.pace === 'correspondence' && (
                   <span className="block text-right font-normal tabular-nums">{timeLeft(left)}</span>
                 )}

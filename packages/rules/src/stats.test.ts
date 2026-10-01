@@ -310,6 +310,15 @@ describe('chess profile', () => {
     expect(ann.averageMoves).toBe(19.25);
   });
 
+  it('counts games played over the board, but not their length or opening', () => {
+    const otb = game('7', { reason: 'over-the-board', plies: 4, finishedAt: '2026-09-10T12:00:00.000Z' });
+    const ann = chessProfile(ANN, [...games, otb]);
+    expect(ann.played).toBe(5);
+    expect(ann.endings['over-the-board']).toEqual({ won: 1, drawn: 0, lost: 0 });
+    expect(ann.averageMoves).toBe(19.25);
+    expect(ann.openings.find((o) => o.family === 'Italian Game')?.games).toBe(2);
+  });
+
   it('groups openings into families for each colour, most played first', () => {
     expect(chessProfile(ANN, games).openings).toEqual([
       { family: 'Italian Game', color: 'white', games: 2, won: 1, drawn: 1, lost: 0 },

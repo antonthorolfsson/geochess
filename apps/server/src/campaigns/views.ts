@@ -8,7 +8,7 @@ import {
   type EventView,
   type InvitePreview,
 } from '@empire/rules';
-import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context';
 import {
   accords,
@@ -275,9 +275,18 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
         inArray(games.campaignId, campaignIds),
         eq(games.status, 'playing'),
         or(
-          and(eq(games.whiteId, userId), sql`jsonb_array_length(${games.moves}) % 2 = 0`),
-          and(eq(games.blackId, userId), sql`jsonb_array_length(${games.moves}) % 2 = 1`),
+          // Online: their move, or an offer to play over the board. Over the board: a result reported to them.
+          and(
+            isNull(games.overTheBoardAt),
+            or(
+              and(eq(games.whiteId, userId), sql`jsonb_array_length(${games.moves}) % 2 = 0`),
+              and(eq(games.blackId, userId), sql`jsonb_array_length(${games.moves}) % 2 = 1`),
+              and(isNotNull(games.otbOfferBy), ne(games.otbOfferBy, userId)),
+            ),
+          ),
+          and(isNotNull(games.report), sql`${games.report}->>'by' <> ${userId}`),
         ),
+        or(eq(games.whiteId, userId), eq(games.blackId, userId)),
       ),
     )
     .groupBy(games.campaignId);

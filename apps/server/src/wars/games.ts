@@ -1,22 +1,29 @@
 import {
   ChessGame,
+  OVER_THE_BOARD_REJECTION_MESSAGES,
+  REPORT_WINDOW_MS,
+  REPORT_WINDOW_TEXT,
   chargeClock,
   colorToMove,
+  getTerritory,
   opposite,
+  overTheBoard,
   turnDeadline,
   winFor,
   type Clocks,
   type Color,
   type GameEnding,
   type GameView,
+  type OverTheBoardAction,
 } from '@empire/rules';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
+import { userName } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import type { Tx } from '../db/client';
-import { games, members, peaceOffers, wars } from '../db/schema';
+import { campaigns, games, members, peaceOffers, wars } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import type { GameRow } from './board';
-import { settleGame } from './service';
+import { LIVE_COUNTDOWN_MS, settleGame } from './service';
 import { toGameView } from './views';
 
 /** The most lag credited to a live move: about one round trip, for the move and the push before it. */
@@ -28,6 +35,7 @@ export type GameAction = 'resign' | 'offer-draw' | 'accept-draw' | 'decline-draw
 
 /** A game stopped because its war ended without it: peace terms, or the campaign's end. */
 const CALLED_OFF = 'The war ended without this game, so it was called off.';
+const PLAYED_OVER_THE_BOARD = 'This game is being played over the board. Report the result instead.';
 
 const playerOf = (game: GameRow, color: Color) => (color === 'white' ? game.whiteId : game.blackId);
 
@@ -52,6 +60,8 @@ function finish(ending: GameEnding, at: Date, extra: Partial<GameRow> = {}): Par
     finishedAt: at,
     deadline: null,
     drawOfferBy: null,
+    otbOfferBy: null,
+    report: null,
   };
 }
 
@@ -126,6 +136,7 @@ export async function playMove(
       if (game.status === 'waiting') throw conflict('This game has not started yet.', 'not-started');
       if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
       if (game.status === 'cancelled') throw conflict(CALLED_OFF, 'game-cancelled');
+      if (game.overTheBoardAt) throw conflict(PLAYED_OVER_THE_BOARD, 'over-the-board');
       const mover = chess.turn;
       if (playerOf(game, mover) !== userId) throw conflict("It's not your move.", 'not-your-move');
       if (input.ply !== chess.ply) throw conflict('The position has changed. Check the board.', 'stale-move');
@@ -149,8 +160,9 @@ export async function playMove(
         fen: chess.fen,
         clocks,
         lastMoveAt: receivedAt,
-        // Moving declines the opponent's draw offer; your own offer stands.
+        // Moving declines the opponent's offers of a draw or a real board; your own stand.
         drawOfferBy: game.drawOfferBy === userId ? userId : null,
+        otbOfferBy: game.otbOfferBy === userId ? userId : null,
       };
       const ending = chess.ending();
       if (ending) return finish(ending, receivedAt, played);
@@ -196,7 +208,7 @@ export async function playMove(
   return view;
 }
 
-/** Resigning, and offering, accepting or declining a draw. */
+/** Resigning, and offering, accepting or declining a draw. Over the board, resigning reports a loss. */
 export async function gameAction(
   ctx: AppContext,
   gameId: string,
@@ -210,9 +222,12 @@ export async function gameAction(
     const color: Color = game.whiteId === userId ? 'white' : 'black';
     const opponentId = playerOf(game, opposite(color));
     const clocks = { clocks: clocksAt(game, at) };
+    if (game.overTheBoardAt && action !== 'resign') throw conflict(PLAYED_OVER_THE_BOARD, 'over-the-board');
     switch (action) {
-      case 'resign':
-        return finish({ result: winFor(opposite(color)), reason: 'resignation' }, at, clocks);
+      case 'resign': {
+        const reason = game.overTheBoardAt ? 'over-the-board' : 'resignation';
+        return finish({ result: winFor(opposite(color)), reason }, at, clocks);
+      }
       case 'offer-draw':
         if (game.drawOfferBy === opponentId) return finish({ result: '1/2-1/2', reason: 'agreement' }, at, clocks);
         return game.drawOfferBy === userId ? null : { drawOfferBy: userId };
@@ -226,12 +241,152 @@ export async function gameAction(
   });
 }
 
-/** Ends a game on time if the side to move is past their deadline (live games get a little grace for lag). */
+/**
+ * Playing a game over the board (`@empire/rules` over-the-board.ts): offering and answering, reporting
+ * the result and answering the report, and going back online. Moving over the board stops the
+ * clocks where they stand; going back online starts them again (live games after a countdown).
+ */
+export async function overTheBoardAction(
+  ctx: AppContext,
+  gameId: string,
+  userId: string,
+  action: OverTheBoardAction,
+): Promise<GameView> {
+  const at = ctx.now();
+  const [seated] = await ctx.db
+    .select({ campaignId: games.campaignId, whiteId: games.whiteId, blackId: games.blackId })
+    .from(games)
+    .where(eq(games.id, gameId));
+  if (!seated) throw notFound('Game not found.');
+  // A bot (standing in for a person, too) can't sit at a real board.
+  const bots = await ctx.db
+    .select({ userId: members.userId })
+    .from(members)
+    .where(
+      and(
+        eq(members.campaignId, seated.campaignId),
+        inArray(members.userId, [seated.whiteId, seated.blackId]),
+        isNotNull(members.botLevel),
+      ),
+    );
+  const view = await changeGame(ctx, gameId, userId, (game) => {
+    if (game.status === 'cancelled') throw conflict(CALLED_OFF, 'game-cancelled');
+    if (game.status === 'finished') throw conflict('This game is over.', 'game-over');
+    const state = {
+      status: game.status,
+      whiteId: game.whiteId,
+      blackId: game.blackId,
+      offerBy: game.otbOfferBy,
+      overTheBoard: game.overTheBoardAt !== null,
+      report: game.report,
+    };
+    const outcome = overTheBoard(state, userId, action, new Set(bots.map((b) => b.userId)));
+    if (!outcome.ok) throw conflict(OVER_THE_BOARD_REJECTION_MESSAGES[outcome.reason], outcome.reason);
+    const { change } = outcome;
+    if (change.ending) return finish({ result: change.ending, reason: 'over-the-board' }, at);
+    const set: Partial<GameRow> = {};
+    if (change.offerBy !== undefined) set.otbOfferBy = change.offerBy;
+    if (change.report !== undefined) {
+      set.report = change.report;
+      set.deadline = change.report ? new Date(at.getTime() + REPORT_WINDOW_MS[game.timeControl.kind]) : null;
+    }
+    if (change.overTheBoard === true) {
+      Object.assign(set, { overTheBoardAt: at, clocks: clocksAt(game, at), lastMoveAt: null, deadline: null });
+      set.drawOfferBy = null;
+    } else if (change.overTheBoard === false) {
+      const startsAt = at.getTime() + (game.timeControl.kind === 'live' ? LIVE_COUNTDOWN_MS : 0);
+      const turn = colorToMove(game.moves.length);
+      Object.assign(set, {
+        overTheBoardAt: null,
+        startsAt: new Date(startsAt),
+        lastMoveAt: new Date(startsAt),
+        deadline: new Date(turnDeadline(game.timeControl, game.clocks, turn, startsAt)),
+      });
+    }
+    return set;
+  });
+  await tellOpponent(ctx, view, userId, action).catch((err: unknown) =>
+    ctx.log.error({ err }, 'could not send an over-the-board notification'),
+  );
+  return view;
+}
+
+/** Tells the other player what `userId` just did over the board, where it needs them. */
+async function tellOpponent(ctx: AppContext, game: GameView, userId: string, action: OverTheBoardAction) {
+  const opponentId = game.whiteId === userId ? game.blackId : game.whiteId;
+  const [war] = await ctx.db
+    .select({ targetId: wars.targetId, datasetVersion: campaigns.datasetVersion })
+    .from(wars)
+    .innerJoin(campaigns, eq(campaigns.id, wars.campaignId))
+    .where(eq(wars.id, game.warId));
+  if (!war) return;
+  const battle = `the battle for ${getTerritory(ctx.datasets.get(war.datasetVersion), war.targetId).name}`;
+  const name = await userName(ctx.db, userId);
+  const correspondence = game.timeControl.kind === 'correspondence';
+  const message = (() => {
+    switch (action) {
+      case 'offer':
+        return game.overTheBoard
+          ? { title: 'Over the board', body: `${name} agreed to play ${battle} on a real board.` }
+          : { title: 'Play over the board?', body: `${name} wants to play ${battle} on a real board.` };
+      case 'accept':
+        return {
+          title: 'Over the board',
+          body: `${name} agreed to play ${battle} on a real board. Report the result when the game is over.`,
+        };
+      case 'decline':
+        return { title: 'Playing online', body: `${name} would rather play ${battle} online.` };
+      case 'report-win':
+      case 'report-draw': {
+        const what = action === 'report-win' ? 'a win' : 'a draw';
+        const window = REPORT_WINDOW_TEXT[game.timeControl.kind];
+        return {
+          title: `${name} reports ${what}`,
+          body: `${name} reports ${what} over the board in ${battle}. Confirm or dispute it within ${window}; unanswered, it stands.`,
+          email: correspondence,
+        };
+      }
+      case 'dispute':
+        return {
+          title: 'Result disputed',
+          body: `${name} disputes the result you reported in ${battle}. Report it again, or play the game online.`,
+        };
+      case 'online':
+        return {
+          title: 'Back online',
+          body: `${name} took ${battle} back online. ${correspondence ? 'The clock is running again.' : 'The clocks start in 15 seconds.'}`,
+        };
+      case 'confirm':
+        return null;
+    }
+  })();
+  if (!message) return;
+  // Bots aren't told anything: they look at the game themselves.
+  const [seat] = await ctx.db
+    .select({ botLevel: members.botLevel })
+    .from(members)
+    .where(and(eq(members.campaignId, game.campaignId), eq(members.userId, opponentId)));
+  if (seat?.botLevel != null) return;
+  await ctx.notifier.send({
+    userId: opponentId,
+    url: `/c/${game.campaignId}?game=${game.id}`,
+    tag: `game:${game.id}`,
+    ...message,
+  });
+}
+
+/**
+ * Ends a game on time if the side to move is past their deadline (live games get a little grace for
+ * lag). Over the board, a reported result nobody answered by its deadline stands.
+ */
 export async function flagIfDue(ctx: AppContext, gameId: string): Promise<void> {
   await changeGame(ctx, gameId, null, (game, chess) => {
     if (game.status !== 'playing' || !game.deadline) return null;
     const grace = game.timeControl.kind === 'live' ? FLAG_GRACE_MS : 0;
     if (ctx.now().getTime() < game.deadline.getTime() + grace) return null;
+    if (game.overTheBoardAt) {
+      return game.report ? finish({ result: game.report.result, reason: 'over-the-board' }, game.deadline) : null;
+    }
     const mover = chess.turn;
     const clocks = game.clocks ? { clocks: { ...game.clocks, [mover]: 0 } } : {};
     return finish(chess.timeout(mover), game.deadline, clocks);
@@ -240,7 +395,10 @@ export async function flagIfDue(ctx: AppContext, gameId: string): Promise<void> 
 
 /** Arms the timer that flags a live game's side to move the moment their time runs out. */
 export function armFlag(ctx: AppContext, game: GameRow): void {
-  if (game.status !== 'playing' || !game.deadline || game.timeControl.kind !== 'live') return;
+  if (game.status !== 'playing' || !game.deadline || game.timeControl.kind !== 'live') {
+    ctx.timers.clear(`flag:${game.id}`);
+    return;
+  }
   ctx.timers.set(`flag:${game.id}`, game.deadline.getTime() + FLAG_GRACE_MS + 50, () => {
     flagIfDue(ctx, game.id).catch((err: unknown) => ctx.log.error({ err, gameId: game.id }, 'flag check failed'));
   });

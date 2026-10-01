@@ -778,7 +778,10 @@ starts**.
   handicap" part and the settings list a row (`handicapText`, `ratingText`, `handicapLine`).
 - **Simulator.** `whiteEdge` now uses `clockFactors`, so the simulator plays the handicap when the
   rules have one, every simulated player rated at their `elo`. Scenarios `elo-300-light`,
-  `elo-300-full` and `elo-star-full`.
+  `elo-300-full` and `elo-star-full`; results in the balance report's
+  [Rating handicaps](balance-report.md#rating-handicaps). In short: full in live games cuts a
+  player 300 points stronger than the table from 89% of wars won to 61% (and 91% of 4-player
+  campaigns to 58%); light barely registers; correspondence handicaps do almost nothing.
 - **Checked in the browser** (dev server): a live 5+3 lobby with Ann (1850, own), Bo (1450, own) and
   a level 3 bot (1400); Bo's change after the draft started was refused; Ann's declaration on Russia
   previewed "Bo +60% time, You −60% (400 points apart)" and the game came out 2:18 + 1.4 s for Ann
@@ -991,6 +994,12 @@ All at the proposed defaults.
   quarter of declarations, mostly with countries near the 50% floor. Redirects nearly vanish with
   both `nearby` and a token (0–1% of declarations, from 16–39%). Both are host settings; the
   playtest should say whether the floor needs raising and whether redirects should stay nearby.
+
+- **Rating handicap numbers** (see the report's
+  [Rating handicaps](balance-report.md#rating-handicaps)): only full, live, changes much in the
+  simulator, and correspondence handicaps barely matter, since the stronger player keeps their time
+  there. Steeper scales, taking time in correspondence too, or draw odds for correspondence are the
+  options; the playtest should say how live time odds feel at the board.
 
 ## Running and testing
 

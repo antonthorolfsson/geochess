@@ -857,6 +857,54 @@ per cell, players 2 / 4 / 6 / 8.
 To rerun: `pnpm sim --scenario baseline,whatif:no-turns --players 2-8 --seeds 100 --out turns`, then
 `pnpm sim:report turns --compare baseline`.
 
+## Rating handicaps
+
+_Added 1 October 2026. Hosts can now give weaker players time odds (`rules.war.handicap`): for
+every 100 rating points between the two players, the weaker gets 8% (light) or 16% (full) more
+time, up to 30% or 60%. In live games the stronger player has as much less; in correspondence they
+keep their time. The simulator plays it with every player rated at their Elo. Clock time is worth
+`eloPerTimePct` = 1.5 Elo per percent of the opponent's time, an assumption rather than a
+measurement: doubling your time is worth 150 points._
+
+The same seeds with and without handicaps: mission rules version 3 with a last round of 25, 150
+campaigns per cell, players 2 / 4 / 8. "Wins" is campaigns won, "wars" is wars won, each by rating,
+strongest first.
+
+| Scenario, pace           | 2 players: wins, wars | 4 players: wins    | 4 players: wars won |
+| ------------------------ | --------------------- | ------------------ | ------------------- |
+| elo-300, live            | 93 · 7%, 80 · 20%     | 79 · 18 · 3 · 0%   | 90 · 69 · 48 · 14%  |
+| elo-300-light, live      | 93 · 7%, 74 · 26%     | 75 · 19 · 6 · 1%   | 84 · 69 · 49 · 17%  |
+| elo-300-full, live       | 83 · 17%, 62 · 38%    | 67 · 23 · 10 · 0%  | 70 · 60 · 47 · 31%  |
+| elo-star, live           | 100 · 0%, 90 · 10%    | 91 · 1 · 3 · 5%    | 89 · 45 · 44 · 43%  |
+| elo-star-full, live      | 88 · 12%, 61 · 39%    | 58 · 10 · 17 · 15% | 61 · 46 · 47 · 45%  |
+| elo-300, correspondence  | 95 · 5%, 76 · 24%     | 74 · 22 · 4 · 0%   | 89 · 69 · 47 · 14%  |
+| elo-300-full, corresp.   | 91 · 9%, 74 · 26%     | 74 · 18 · 7 · 1%   | 86 · 67 · 49 · 17%  |
+| elo-star, correspondence | 100 · 0%, 89 · 11%    | 95 · 1 · 3 · 1%    | 89 · 42 · 45 · 42%  |
+| elo-star-full, corresp.  | 100 · 0%, 83 · 17%    | 90 · 2 · 3 · 5%    | 86 · 43 · 45 · 42%  |
+
+At 8 players, live: the one strong player (`elo-star`) wins 53% of campaigns, 38% with a full
+handicap; in correspondence 60% and 55%.
+
+- **Full, live, is the only setting that does much.** A player 300 points stronger than everyone
+  else wins 61% of their wars instead of 89–90%, and 58% of 4-player campaigns instead of 91%. With
+  ratings spread (sd 300), the strongest player's 4-player share falls from 79% to 67%.
+- **Light barely registers**: a few points of war wins, campaign shares within noise.
+- **Correspondence handicaps do almost nothing**, as expected: the stronger player keeps their
+  time, and a little more time per move changes little. The simulator, which counts time the same
+  at every pace, if anything overstates what they do.
+- **Even full isn't even.** At a 300-point gap the stronger player still wins more of the games,
+  and the campaign is decided over many wars, so a modest per-game edge still adds up.
+
+Possible tuning, all host-facing numbers in `packages/rules/src/handicap.ts`: a steeper full scale
+(the 60% cap is reached at 375 points), a stronger correspondence handicap (taking time from the
+stronger player there too, at the cost of tighter deadlines), or a different kind of odds for
+correspondence (draw odds, material). The playtest should say whether live time odds feel fair at
+the board, which the simulator can't.
+
+To rerun: `pnpm sim --scenario elo-300,elo-300-light,elo-300-full,elo-star,elo-star-full --players 2,4,8
+--paces live,correspondence --seeds 150 --out handicap`, then `pnpm sim:report handicap` (its chess
+skill table merges both paces).
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,

@@ -14,6 +14,7 @@ import type {
   MeResponse,
   MessageView,
   MessagesPage,
+  OverTheBoardAction,
   PeaceTerms,
   ProposeAccordInput,
   PublicMissionKind,
@@ -171,6 +172,8 @@ export const api = {
   resign: (gameId: string) => request<GameView>('POST', `/games/${gameId}/resign`),
   draw: (gameId: string, action: 'offer' | 'accept' | 'decline') =>
     request<GameView>('POST', `/games/${gameId}/draw`, { action }),
+  overTheBoard: (gameId: string, action: OverTheBoardAction) =>
+    request<GameView>('POST', `/games/${gameId}/over-the-board`, { action }),
 
   pushKey: () => request<{ publicKey: string | null }>('GET', '/push/key'),
   pushSubscribe: (subscription: PushSubscriptionJSON) => request('POST', '/push/subscribe', subscription),

@@ -483,10 +483,17 @@ export async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
 }
 
 /**
- * Sets up the war's game (or its Armageddon tiebreak). Live games wait until neither player is in
- * another game, and while players are taking turns to declare; correspondence games start at once.
+ * Sets up the war's game (or its Armageddon tiebreak, played over the board if the drawn game
+ * was). Live games wait until neither player is in another game, and while players are taking
+ * turns to declare; correspondence games start at once.
  */
-async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow, armageddon = false): Promise<void> {
+async function beginFighting(
+  ctx: AppContext,
+  scope: MutationScope,
+  war: WarRow,
+  armageddon = false,
+  overTheBoard = false,
+): Promise<void> {
   const board = await loadBoard(ctx, scope.tx, scope.campaign);
   const rules = scope.campaign.rules;
   const modifiers = clockModifiers(board, war.attackerId, clockTarget(rules, war));
@@ -507,6 +514,7 @@ async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow,
       fen: INITIAL_FEN,
       clocks: initialClocks(tc),
       status: 'waiting',
+      overTheBoardAt: overTheBoard ? ctx.now() : null,
     })
     .returning();
   const busy = tc.kind === 'live' ? await busyPlayers(scope) : new Set<string>();
@@ -530,14 +538,17 @@ async function startGame(ctx: AppContext, scope: MutationScope, gameId: string):
   const [waiting] = await scope.tx.select().from(games).where(eq(games.id, gameId));
   const game = waiting!;
   const now = ctx.now().getTime();
-  const startsAt = game.timeControl.kind === 'live' ? now + LIVE_COUNTDOWN_MS : now;
+  const otb = game.overTheBoardAt !== null;
+  const startsAt = game.timeControl.kind === 'live' && !otb ? now + LIVE_COUNTDOWN_MS : now;
   const [started] = await scope.tx
     .update(games)
     .set({
       status: 'playing',
       startsAt: new Date(startsAt),
-      lastMoveAt: new Date(startsAt),
-      deadline: new Date(turnDeadline(game.timeControl, game.clocks, 'white', startsAt)),
+      // Over the board, the clocks here stay stopped.
+      lastMoveAt: otb ? null : new Date(startsAt),
+      deadline: otb ? null : new Date(turnDeadline(game.timeControl, game.clocks, 'white', startsAt)),
+      ...(otb ? { overTheBoardAt: new Date(now) } : {}),
     })
     .where(eq(games.id, gameId))
     .returning();
@@ -570,11 +581,17 @@ async function startGame(ctx: AppContext, scope: MutationScope, gameId: string):
       userId,
       title: `${game.armageddon ? 'Armageddon' : 'The battle'} for ${target} has begun`,
       body:
-        `You play ${color} against ${await userName(scope.tx, opponentId)}.` +
-        (live ? ' The clocks start in 15 seconds.' : color === 'White' ? ' Your move.' : ''),
+        `You play ${color} against ${await userName(scope.tx, opponentId)}` +
+        (otb
+          ? ' over the board, like the game before. Report the result when it is over.'
+          : live
+            ? '. The clocks start in 15 seconds.'
+            : color === 'White'
+              ? '. Your move.'
+              : '.'),
       url: gameUrl(war!.campaignId, gameId),
       tag: `game:${gameId}`,
-      email: !live && color === 'White',
+      email: !live && !otb && color === 'White',
     });
   }
 }
@@ -608,7 +625,7 @@ export async function startQueuedGames(ctx: AppContext, scope: MutationScope): P
 export async function stopWarGames(ctx: AppContext, scope: MutationScope, warId: string): Promise<void> {
   const stopped = await scope.tx
     .update(games)
-    .set({ status: 'cancelled', deadline: null, drawOfferBy: null })
+    .set({ status: 'cancelled', deadline: null, drawOfferBy: null, otbOfferBy: null, report: null })
     .where(and(eq(games.warId, warId), inArray(games.status, ['waiting', 'playing'])))
     .returning();
   const [last] = await scope.tx
@@ -647,7 +664,7 @@ async function settleFinishedGame(ctx: AppContext, scope: MutationScope, gameId:
     if (tiebreak) return;
   }
   const next = afterGame(scope.campaign.rules, game.armageddon, winnerOf(game.result));
-  if (next === 'armageddon') await beginFighting(ctx, scope, war, true);
+  if (next === 'armageddon') await beginFighting(ctx, scope, war, true, game.reason === 'over-the-board');
   else await resolveWar(ctx, scope, war, next, { result: game.result, reason: game.reason ?? undefined });
   await startQueuedGames(ctx, scope);
 }

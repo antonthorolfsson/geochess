@@ -15,6 +15,7 @@ export function toGameSummary(game: GameRow): GameSummary {
     status: game.status,
     result: game.result,
     reason: game.reason,
+    overTheBoard: game.overTheBoardAt !== null,
   };
 }
 
@@ -36,6 +37,8 @@ export function toGameView(game: GameRow, now: Date): GameView {
     startsAt: game.startsAt?.toISOString() ?? null,
     deadline: game.deadline?.toISOString() ?? null,
     drawOfferBy: game.drawOfferBy,
+    overTheBoardOfferBy: game.otbOfferBy,
+    report: game.report,
     serverNow: now.toISOString(),
   };
 }

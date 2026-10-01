@@ -917,6 +917,16 @@ function Battle({ rules, standard }: { rules: CampaignRules; standard: boolean }
           offer a draw from the board; making a move declines your opponent's offer.
         </p>
       </Part>
+      <Part title="Over the board">
+        <p>
+          Meeting up? Either player can offer to play the game over the board, on a real board, and the game moves there
+          once the other accepts. The clocks here stop where they are and no moves are made online; bring your own
+          clock. When the game is over, report it: the winner says "I won", or either player reports a draw, and the
+          other confirms it. Unanswered within {answerTime(rules, standard)}, a report stands. "I lost" ends the game at
+          once. A disputed report leaves the game on the real board, and either player can take it back online when no
+          report is waiting, with the clocks as they were. Bots play online only.
+        </p>
+      </Part>
     </Section>
   );
 }
@@ -1309,6 +1319,7 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
       : ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],
     ['A player answers an accord proposal', answer, 'The proposal lapses.'],
     ['A player moves', war.pace === 'live' ? 'Their clock' : perMoveText(war.hoursPerMove), 'They lose the game.'],
+    ['A player answers a result reported over the board', answer, 'The result stands.'],
     ...(rules.victory.mode === 'objectives'
       ? [
           [

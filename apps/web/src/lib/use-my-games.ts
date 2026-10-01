@@ -9,10 +9,16 @@ export interface MyGame {
   gameId: string;
   /** The live state, once loaded. */
   game: BoardGame | undefined;
+  /**
+   * Whether the game waits for the viewer: their move, or an offer to play over the board, or
+   * (over the board) a result reported to them.
+   */
   myMove: boolean;
+  /** Being played over the board, as of the live state. */
+  overTheBoard: boolean;
 }
 
-/** The viewer's games underway, each with whether it's their move. */
+/** The viewer's games underway, each with whether it waits for them. */
 export function useMyGames(model: CampaignModel): MyGame[] {
   const me = model.me.userId;
   const mine = model.activeWars.flatMap((war) => {
@@ -22,7 +28,17 @@ export function useMyGames(model: CampaignModel): MyGame[] {
   const states = useGames(mine.map((m) => m.gameId));
   return mine.map((m, i) => {
     const game = states[i]?.data;
-    const turn = game && game.status === 'playing' ? colorToMove(game.moves.length) : null;
-    return { ...m, game, myMove: turn !== null && (turn === 'white' ? game!.whiteId : game!.blackId) === me };
+    if (!game || game.status !== 'playing') return { ...m, game, myMove: false, overTheBoard: false };
+    if (game.overTheBoard) {
+      return { ...m, game, myMove: game.report !== null && game.report.by !== me, overTheBoard: true };
+    }
+    const turn = colorToMove(game.moves.length);
+    const offered = game.overTheBoardOfferBy !== null && game.overTheBoardOfferBy !== me;
+    return {
+      ...m,
+      game,
+      myMove: offered || (turn === 'white' ? game.whiteId : game.blackId) === me,
+      overTheBoard: false,
+    };
   });
 }

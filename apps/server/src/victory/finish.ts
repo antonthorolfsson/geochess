@@ -213,7 +213,7 @@ async function cancelUnfinishedWars(ctx: AppContext, scope: MutationScope): Prom
   const stopGames = () =>
     tx
       .update(games)
-      .set({ status: 'cancelled', deadline: null, drawOfferBy: null })
+      .set({ status: 'cancelled', deadline: null, drawOfferBy: null, otbOfferBy: null, report: null })
       .where(and(eq(games.campaignId, campaign.id), inArray(games.status, ['waiting', 'playing'])))
       .returning();
   const stopped = await stopGames();

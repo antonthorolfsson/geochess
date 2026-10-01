@@ -6,6 +6,7 @@ import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
 import type { PlayerRating } from './handicap';
 import type { Opening } from './openings';
+import type { ResultReport } from './over-the-board';
 import type { MissionSpec, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
@@ -112,7 +113,7 @@ export type CampaignEvent =
       payload: {
         warId: string;
         outcome: WarOutcome;
-        /** The deciding game's result, for wars settled over the board. */
+        /** The deciding game's result, for wars settled by a game. */
         result?: GameResult;
         reason?: GameEndReason;
         transfers: Transfer[];
@@ -621,6 +622,8 @@ export interface GameSummary {
   status: GameStatus;
   result: GameResult | null;
   reason: GameEndReason | null;
+  /** Being played over the board, on a real board: no moves or clocks here, just the reported result. */
+  overTheBoard: boolean;
 }
 
 export interface GameView extends GameSummary {
@@ -633,10 +636,17 @@ export interface GameView extends GameSummary {
   clocks: Clocks | null;
   /** When play starts. Live games open with a short countdown so both players can get to the board. */
   startsAt: string | null;
-  /** When the side to move loses on time. */
+  /** When the side to move loses on time; over the board, when an unanswered report stands. */
   deadline: string | null;
   /** A standing draw offer, by player id. */
   drawOfferBy: string | null;
+  /** A standing offer to play the game over the board, by player id. */
+  overTheBoardOfferBy: string | null;
+  /**
+   * Over the board: a result one player reported, waiting for the other to confirm or dispute it.
+   * Unanswered by `deadline`, it stands.
+   */
+  report: ResultReport | null;
   serverNow: string;
 }
 
@@ -759,7 +769,7 @@ export interface ChessProfile {
   asBlack: ResultTally;
   /** How finished games ended, from this player's side. */
   endings: Partial<Record<GameEndReason, ResultTally>>;
-  /** Average length of finished games, in moves. */
+  /** Average length of finished games played online, in moves. */
   averageMoves: number | null;
   /** Opening families played, most played first. */
   openings: OpeningStat[];

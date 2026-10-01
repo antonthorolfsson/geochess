@@ -26,7 +26,9 @@ export type GameEndReason =
   | 'fifty-moves'
   | 'agreement'
   /** The flag fell, but the opponent could never have mated: a draw. */
-  | 'timeout-vs-insufficient-material';
+  | 'timeout-vs-insufficient-material'
+  /** Played on a real board, with the result reported and confirmed (or resigned) here. */
+  | 'over-the-board';
 
 export interface GameEnding {
   result: GameResult;

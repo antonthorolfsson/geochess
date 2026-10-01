@@ -25,6 +25,7 @@ const REASONS: Record<GameEndReason, string> = {
   'fifty-moves': 'by the fifty-move rule',
   agreement: 'by agreement',
   'timeout-vs-insufficient-material': 'on time against a lone king',
+  'over-the-board': 'over the board',
 };
 
 /** How a game ended: "by checkmate", "on time". */

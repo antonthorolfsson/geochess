@@ -284,6 +284,7 @@ export function chessProfile(userId: UserId, games: readonly GameFacts[]): Chess
   const lines: GameLine[] = [];
   let underway = 0;
   let totalMoves = 0;
+  let onlineGames = 0;
   for (const g of games) {
     const color: Color | null = g.whiteId === userId ? 'white' : g.blackId === userId ? 'black' : null;
     if (!color) continue;
@@ -292,8 +293,13 @@ export function chessProfile(userId: UserId, games: readonly GameFacts[]): Chess
     const result = resultFor(g.result, color);
     (color === 'white' ? asWhite : asBlack)[result]++;
     if (g.reason) (endings[g.reason] ??= emptyResults())[result]++;
-    totalMoves += movesOf(g.plies);
-    if (g.opening) {
+    // A game played over the board has no moves here (or only its first few), so neither a length nor an opening.
+    const online = g.reason !== 'over-the-board';
+    if (online) {
+      totalMoves += movesOf(g.plies);
+      onlineGames++;
+    }
+    if (g.opening && online) {
       const family = openingFamily(g.opening.name);
       const key = `${color} ${family}`;
       const stat = openings.get(key) ?? { family, color, games: 0, ...emptyResults() };
@@ -320,7 +326,7 @@ export function chessProfile(userId: UserId, games: readonly GameFacts[]): Chess
     asWhite,
     asBlack,
     endings,
-    averageMoves: lines.length > 0 ? totalMoves / lines.length : null,
+    averageMoves: onlineGames > 0 ? totalMoves / onlineGames : null,
     openings: [...openings.values()].sort(
       (a, b) => b.games - a.games || b.won - a.won || a.family.localeCompare(b.family),
     ),

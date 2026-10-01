@@ -9,7 +9,10 @@ import {
   selectionMs,
   stakeFloor,
   type CampaignRules,
+  type Handicap,
   type LiveClock,
+  type Pace,
+  type PlayerRating,
 } from '@empire/rules';
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -101,6 +104,7 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Time to answer', value: RESPONSE_WINDOW_TEXT[war.pace] },
     { label: 'Draws', value: war.draws === 'armageddon' ? 'Armageddon' : 'Defender holds' },
     { label: 'Clock modifiers', value: war.clockModifiers ? 'On' : 'Off' },
+    { label: 'Rating handicap', value: handicapText(rules) },
     { label: 'War tokens', value: `${war.tokensPerRound} a round, up to ${war.tokenCap}` },
     { label: 'Least stake', value: `${war.stakeFloorPct}% of the target` },
     { label: 'Raising the stakes', value: raiseText(rules) },
@@ -129,4 +133,29 @@ export function raiseText(rules: CampaignRules): string {
     case 'off':
       return 'None';
   }
+}
+
+/** The campaign's rating handicap, in a few words. */
+export function handicapText(rules: CampaignRules): string {
+  const { handicap, selfRatings } = rules.war;
+  if (handicap === 'off') return 'Off';
+  return `${handicap === 'full' ? 'Full' : 'Light'}, from Lichess ratings${selfRatings ? ' or players’ own' : ''}`;
+}
+
+/** A player's rating and where it's from: "1834, Lichess blitz". */
+export function ratingText(r: PlayerRating): string {
+  const from =
+    r.source === 'lichess' ? `Lichess ${r.perf ?? ''}`.trim() : r.source === 'bot' ? 'bot level' : 'own rating';
+  return `${r.rating}, ${from}`;
+}
+
+/**
+ * A war game's time odds in a line: "Ann +40% time, Bo −40% (250 points apart)". In
+ * correspondence the stronger player keeps their time.
+ */
+export function handicapLine(h: Handicap, pace: Pace, names: { attacker: string; defender: string }): string {
+  const weaker = h.favored === 'attacker' ? names.attacker : names.defender;
+  const stronger = h.favored === 'attacker' ? names.defender : names.attacker;
+  const taken = pace === 'live' ? `, ${stronger} −${h.pct}%` : '';
+  return `${weaker} +${h.pct}% time${taken} (${h.gap} points apart)`;
 }

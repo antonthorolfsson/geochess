@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { parseLichessPerfs } from '@empire/rules';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -16,7 +17,7 @@ const pendingSchema = z.object({ verifier: z.string(), state: z.string(), next: 
 /**
  * "Sign in with Lichess": OAuth 2 authorization code flow with PKCE. Lichess accepts public
  * clients without registration, so no client secret is needed. We only read the account
- * identity and revoke the token straight away.
+ * identity and ratings (for handicaps) and revoke the token straight away.
  */
 export function registerLichessRoutes(app: FastifyInstance, ctx: AppContext): void {
   const { db, env } = ctx;
@@ -71,7 +72,7 @@ export function registerLichessRoutes(app: FastifyInstance, ctx: AppContext): vo
 
       const accountRes = await fetch(`${env.LICHESS_HOST}/api/account`, { headers: auth });
       if (!accountRes.ok) throw new Error(`account lookup failed: ${accountRes.status}`);
-      const account = (await accountRes.json()) as { id: string; username: string };
+      const account = (await accountRes.json()) as { id: string; username: string; perfs?: unknown };
       void fetch(`${env.LICHESS_HOST}/api/token`, { method: 'DELETE', headers: auth }).catch(() => {});
 
       const userId = await upsertLichessUser(ctx, account, req.user?.id ?? null);
@@ -85,26 +86,32 @@ export function registerLichessRoutes(app: FastifyInstance, ctx: AppContext): vo
 }
 
 async function upsertLichessUser(
-  { db }: AppContext,
-  account: { id: string; username: string },
+  ctx: AppContext,
+  account: { id: string; username: string; perfs?: unknown },
   currentUserId: string | null,
 ): Promise<string> {
+  const lichess = {
+    lichessUsername: account.username,
+    lichessRatings: parseLichessPerfs(account.perfs),
+    lichessRatingsAt: ctx.now(),
+  };
+  const { db } = ctx;
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.lichessId, account.id));
   if (existing) {
-    await db.update(users).set({ lichessUsername: account.username }).where(eq(users.id, existing.id));
+    await db.update(users).set(lichess).where(eq(users.id, existing.id));
     return existing.id;
   }
   if (currentUserId) {
     // Already signed in (e.g. by email): link the Lichess account to this player.
     await db
       .update(users)
-      .set({ lichessId: account.id, lichessUsername: account.username })
+      .set({ lichessId: account.id, ...lichess })
       .where(eq(users.id, currentUserId));
     return currentUserId;
   }
   const [created] = await db
     .insert(users)
-    .values({ id: newId(), name: account.username, lichessId: account.id, lichessUsername: account.username })
+    .values({ id: newId(), name: account.username, lichessId: account.id, ...lichess })
     .returning({ id: users.id });
   return created!.id;
 }

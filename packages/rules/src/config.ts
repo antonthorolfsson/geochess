@@ -55,6 +55,16 @@ export const REDIRECT_RULES = ['nearby', 'anywhere'] as const;
 export type RedirectRule = (typeof REDIRECT_RULES)[number];
 
 /**
+ * Time odds for the weaker player in a war's game, by the gap between the two players' ratings
+ * (see `handicap.ts`):
+ * - `off`: none (the original rule).
+ * - `light`: a little time moves from the stronger player's clock to the weaker's.
+ * - `full`: twice as much.
+ */
+export const HANDICAP_LEVELS = ['off', 'light', 'full'] as const;
+export type HandicapLevel = (typeof HANDICAP_LEVELS)[number];
+
+/**
  * War settings. Rules stored before a setting existed read as the original game (a free raise,
  * redirects anywhere and free, tribute, no fortifying or recall, declaring whenever you like), so
  * no campaign underway changes; new campaigns start from `DEFAULT_RULES`, which plays the revised
@@ -101,6 +111,10 @@ export const warRulesSchema = z.object({
    * anyone declares whenever they like (the original rule).
    */
   turns: z.boolean().default(false),
+  /** Time odds for the weaker player, from the players' ratings (Lichess, a bot's level, or their own). */
+  handicap: z.enum(HANDICAP_LEVELS).default('off'),
+  /** Players without an established Lichess rating may give their own, for the handicap. */
+  selfRatings: z.boolean().default(false),
 });
 
 /** The war settings new campaigns start with, over the original game's: the revised answers, and turns. */

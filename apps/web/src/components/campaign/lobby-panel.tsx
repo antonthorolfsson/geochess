@@ -4,26 +4,34 @@ import {
   CORRESPONDENCE_HOURS,
   DEFAULT_BOT_LEVEL,
   EMPIRE_COLORS,
+  HANDICAP_CAP_PCT,
+  HANDICAP_LEVELS,
+  HANDICAP_PCT_PER_100,
   LIVE_CLOCKS,
   MAX_PLAYERS,
   MIN_PLAYERS,
   MATCHED_RAISE_MIN_PCT,
+  RATING_MAX,
+  RATING_MIN,
   TURN_WINDOW_TEXT,
   type DraftMode,
   type DrawRule,
+  type HandicapLevel,
   type MemberView,
   type Pace,
   type RaiseStyle,
   type TerritoryId,
   type WarRules,
   botLevelText,
+  lichessPerfFor,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
+import { ratingText } from '@/lib/rules-text';
 import { EmpireSwatch } from '../hatch';
 import { Notice, Toggle } from '../ui';
 import { LobbyMissions } from '../victory/lobby-missions';
@@ -166,6 +174,14 @@ export function LobbyPanel({
         />
       </section>
 
+      {campaign.rules.war.handicap !== 'off' && (
+        <RatingsSection
+          model={model}
+          pending={action.isPending}
+          onSave={(rating) => run(() => api.updateMembership(campaign.id, { rating }))}
+        />
+      )}
+
       <RulesSection model={model} onSave={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))} />
 
       <LobbyMissions
@@ -273,6 +289,130 @@ function ColorChoices({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Everyone's rating for the handicap, and the viewer's own: from Lichess (read again here, and
+ * when the draft starts), or typed in where the host allows it.
+ */
+function RatingsSection({
+  model,
+  pending,
+  onSave,
+}: {
+  model: CampaignModel;
+  pending: boolean;
+  onSave(rating: number | null): void;
+}) {
+  const { campaign, me } = model;
+  const queryClient = useQueryClient();
+  const { selfRatings } = campaign.rules.war;
+  const lichess = me.lichessUsername;
+  const ownRating = me.rating?.source === 'self' ? me.rating.rating : null;
+  const [draft, setDraft] = useState(ownRating === null ? '' : String(ownRating));
+  const value = Number(draft);
+  const valid = draft !== '' && Number.isInteger(value) && value >= RATING_MIN && value <= RATING_MAX;
+
+  const reread = useMutation({
+    mutationFn: () => api.refreshRating(campaign.id),
+    onSuccess: ({ refreshed }) => {
+      if (refreshed) void queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) });
+    },
+  });
+  // Lichess ratings move: read them again when a Lichess player opens the lobby (the server
+  // reads Lichess at most every ten minutes).
+  const { mutate: rereadNow } = reread;
+  useEffect(() => {
+    if (lichess) rereadNow();
+  }, [lichess, rereadNow]);
+
+  const linkLichess = (
+    <a
+      href={`/api/auth/lichess?next=${encodeURIComponent(`/c/${campaign.id}`)}`}
+      className="underline underline-offset-2 hover:text-paper"
+    >
+      Link your Lichess account
+    </a>
+  );
+
+  return (
+    <section>
+      <h2 className="label mb-2">Ratings for the handicap</h2>
+      <ul className="divide-y divide-line rounded-[3px] border border-line">
+        {campaign.members.map((m) => (
+          <li key={m.userId} className="flex min-h-11 items-center gap-3 px-3">
+            <span className="min-w-0 flex-1">
+              <PlayerName member={m} you={m.userId === me.userId} />
+            </span>
+            <span className={`text-sm ${m.rating ? '' : 'text-muted'}`}>
+              {m.rating ? ratingText(m.rating) : 'Unrated'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 space-y-2 text-sm text-muted">
+        {lichess && me.rating?.source === 'lichess' ? (
+          <p>
+            Yours is from Lichess ({lichess}), for {lichessPerfFor(campaign.rules.war)} games or the nearest kind you
+            play.{' '}
+            <button
+              type="button"
+              className="underline underline-offset-2 hover:text-paper"
+              disabled={reread.isPending}
+              onClick={() => reread.mutate()}
+            >
+              Check Lichess again
+            </button>
+            {reread.isSuccess && !reread.data.refreshed && ' Up to date.'}
+          </p>
+        ) : (
+          <>
+            <p>
+              {lichess
+                ? `Your Lichess account (${lichess}) has no established rating yet.`
+                : 'You’re not signed in with Lichess.'}{' '}
+              {selfRatings
+                ? 'Give the rating you’d have on Lichess, or your best guess.'
+                : 'Without a rating your games have no handicap.'}{' '}
+              {!lichess && linkLichess}
+              {!lichess && '.'}
+            </p>
+            {selfRatings && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (valid) onSave(value);
+                }}
+              >
+                <label className="flex items-center gap-2">
+                  <span className="font-semibold text-paper">Your rating</span>
+                  <input
+                    className="input w-24"
+                    type="number"
+                    inputMode="numeric"
+                    min={RATING_MIN}
+                    max={RATING_MAX}
+                    step={1}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!valid || pending || value === ownRating}
+                >
+                  Save
+                </button>
+              </form>
+            )}
+          </>
+        )}
+        <p>Ratings are frozen when the draft starts. A game with an unrated player has no handicap.</p>
+      </div>
+    </section>
   );
 }
 
@@ -400,6 +540,15 @@ const DRAW_OPTIONS: { value: DrawRule; title: string; body: string }[] = [
   },
 ];
 
+const handicapBody = (level: Exclude<HandicapLevel, 'off'>) =>
+  `The weaker player gets ${HANDICAP_PCT_PER_100[level]}% more time for every 100 rating points between the two, up to ${HANDICAP_CAP_PCT[level]}%. In live games the stronger player has as much less.`;
+
+const HANDICAP_OPTIONS: { value: HandicapLevel; title: string; body: string }[] = HANDICAP_LEVELS.map((value) =>
+  value === 'off'
+    ? { value, title: 'Off', body: 'Both players get the same time, whatever their ratings.' }
+    : { value, title: value === 'full' ? 'Full' : 'Light', body: handicapBody(value) },
+);
+
 const hoursLabel = (h: number) => (h % 24 === 0 ? `${h / 24} ${h === 24 ? 'day' : 'days'}` : `${h} hours`);
 
 /** How a defender raises the stakes, in the lobby's words. */
@@ -441,6 +590,7 @@ function WarRulesFields({
   const paceName = useId();
   const drawName = useId();
   const raiseName = useId();
+  const handicapName = useId();
   const numbers: {
     key: 'tokensPerRound' | 'tokenCap' | 'truceRounds' | 'lockRounds';
     label: string;
@@ -535,6 +685,34 @@ function WarRulesFields({
         label="Clock modifiers"
         description="Home turf, mountains and islands give the defender extra time; supply lines give the attacker extra time. Capped at 25%."
       />
+      <div className="space-y-1">
+        <span className="block text-sm font-semibold text-muted">Rating handicap</span>
+        {HANDICAP_OPTIONS.map((h) => (
+          <label key={h.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
+            <input
+              type="radio"
+              name={handicapName}
+              className="mt-1 size-4 accent-amber"
+              checked={rules.handicap === h.value}
+              disabled={disabled}
+              onChange={() => onSave({ handicap: h.value })}
+            />
+            <span>
+              <span className="block font-semibold">{h.title}</span>
+              <span className="block text-sm text-muted">{h.body}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {rules.handicap !== 'off' && (
+        <Toggle
+          checked={rules.selfRatings}
+          disabled={disabled}
+          onChange={(selfRatings) => onSave({ selfRatings })}
+          label="Players give their own rating"
+          description="Players without an established Lichess rating type one in. Off: they play unrated, and their games have no handicap."
+        />
+      )}
       <div className="space-y-1">
         <span className="block text-sm font-semibold text-muted">Raising the stakes</span>
         {raiseStyleOptions(rules).map((r) => (

@@ -2,6 +2,9 @@ import { DEFAULT_RULES, parseRules } from '@empire/rules';
 import { describe, expect, it } from 'vitest';
 import {
   forRounds,
+  handicapLine,
+  handicapText,
+  ratingText,
   liveClockText,
   perMoveText,
   raisedRowLabel,
@@ -81,5 +84,19 @@ describe('rules in words', () => {
     expect(raisedRowLabel(parseRules({}))).toBe('After a raise');
     expect(raisedRowLabel(parseRules({ war: { raise: 'token', fortify: true } }))).toBe('After a raise, or fortified');
     expect(raisedRowLabel(parseRules({ war: { raise: 'matched' } }))).toBeNull();
+  });
+
+  it('describes rating handicaps', () => {
+    expect(handicapText(DEFAULT_RULES)).toBe('Off');
+    expect(handicapText(parseRules({ war: { handicap: 'full', selfRatings: true } }))).toBe(
+      'Full, from Lichess ratings or players’ own',
+    );
+    expect(handicapText(parseRules({ war: { handicap: 'light' } }))).toBe('Light, from Lichess ratings');
+    expect(ratingText({ rating: 1834, source: 'lichess', perf: 'blitz' })).toBe('1834, Lichess blitz');
+    expect(ratingText({ rating: 1400, source: 'self' })).toBe('1400, own rating');
+    const h = { favored: 'defender' as const, pct: 40, gap: 250 };
+    const names = { attacker: 'Ann', defender: 'Bo' };
+    expect(handicapLine(h, 'live', names)).toBe('Bo +40% time, Ann −40% (250 points apart)');
+    expect(handicapLine(h, 'correspondence', names)).toBe('Bo +40% time (250 points apart)');
   });
 });

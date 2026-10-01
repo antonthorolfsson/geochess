@@ -147,6 +147,18 @@ export const SCENARIOS: Record<string, Scenario> = {
   'elo-150': { description: 'Ratings spread with sd 150.', config: { elo: { kind: 'spread', sd: 150 } } },
   'elo-300': { description: 'Ratings spread with sd 300.', config: { elo: { kind: 'spread', sd: 300 } } },
   'elo-star': { description: 'One player 300 points stronger.', config: { elo: { kind: 'star', bonus: 300 } } },
+  'elo-300-light': {
+    description: 'Ratings spread with sd 300, with a light rating handicap.',
+    config: { elo: { kind: 'spread', sd: 300 }, war: { handicap: 'light' } },
+  },
+  'elo-300-full': {
+    description: 'Ratings spread with sd 300, with a full rating handicap.',
+    config: { elo: { kind: 'spread', sd: 300 }, war: { handicap: 'full' } },
+  },
+  'elo-star-full': {
+    description: 'One player 300 points stronger, with a full rating handicap.',
+    config: { elo: { kind: 'star', bonus: 300 }, war: { handicap: 'full' } },
+  },
   armageddon: { description: 'Drawn wars go to Armageddon.', config: { war: { draws: 'armageddon' } } },
   'vp-10': {
     description: 'Players who value a victory point at 10 country value instead of 4: more mission-driven.',

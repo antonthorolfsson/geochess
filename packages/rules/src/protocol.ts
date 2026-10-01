@@ -4,6 +4,7 @@ import type { CampaignRules } from './config';
 import type { TerritoryId } from './dataset';
 import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
+import type { PlayerRating } from './handicap';
 import type { Opening } from './openings';
 import type { MissionSpec, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
@@ -225,6 +226,12 @@ export interface MemberView {
    * empire while they're away; null for people playing their own. Public.
    */
   bot: { level: number; standIn: boolean } | null;
+  /**
+   * The rating this player's games are handicapped by, where the host turned handicaps on: in the
+   * lobby as it stands, from the draft on as frozen then (a bot's level for a seat a bot plays).
+   * Null: handicaps off, or the player has no rating, so their games have no handicap. Public.
+   */
+  rating: PlayerRating | null;
 }
 
 /**

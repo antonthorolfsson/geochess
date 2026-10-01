@@ -23,6 +23,7 @@ const member = (userId: string, color: number) => ({
   reputation: 100,
   joinedAt: '2026-01-01T00:00:00.000Z',
   bot: null,
+  rating: null,
 });
 const positions: MissionView = {
   key: 'p0',

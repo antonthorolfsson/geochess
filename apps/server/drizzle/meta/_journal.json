@@ -78,6 +78,13 @@
       "when": 1790810717413,
       "tag": "0010_bots",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790863902602,
+      "tag": "0011_ratings",
+      "breakpoints": true
     }
   ]
 }

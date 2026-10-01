@@ -7,6 +7,7 @@ import type { Env } from './env';
 import type { KeyedMutex } from './lib/mutex';
 import type { Timers } from './lib/timers';
 import type { Notifier } from './notifications/notifier';
+import type { LichessClient } from './ratings/lichess';
 import type { Hub } from './realtime/hub';
 import type { OpeningNamer } from './stats/openings';
 
@@ -18,6 +19,8 @@ export interface AppContext {
   hub: Hub;
   mailer: Mailer;
   notifier: Notifier;
+  /** Reads players' ratings from Lichess, for handicaps. */
+  lichess: LichessClient;
   log: FastifyBaseLogger;
   /** The current time. Injectable so tests can step through deadlines. */
   now(): Date;

@@ -23,6 +23,8 @@ import { KeyedMutex } from './lib/mutex';
 import { Timers } from './lib/timers';
 import { createNotifier, type Notifier } from './notifications/notifier';
 import { registerNotificationRoutes } from './notifications/routes';
+import { createLichessClient, type LichessClient } from './ratings/lichess';
+import { registerRatingRoutes } from './ratings/routes';
 import { Hub } from './realtime/hub';
 import { registerRealtimeRoutes } from './realtime/routes';
 import { OpeningNamer } from './stats/openings';
@@ -48,6 +50,8 @@ export interface AppDeps {
   scheduler?: boolean;
   /** The chess engine bots play with. Tests pass their own. */
   engine?: ChessEngine;
+  /** Where players' Lichess ratings come from. Tests pass their own. */
+  lichess?: LichessClient;
 }
 
 declare module 'fastify' {
@@ -78,6 +82,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     datasets: deps.datasets,
     hub,
     mailer,
+    lichess: deps.lichess ?? createLichessClient(deps.env, app.log),
     notifier: skippingBots(deps.notifier ?? createNotifier({ db: deps.db, env: deps.env, mailer, log: app.log })),
     log: app.log,
     now: deps.now ?? (() => new Date()),
@@ -142,6 +147,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerStatsRoutes(app, ctx);
   registerVictoryRoutes(app, ctx);
   registerBotRoutes(app, ctx);
+  registerRatingRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);
   registerRealtimeRoutes(app, ctx);
   return app;

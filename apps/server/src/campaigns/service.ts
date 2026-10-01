@@ -10,6 +10,7 @@ import {
   holdTimeIssue,
   isDraftComplete,
   normalizeDraftList,
+  parseRules,
   pickerAt,
   shuffled,
   type CampaignEvent,
@@ -17,13 +18,14 @@ import {
   type DatasetIndex,
   type TerritoryId,
 } from '@empire/rules';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { botDraftPick } from '../bots/draft';
 import { deleteBotUsers } from '../bots/lobby';
 import type { AppContext } from '../context';
 import { campaigns, holdings, members } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { LICHESS_FRESH_MS, freezeRatings, refreshLichessRatings } from '../ratings/service';
 import { parse } from '../lib/http';
 import { newId, newInviteCode } from '../lib/ids';
 import { checkPublicMissions, withDefaultMissions } from '../victory/lobby';
@@ -199,11 +201,15 @@ export async function updateMembership(
   ctx: AppContext,
   campaignId: string,
   userId: string,
-  input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback },
+  input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback; rating?: number | null },
 ): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     const me = requireMember(scope, userId);
     const where = and(eq(members.campaignId, campaignId), eq(members.userId, userId));
+    if (input.rating !== undefined && input.rating !== me.claimedRating) {
+      requireLobby(scope, 'Ratings are frozen once the draft starts.');
+      await scope.tx.update(members).set({ claimedRating: input.rating }).where(where);
+    }
     if (input.color !== undefined && input.color !== me.color) {
       empireColor(input.color);
       if (scope.members.some((m) => m.color === input.color)) throw conflict('That color is taken.', 'color-taken');
@@ -368,6 +374,7 @@ async function finishDraft(
 }
 
 export async function startDraft(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await refreshBeforeFreezing(ctx, campaignId, userId);
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'start the draft');
     requireLobby(scope, 'The draft has already started.');
@@ -388,9 +395,31 @@ export async function startDraft(ctx: AppContext, campaignId: string, userId: st
       .set({ status: 'draft', draftOrder: order, pickIndex: 0, draftStartedAt: ctx.now() })
       .where(eq(campaigns.id, campaignId));
     scope.campaign = { ...scope.campaign, status: 'draft', draftOrder: order, pickIndex: 0 };
+    if (scope.campaign.rules.war.handicap !== 'off') await freezeRatings(scope);
     await scope.log.add({ type: 'draft.started', payload: { order } }, userId, 0);
     await advanceDraft(ctx, scope);
   });
+}
+
+/**
+ * With handicaps on, reads again the Lichess ratings the draft is about to freeze, if they're more
+ * than an hour old. Outside the campaign lock, since Lichess may be slow; a failure keeps the old ones.
+ */
+async function refreshBeforeFreezing(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  const [row] = await ctx.db
+    .select({ rules: campaigns.rules, status: campaigns.status, hostId: campaigns.hostId })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId));
+  if (!row || row.hostId !== userId || row.status !== 'lobby' || parseRules(row.rules).war.handicap === 'off') return;
+  const players = await ctx.db
+    .select({ userId: members.userId })
+    .from(members)
+    .where(and(eq(members.campaignId, campaignId), isNull(members.botLevel)));
+  await refreshLichessRatings(
+    ctx,
+    players.map((p) => p.userId),
+    LICHESS_FRESH_MS,
+  );
 }
 
 /** A player's own pick, or (with `territoryId` null) the auto-draft pick for whoever is up. */

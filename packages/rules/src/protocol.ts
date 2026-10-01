@@ -1,6 +1,6 @@
 /** Shapes exchanged between the web client and the game server. */
 import type { Clocks, Color, GameEndReason, GameResult, TimeControl } from './chess';
-import type { CampaignRules } from './config';
+import type { CampaignRules, Pace } from './config';
 import type { TerritoryId } from './dataset';
 import type { AccordStatus } from './diplomacy';
 import type { AutodraftFallback } from './draft';
@@ -295,6 +295,16 @@ export interface CampaignView {
   victory: VictoryView | null;
   /** The viewer's own secret mission (or options to choose from). Private: nobody else sees it. */
   mySecret: MySecretView | null;
+  /** Friends invited to the lobby who haven't answered yet, oldest first; empty once the draft starts. */
+  invited: InvitedView[];
+}
+
+/** A friend invited to a campaign's lobby. Public to the campaign's members, like the players. */
+export interface InvitedView {
+  userId: string;
+  name: string;
+  /** The member who invited them: they or the host can call the invitation off. */
+  invitedBy: string;
 }
 
 /** Declaring in turns during the current round. */
@@ -830,6 +840,56 @@ export interface InvitePreview {
   isMember: boolean;
 }
 
+/**
+ * Someone the player can invite to campaigns: everyone they've drafted a campaign with (bots
+ * aside), and anyone who opened their friend link or whose link they opened. Friendship goes
+ * both ways, and removing a friend removes it for both.
+ */
+export interface FriendView {
+  userId: string;
+  name: string;
+  lichessUsername: string | null;
+  /** The campaigns both are in, newest first: for inviting a group again. */
+  campaignIds: string[];
+}
+
+export interface FriendsView {
+  /** By name. */
+  friends: FriendView[];
+  /** The code of the player's friend link, `/friend/<code>`. */
+  friendCode: string;
+}
+
+/** Who a friend link belongs to, before it's used. */
+export interface FriendLinkPreview {
+  name: string;
+  /** The link is the viewer's own. */
+  self: boolean;
+  /** The viewer and the link's owner are friends already. */
+  friends: boolean;
+}
+
+/** An invitation to a campaign's lobby, as the invited player sees it until they join or decline. */
+export interface InvitationView {
+  campaignId: string;
+  name: string;
+  hostName: string;
+  invitedBy: { userId: string; name: string };
+  /** The players seated so far, in the order they joined. */
+  players: string[];
+  maxPlayers: number;
+  pace: Pace;
+  createdAt: string;
+}
+
+/** A campaign as created: a name, rules over the defaults, and friends to invite to its lobby. */
+export interface CreateCampaignInput {
+  name: string;
+  rules?: Record<string, unknown>;
+  /** Friends' user ids. */
+  invite?: string[];
+}
+
 export interface ApiError {
   error: { message: string; code?: string };
 }
@@ -849,4 +909,6 @@ export type ServerMessage =
    */
   | { type: 'chat.message'; campaignId: string; message: MessageView }
   /** The player read a conversation (on any device), so unread counts changed. */
-  | { type: 'chat.read'; campaignId: string };
+  | { type: 'chat.read'; campaignId: string }
+  /** The player's friends, or their invitations to campaigns, changed. */
+  | { type: 'friends.changed' };

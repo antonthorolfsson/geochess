@@ -22,8 +22,16 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { botDraftPick } from '../bots/draft';
 import { deleteBotUsers } from '../bots/lobby';
 import type { AppContext } from '../context';
-import { campaigns, holdings, members } from '../db/schema';
+import { campaigns, holdings, invitations, members } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
+import { befriend } from '../friends/friends';
+import {
+  addInvitations,
+  closeInvitations,
+  invitationNotice,
+  isInvited,
+  removeInvitation,
+} from '../friends/invitations';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { LICHESS_FRESH_MS, freezeRatings, refreshLichessRatings } from '../ratings/service';
 import { parse } from '../lib/http';
@@ -79,16 +87,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 // ---------------------------------------------------------------------------------------------
 // Lobby
 
+/** A new lobby with the host seated, and the host's friends in `invite` invited to it. */
 export async function createCampaign(
   ctx: AppContext,
   hostId: string,
-  input: { name: string; rules?: Record<string, unknown> },
+  input: { name: string; rules?: Record<string, unknown>; invite?: readonly string[] },
 ): Promise<{ id: string }> {
   const id = newId();
   const datasetVersion = ctx.datasets.latestVersion();
   // Objectives campaigns get their public missions now, so everyone sees them in the lobby.
   const rules = withDefaultMissions(ctx, datasetVersion, mergeRules(DEFAULT_RULES, input.rules ?? {}));
-  await ctx.db.transaction(async (tx) => {
+  const { invited, hostName } = await ctx.db.transaction(async (tx) => {
     await tx.insert(campaigns).values({
       id,
       name: input.name,
@@ -99,7 +108,17 @@ export async function createCampaign(
     });
     await tx.insert(members).values({ campaignId: id, userId: hostId, color: 0 });
     await new EventLog(tx, id).add({ type: 'campaign.created', payload: { name: input.name } }, hostId, 0);
+    const invited = await addInvitations(tx, id, hostId, input.invite ?? [], [hostId]);
+    return { invited, hostName: invited.length > 0 ? await userName(tx, hostId) : '' };
   });
+  if (invited.length > 0) {
+    ctx.hub.send(invited, { type: 'friends.changed' });
+    for (const userId of invited) {
+      ctx.notifier
+        .send(invitationNotice({ id, name: input.name }, hostName, userId))
+        .catch((err: unknown) => ctx.log.error({ err }, 'could not send an invitation'));
+    }
+  }
   return { id };
 }
 
@@ -148,15 +167,39 @@ export async function joinCampaign(ctx: AppContext, inviteCode: string, userId: 
   if (!found) throw notFound('This invite link is no longer valid.');
 
   return mutate(ctx, found.id, async (scope) => {
-    const { campaign, tx } = scope;
-    if (campaign.inviteCode !== inviteCode) throw notFound('This invite link is no longer valid.');
-    if (scope.members.some((m) => m.userId === userId)) return { id: campaign.id };
-    requireLobby(scope);
-    const color = nextSeatColor(scope);
-    await tx.insert(members).values({ campaignId: campaign.id, userId, color });
-    await scope.log.add({ type: 'member.joined', payload: { userId, name: await userName(tx, userId) } }, userId, 0);
-    return { id: campaign.id };
+    if (scope.campaign.inviteCode !== inviteCode) throw notFound('This invite link is no longer valid.');
+    await seatPlayer(ctx, scope, userId);
+    return { id: scope.campaign.id };
   });
+}
+
+/** Joins the lobby a friend invited the player to. */
+export async function acceptInvitation(ctx: AppContext, campaignId: string, userId: string): Promise<{ id: string }> {
+  return mutate(ctx, campaignId, async (scope) => {
+    const seated = scope.members.some((m) => m.userId === userId);
+    if (!seated && !(await isInvited(scope.tx, campaignId, userId))) {
+      throw notFound('This invitation is no longer open.');
+    }
+    await seatPlayer(ctx, scope, userId);
+    return { id: campaignId };
+  });
+}
+
+/** Seats a player at the lobby's table, from an invite link or an invitation. Seated players stay as they are. */
+async function seatPlayer(ctx: AppContext, scope: MutationScope, userId: string): Promise<void> {
+  if (scope.members.some((m) => m.userId === userId)) return;
+  requireLobby(scope);
+  const color = nextSeatColor(scope);
+  await scope.tx.insert(members).values({ campaignId: scope.campaign.id, userId, color });
+  await scope.log.add(
+    { type: 'member.joined', payload: { userId, name: await userName(scope.tx, userId) } },
+    userId,
+    0,
+  );
+  // Joining answers an invitation, however the player came in.
+  if (await removeInvitation(scope.tx, scope.campaign.id, userId)) {
+    scope.afterCommit(() => ctx.hub.send([userId], { type: 'friends.changed' }));
+  }
 }
 
 export async function removeMember(
@@ -183,17 +226,23 @@ export async function removeMember(
 
 export async function deleteCampaign(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
   await ctx.locks.run(campaignId, async () => {
-    const memberIds = await ctx.db.transaction(async (tx) => {
+    const { memberIds, invitedIds } = await ctx.db.transaction(async (tx) => {
       const [c] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).for('update');
       if (!c) throw notFound('Campaign not found.');
       if (c.hostId !== userId) throw forbidden('Only the host can delete the campaign.');
       const rows = await tx.select({ userId: members.userId }).from(members).where(eq(members.campaignId, campaignId));
+      const invited = await tx
+        .select({ userId: invitations.userId })
+        .from(invitations)
+        .where(eq(invitations.campaignId, campaignId));
       await tx.delete(campaigns).where(eq(campaigns.id, campaignId));
       const memberIds = rows.map((r) => r.userId);
       await deleteBotUsers(tx, memberIds);
-      return memberIds;
+      return { memberIds, invitedIds: invited.map((r) => r.userId) };
     });
     ctx.hub.send(memberIds, { type: 'campaign.deleted', campaignId });
+    // Their invitations went with the campaign.
+    ctx.hub.send(invitedIds, { type: 'friends.changed' });
   });
 }
 
@@ -396,6 +445,10 @@ export async function startDraft(ctx: AppContext, campaignId: string, userId: st
       .where(eq(campaigns.id, campaignId));
     scope.campaign = { ...scope.campaign, status: 'draft', draftOrder: order, pickIndex: 0 };
     if (scope.campaign.rules.war.handicap !== 'off') await freezeRatings(scope);
+    // The table is settled: invitations close, and everyone at it is friends from now on.
+    await closeInvitations(ctx, scope);
+    const people = await befriend(scope.tx, order);
+    scope.afterCommit(() => ctx.hub.send(people, { type: 'friends.changed' }));
     await scope.log.add({ type: 'draft.started', payload: { order } }, userId, 0);
     await advanceDraft(ctx, scope);
   });

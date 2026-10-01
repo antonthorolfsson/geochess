@@ -85,6 +85,59 @@ export function PasswordInput({
   );
 }
 
+/** A link to send to someone: shown in full, with the device's share sheet where it has one, else Copy. */
+export function ShareLink({
+  path,
+  label,
+  shareTitle,
+  shareText,
+}: {
+  /** The app path, e.g. `/join/<code>`. */
+  path: string;
+  label: string;
+  shareTitle: string;
+  shareText: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window === 'undefined' ? path : `${window.location.origin}${path}`;
+  const canShare = typeof navigator !== 'undefined' && 'share' in navigator;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="flex gap-2">
+      <input
+        className="input min-w-0 flex-1 font-mono text-sm"
+        readOnly
+        value={url}
+        onFocus={(e) => e.target.select()}
+        aria-label={label}
+      />
+      {canShare ? (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => navigator.share({ title: shareTitle, text: shareText, url }).catch(() => {})}
+        >
+          Share
+        </button>
+      ) : (
+        <button type="button" className="btn btn-ghost" onClick={copy}>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Toggle({
   checked,
   onChange,

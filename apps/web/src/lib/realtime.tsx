@@ -67,6 +67,10 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
           void queryClient.invalidateQueries({ queryKey: chatKeys.summary(message.campaignId) });
           void queryClient.invalidateQueries({ queryKey: keys.campaigns });
           break;
+        case 'friends.changed':
+          void queryClient.invalidateQueries({ queryKey: keys.friends });
+          void queryClient.invalidateQueries({ queryKey: keys.invitations });
+          break;
         default:
           if (message.type === 'campaign.events') {
             upsertFeedItems(queryClient, message.campaignId, eventItems(message.events));
@@ -95,6 +99,8 @@ export function RealtimeProvider({ userId, children }: { userId: string | null; 
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
         void queryClient.invalidateQueries({ queryKey: keys.campaigns });
+        void queryClient.invalidateQueries({ queryKey: keys.friends });
+        void queryClient.invalidateQueries({ queryKey: keys.invitations });
       };
       ws.onclose = () => {
         if (socket !== ws) return;

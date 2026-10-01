@@ -86,6 +86,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       ...victory,
     },
     mySecret: null,
+    invited: [],
     ...overrides,
   };
 }

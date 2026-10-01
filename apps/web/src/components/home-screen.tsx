@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { keys, useCampaigns, useMe } from '@/lib/queries';
 import { AppHeader, Emblem } from './app-header';
+import { FriendsSection, InvitationsSection } from './friends/home-sections';
 import { EmpireSwatch } from './hatch';
 import { LinkSent } from './login-screen';
 import { RulesGuide } from './rules/rules-guide';
@@ -73,6 +74,7 @@ function Dashboard({ user }: { user: SessionUser }) {
   const campaigns = useCampaigns(true);
   return (
     <div className="space-y-8">
+      <InvitationsSection />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Your campaigns</h1>
         <Link href="/new" className="btn btn-primary">
@@ -86,7 +88,7 @@ function Dashboard({ user }: { user: SessionUser }) {
         <Notice tone="error">{errorMessage(campaigns.error)}</Notice>
       ) : campaigns.data.length === 0 ? (
         <div className="panel p-6 text-muted">
-          No campaigns yet. Start one and send the invite link to your group, or open an invite link a friend sent you.
+          No campaigns yet. Start one and invite your group, or open an invite link a friend sent you.
         </div>
       ) : (
         <ul className="space-y-2">
@@ -126,6 +128,7 @@ function Dashboard({ user }: { user: SessionUser }) {
         </ul>
       )}
 
+      <FriendsSection />
       <ProfileSection user={user} />
       {user.email && <PasswordSection hasPassword={user.hasPassword} email={user.email} />}
     </div>

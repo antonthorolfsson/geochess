@@ -10,6 +10,9 @@ export const keys = {
   campaigns: ['campaigns'] as const,
   campaign: (id: string) => ['campaign', id] as const,
   invite: (code: string) => ['invite', code] as const,
+  friends: ['friends'] as const,
+  friendLink: (code: string) => ['friend-link', code] as const,
+  invitations: ['invitations'] as const,
   mapData: (version: string) => ['map-data', version] as const,
   /** Mutation key for saving a draft list, so bursts of edits can be told apart from other changes. */
   draftList: (campaignId: string) => ['draft-list', campaignId] as const,
@@ -28,6 +31,20 @@ export function useMe() {
 
 export function useCampaigns(enabled: boolean) {
   return useQuery({ queryKey: keys.campaigns, queryFn: api.campaigns, enabled });
+}
+
+/** The player's friends and friend link, kept current by `friends.changed` messages. */
+export function useFriends(enabled = true) {
+  return useQuery({ queryKey: keys.friends, queryFn: api.friends, enabled });
+}
+
+/** Lobbies friends invited the player to. */
+export function useInvitations(enabled = true) {
+  return useQuery({ queryKey: keys.invitations, queryFn: api.invitations, enabled });
+}
+
+export function useFriendLink(code: string) {
+  return useQuery({ queryKey: keys.friendLink(code), queryFn: () => api.friendLink(code), retry: retryServerErrors });
 }
 
 export function useCampaign(id: string) {

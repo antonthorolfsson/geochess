@@ -6,10 +6,14 @@ import type {
   CampaignSummary,
   CampaignView,
   ChatSummary,
+  CreateCampaignInput,
   DeclareWarInput,
   FeedFilter,
   FeedPage,
+  FriendLinkPreview,
+  FriendsView,
   GameView,
+  InvitationView,
   InvitePreview,
   MeResponse,
   MessageView,
@@ -79,8 +83,7 @@ export const api = {
 
   campaigns: () => request<CampaignSummary[]>('GET', '/campaigns'),
   campaign: (id: string) => request<CampaignView>('GET', `/campaigns/${id}`),
-  createCampaign: (input: { name: string; rules: Record<string, unknown> }) =>
-    request<{ id: string }>('POST', '/campaigns', input),
+  createCampaign: (input: CreateCampaignInput) => request<{ id: string }>('POST', '/campaigns', input),
   updateCampaign: (id: string, input: { name?: string; rules?: Record<string, unknown> }) =>
     request('PATCH', `/campaigns/${id}`, input),
   deleteCampaign: (id: string) => request('DELETE', `/campaigns/${id}`),
@@ -113,6 +116,21 @@ export const api = {
 
   invite: (code: string) => request<InvitePreview>('GET', `/invites/${code}`),
   join: (code: string) => request<{ id: string }>('POST', `/invites/${code}/join`),
+  /** Invites the player's friends to a lobby. */
+  inviteFriends: (id: string, userIds: string[]) =>
+    request<{ invited: string[] }>('POST', `/campaigns/${id}/invitations`, { userIds }),
+  /** Calls off an invitation: the player who sent it, or the host. */
+  cancelInvitation: (id: string, userId: string) =>
+    request('DELETE', `/campaigns/${id}/invitations/${encodeURIComponent(userId)}`),
+
+  friends: () => request<FriendsView>('GET', '/friends'),
+  removeFriend: (userId: string) => request('DELETE', `/friends/${encodeURIComponent(userId)}`),
+  resetFriendLink: () => request<{ friendCode: string }>('POST', '/friends/link/reset'),
+  friendLink: (code: string) => request<FriendLinkPreview>('GET', `/friend-links/${code}`),
+  addFriend: (code: string) => request<{ userId: string; name: string }>('POST', `/friend-links/${code}`),
+  invitations: () => request<InvitationView[]>('GET', '/invitations'),
+  acceptInvitation: (campaignId: string) => request<{ id: string }>('POST', `/invitations/${campaignId}/join`),
+  declineInvitation: (campaignId: string) => request('POST', `/invitations/${campaignId}/decline`),
 
   declareWar: (id: string, input: DeclareWarInput) => request<{ id: string }>('POST', `/campaigns/${id}/wars`, input),
   respondToWar: (id: string, warId: string, input: WarResponse) =>

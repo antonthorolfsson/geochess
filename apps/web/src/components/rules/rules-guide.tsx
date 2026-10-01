@@ -261,8 +261,9 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
       stage: 'Lobby',
       text: (
         <>
-          The host creates the campaign, picks the settings and shares the invite link. Everyone who joins chooses an
-          empire color. Once at least {inWords(MIN_PLAYERS)} players are in, the host starts the draft.
+          The host creates the campaign, picks the settings, and invites friends or shares the invite link. Everyone who
+          joins chooses an empire color. Once at least {inWords(MIN_PLAYERS)} players are in, the host starts the draft,
+          and everyone at the table becomes friends, ready to invite to the next campaign.
         </>
       ),
     },

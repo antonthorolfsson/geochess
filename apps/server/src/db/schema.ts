@@ -44,8 +44,28 @@ export const users = pgTable('users', {
   /** The player's Lichess ratings as last read from Lichess (at sign-in, or refreshed), for handicaps. */
   lichessRatings: jsonb('lichess_ratings').$type<LichessRatings>(),
   lichessRatingsAt: timestamp('lichess_ratings_at', { withTimezone: true }),
+  /** The code of the player's friend link (`/friend/<code>`), made the first time they look at their friends. */
+  friendCode: text('friend_code').unique(),
   createdAt: createdAt(),
 });
+
+/**
+ * Friendships, one row each way: people who drafted a campaign together, or one opened the other's
+ * friend link. Removing a friend deletes both rows. Bots are never anyone's friend.
+ */
+export const friends = pgTable(
+  'friends',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    friendId: text('friend_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.friendId] })],
+);
 
 /** Only a hash of the session token is stored; the token itself lives in the user's cookie. */
 export const sessions = pgTable(
@@ -159,6 +179,27 @@ export const members = pgTable(
     uniqueIndex('members_campaign_color').on(t.campaignId, t.color),
     index('members_user').on(t.userId),
   ],
+);
+
+/**
+ * A friend invited to a campaign's lobby, until they join (by the invitation or the link), decline,
+ * or the inviter or host calls it off. The draft starting closes every invitation.
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    invitedBy: text('invited_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.userId] }), index('invitations_user').on(t.userId)],
 );
 
 export const holdings = pgTable(

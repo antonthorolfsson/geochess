@@ -26,6 +26,7 @@ import { isBotId } from '../bots/ids';
 import { visibleAccords } from '../diplomacy/accords';
 import { unreadPrivateMessages } from '../diplomacy/chat';
 import { toAccordView } from '../diplomacy/views';
+import { invitedTo } from '../friends/views';
 import { notFound } from '../lib/errors';
 import { seatRating } from '../ratings/service';
 import { victoryViews } from '../victory/views';
@@ -205,6 +206,7 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
             : null,
         victory,
         mySecret,
+        invited: c.status === 'lobby' ? await invitedTo(tx, campaignId) : [],
       };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },

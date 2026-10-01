@@ -15,6 +15,7 @@ import type { AppContext } from './context';
 import type { DatasetProvider } from './datasets';
 import type { Db } from './db/client';
 import { registerDiplomacyRoutes } from './diplomacy/routes';
+import { registerFriendRoutes } from './friends/routes';
 import type { Env } from './env';
 import { HttpError, forbidden } from './lib/errors';
 import { isPublicOrigin } from './lib/http';
@@ -142,6 +143,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/health', async () => ({ ok: true }));
   registerAuthRoutes(app, ctx);
   registerCampaignRoutes(app, ctx);
+  registerFriendRoutes(app, ctx);
   registerWarRoutes(app, ctx);
   registerDiplomacyRoutes(app, ctx);
   registerStatsRoutes(app, ctx);

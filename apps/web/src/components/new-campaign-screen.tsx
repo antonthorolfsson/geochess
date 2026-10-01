@@ -3,11 +3,13 @@
 import { DEFAULT_RULES, MAX_PLAYERS, MIN_PLAYERS, campaignNameSchema, type DraftMode, type Pace } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
-import { keys, useMe } from '@/lib/queries';
+import { friendGroups, seatsNote } from '@/lib/friends';
+import { keys, useCampaigns, useFriends, useMe } from '@/lib/queries';
 import { AppHeader } from './app-header';
 import { PACE_OPTIONS } from './campaign/lobby-panel';
+import { FriendPicker } from './friends/friend-picker';
 import { Notice } from './ui';
 
 const DRAFT_MODES: { value: DraftMode; title: string; body: string }[] = [
@@ -31,18 +33,27 @@ export function NewCampaignScreen() {
   const [maxPlayers, setMaxPlayers] = useState(DEFAULT_RULES.maxPlayers);
   const [mode, setMode] = useState<DraftMode>(DEFAULT_RULES.draft.mode);
   const [pace, setPace] = useState<Pace>(DEFAULT_RULES.war.pace);
+  const [invite, setInvite] = useState<string[]>([]);
+  const signedIn = Boolean(me.data?.user);
+  const friends = useFriends(signedIn);
+  const campaigns = useCampaigns(signedIn);
+  const groups = useMemo(
+    () => friendGroups(friends.data?.friends ?? [], campaigns.data ?? []),
+    [friends.data, campaigns.data],
+  );
 
   useEffect(() => {
     if (me.data && !me.data.user) router.replace('/login?next=/new');
   }, [me.data, router]);
 
   const create = useMutation({
-    mutationFn: () => api.createCampaign({ name, rules: { maxPlayers, draft: { mode }, war: { pace } } }),
+    mutationFn: () => api.createCampaign({ name, rules: { maxPlayers, draft: { mode }, war: { pace } }, invite }),
     onSuccess: async ({ id }) => {
       await queryClient.invalidateQueries({ queryKey: keys.campaigns });
       router.push(`/c/${id}`);
     },
   });
+  const seats = seatsNote(invite.length, maxPlayers - 1);
   const valid = campaignNameSchema.safeParse(name).success;
 
   return (
@@ -80,6 +91,32 @@ export function NewCampaignScreen() {
               ))}
             </select>
           </label>
+
+          {friends.data &&
+            (friends.data.friends.length > 0 ? (
+              <div className="space-y-2">
+                <FriendPicker
+                  legend="Invite friends"
+                  friends={friends.data.friends}
+                  groups={groups}
+                  selected={invite}
+                  onChange={setInvite}
+                />
+                <p className="text-sm text-muted">
+                  Each gets an invitation on their home screen to join or decline. The lobby also has an invite link for
+                  anyone else.
+                </p>
+                {seats && <Notice tone="amber">{seats}</Notice>}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <span className="label">Invite friends</span>
+                <p className="text-sm text-muted">
+                  Everyone you play a campaign with becomes your friend, ready to invite next time. For now, share the
+                  invite link from the lobby.
+                </p>
+              </div>
+            ))}
 
           <fieldset className="space-y-2">
             <legend className="label mb-1">Draft</legend>

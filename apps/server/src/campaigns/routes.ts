@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/session';
 import type { AppContext } from '../context';
+import { inviteInput } from '../friends/invitations';
 import { parse } from '../lib/http';
 import {
   createCampaign,
@@ -32,7 +33,10 @@ export function registerCampaignRoutes(app: FastifyInstance, ctx: AppContext): v
 
   app.post('/api/campaigns', async (req, reply) => {
     const user = requireUser(req);
-    const input = parse(z.object({ name: campaignNameSchema, rules: rulesInput.optional() }), req.body);
+    const input = parse(
+      z.object({ name: campaignNameSchema, rules: rulesInput.optional(), invite: inviteInput.optional() }),
+      req.body,
+    );
     reply.code(201);
     return createCampaign(ctx, user.id, input);
   });

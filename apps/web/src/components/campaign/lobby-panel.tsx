@@ -27,13 +27,15 @@ import {
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
-import { keys } from '@/lib/queries';
+import { friendGroups, seatsNote } from '@/lib/friends';
+import { keys, useCampaigns, useFriends } from '@/lib/queries';
 import { ratingText } from '@/lib/rules-text';
+import { FriendPicker } from '../friends/friend-picker';
 import { EmpireSwatch } from '../hatch';
-import { Notice, Toggle } from '../ui';
+import { Notice, ShareLink, Toggle } from '../ui';
 import { LobbyMissions } from '../victory/lobby-missions';
 import type { MissionFocus } from '../victory/missions-panel';
 import { BotLevelSelect } from './bot-level-select';
@@ -81,7 +83,12 @@ export function LobbyPanel({
     <div className="space-y-6 p-4">
       <section>
         <h2 className="label mb-2">Invite your friends</h2>
-        <InviteLink code={campaign.inviteCode} campaignName={campaign.name} />
+        <ShareLink
+          path={`/join/${campaign.inviteCode}`}
+          label="Invite link"
+          shareTitle={campaign.name}
+          shareText={`Join my Geo Chess campaign, ${campaign.name}.`}
+        />
         {isHost && (
           <button
             type="button"
@@ -94,6 +101,7 @@ export function LobbyPanel({
             Reset link
           </button>
         )}
+        <InviteFriends model={model} />
       </section>
 
       <section>
@@ -159,6 +167,36 @@ export function LobbyPanel({
             </li>
           ))}
         </ul>
+        {campaign.invited.length > 0 && (
+          <>
+            <h3 className="label mt-3 mb-2">Invited · waiting for an answer</h3>
+            <ul className="divide-y divide-line rounded-[3px] border border-dashed border-line-strong">
+              {campaign.invited.map((i) => (
+                <li key={i.userId} className="flex min-h-12 items-center gap-2 px-3 py-1">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{i.name}</span>
+                    <span className="block truncate text-sm text-muted">
+                      Invited by{' '}
+                      {i.invitedBy === me.userId
+                        ? 'you'
+                        : (campaign.members.find((m) => m.userId === i.invitedBy)?.name ?? 'a former player')}
+                    </span>
+                  </span>
+                  {(isHost || i.invitedBy === me.userId) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={action.isPending}
+                      onClick={() => run(() => api.cancelInvitation(campaign.id, i.userId))}
+                    >
+                      Withdraw
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         {isHost && campaign.members.length < campaign.rules.maxPlayers && (
           <AddBot pending={action.isPending} onAdd={(level) => run(() => api.addBot(campaign.id, { level }))} />
         )}
@@ -232,6 +270,62 @@ export function LobbyPanel({
         </button>
       </section>
     </div>
+  );
+}
+
+/** The viewer's friends who aren't at the table yet, to invite to the lobby. */
+function InviteFriends({ model }: { model: CampaignModel }) {
+  const { campaign } = model;
+  const queryClient = useQueryClient();
+  const friends = useFriends();
+  const campaigns = useCampaigns(true);
+  const [selected, setSelected] = useState<string[]>([]);
+  const invite = useMutation({
+    mutationFn: () => api.inviteFriends(campaign.id, selected),
+    onSuccess: () => setSelected([]),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) }),
+  });
+  // Players and invited friends are listed under Players.
+  const exclude = useMemo(
+    () => new Set([...campaign.members.map((m) => m.userId), ...campaign.invited.map((i) => i.userId)]),
+    [campaign.members, campaign.invited],
+  );
+  // The campaign's own players aren't a group to pick from here.
+  const groups = useMemo(
+    () =>
+      friendGroups(
+        friends.data?.friends ?? [],
+        (campaigns.data ?? []).filter((c) => c.id !== campaign.id),
+      ),
+    [friends.data, campaigns.data, campaign.id],
+  );
+  const free = campaign.rules.maxPlayers - campaign.members.length;
+  if (!friends.data?.friends.some((f) => !exclude.has(f.userId)) || free <= 0) return null;
+  const seats = seatsNote(campaign.invited.length + selected.length, free);
+
+  return (
+    <form
+      className="mt-4 space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (selected.length > 0) invite.mutate();
+      }}
+    >
+      <FriendPicker
+        legend="Or invite friends"
+        friends={friends.data.friends}
+        groups={groups}
+        selected={selected}
+        onChange={setSelected}
+        exclude={exclude}
+        disabled={invite.isPending}
+      />
+      {selected.length > 0 && seats && <Notice tone="amber">{seats}</Notice>}
+      <button type="submit" className="btn btn-ghost w-full" disabled={selected.length === 0 || invite.isPending}>
+        {selected.length > 1 ? `Invite ${selected.length} friends` : 'Invite'}
+      </button>
+      {invite.error && <Notice tone="error">{errorMessage(invite.error)}</Notice>}
+    </form>
   );
 }
 
@@ -413,51 +507,6 @@ function RatingsSection({
         <p>Ratings are frozen when the draft starts. A game with an unrated player has no handicap.</p>
       </div>
     </section>
-  );
-}
-
-function InviteLink({ code, campaignName }: { code: string; campaignName: string }) {
-  const [copied, setCopied] = useState(false);
-  const url = typeof window === 'undefined' ? `/join/${code}` : `${window.location.origin}/join/${code}`;
-  const canShare = typeof navigator !== 'undefined' && 'share' in navigator;
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  return (
-    <div className="flex gap-2">
-      <input
-        className="input min-w-0 flex-1 font-mono text-sm"
-        readOnly
-        value={url}
-        onFocus={(e) => e.target.select()}
-        aria-label="Invite link"
-      />
-      {canShare ? (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() =>
-            navigator
-              .share({ title: campaignName, text: `Join my Geo Chess campaign, ${campaignName}.`, url })
-              .catch(() => {})
-          }
-        >
-          Share
-        </button>
-      ) : (
-        <button type="button" className="btn btn-ghost" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      )}
-    </div>
   );
 }
 

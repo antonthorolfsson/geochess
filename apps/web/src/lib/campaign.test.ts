@@ -51,6 +51,7 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     turns: null,
     victory: null,
     mySecret: null,
+    invited: [],
     ...overrides,
   };
 }

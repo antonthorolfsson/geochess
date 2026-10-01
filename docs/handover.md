@@ -830,6 +830,47 @@ online alone, as the way out of a dispute; only games underway (not queued live 
 
 Tests: rules `over-the-board.test.ts`, server `test/over-the-board.test.ts`.
 
+**Friends** (2026-10-01, at the user's request: "a friends list available so it's easy to create a
+new campaign with my friend group"). The user's calls, asked before building: friends are made
+**automatically** from campaigns played together (plus a friend link), and picking friends sends
+them an **invitation** to join or decline, rather than seating them.
+
+- **Who's a friend.** Everyone at the table when a draft starts becomes friends with everyone else
+  there (`befriend` in `startDraft`): people only, so bots and players who left the lobby don't
+  count. Migration `0013_friends` did the same for every campaign past its lobby. A player's friend
+  link (`/friend/<code>`, `users.friend_code`, made the first time they look) makes friends of
+  whoever opens it; "Reset link" replaces it. Friendship goes both ways (a `friends` row each way),
+  and "Remove" ends it for both; drafting together again makes them friends again.
+- **Invitations** (`invitations` table, `apps/server/src/friends/invitations.ts`): the host picks
+  friends on the new-campaign form (`invite` on `POST /api/campaigns`), and any member can invite
+  their own friends from the lobby, as anyone can share the link. Only friends can be invited
+  (`not-a-friend`), and not into a full lobby. Each invited friend gets a notice (emailed when push
+  reaches nothing, tag `invitation-<campaign>`) and a card on their home screen with Join and
+  Decline. Joining by the invitation or the link answers it; a full table leaves it to decline.
+  The member who sent it or the host can withdraw it. The draft starting closes the rest, and
+  deleting the campaign removes them. Invitations change through `mutate()` (members see who's
+  invited, `CampaignView.invited`, public within the campaign) and log no events; the invited
+  player hears through a new `friends.changed` message, which also covers friend-list changes.
+- **Web.** Home screen: "Invitations" at the top when there are any, and a "Friends" panel (each
+  friend with how many campaigns you share, "Remove", your friend link with Share or Copy). The
+  friend picker (`components/friends/friend-picker.tsx`) is on the new-campaign form and under
+  the lobby's invite link: checkboxes, and "Pick the players from" with the player's recent
+  campaigns (`friendGroups` in `lib/friends.ts`, newest first, one per set of friends) and
+  "Everyone". It warns when more friends are invited than seats are free. The lobby lists who's
+  invited under the players, with "Withdraw". The rules guide's lobby step mentions both.
+- **Checked in the browser** (dev server): Ann, Bo and Cy drafted "Iron Winter"; Ann's new
+  campaign picked them with the "Iron Winter" button; Bo, on a phone, joined from the home screen, Cy
+  declined, and Ann's lobby updated live; Di opened Ann's friend link and Ann's lobby offered Di at
+  once.
+
+Defaults taken while building (not asked; easy to change): friends are made when the draft starts,
+not on joining a lobby, so a stranger with a leaked link who is removed doesn't become anyone's
+friend; any member (not only the host) can invite; inviting more friends than seats is allowed (the
+first to join get them); declining tells nobody, though the lobby's list shows it; nobody is told
+when someone opens their friend link, beyond the list updating.
+
+Tests: server `test/friends.test.ts` (including the migration's backfill), web `lib/friends.test.ts`.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1252,14 +1293,14 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                               |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                    |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                         |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members) |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                                         |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                                                                   |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                       |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `friends/{friends,invitations,views,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members), `0012_over_the_board`, `0013_friends` (friends, invitations, `users.friend_code`, and friendships from past campaigns) |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `friends/*` (friend picker, home screen invitations and friends, friend link page), `notifications.tsx`                                                                                                                                                             |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `friends.ts` (groups to invite, seats), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                                                                                                                                                   |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
@@ -1274,4 +1315,6 @@ API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,
 `/api/campaigns/:id/feed?filter=&before=`, `/api/campaigns/:id/messages` (send; `?with=` reads a
 private conversation) and `…/messages/:messageId` (delete), `/api/campaigns/:id/chat` (unread
 counts) and `…/chat/read`, `/api/push/{key,subscribe,unsubscribe}`, `/api/invites/:code` and
-`…/join`, `/ws`.
+`…/join`, `/api/campaigns/:id/invitations` (invite) and `…/invitations/:userId` (withdraw),
+`/api/friends` (list, with the friend link), `/api/friends/:userId` (remove), `/api/friends/link/reset`,
+`/api/friend-links/:code` (whose, add), `/api/invitations` and `…/:campaignId/{join,decline}`, `/ws`.

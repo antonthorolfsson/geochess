@@ -75,6 +75,10 @@ when starting new work.**
   applies them), the server side in `apps/server/src/ratings/`. Ratings come from Lichess (kept on
   the user, read again through the injectable `ctx.lichess`), a bot's level, or the player's own
   number where the host allows it, and are frozen on the membership when the draft starts.
+- Friends (`apps/server/src/friends/`) are made when a draft starts (everyone at the table, bots
+  aside) or by a player's friend link, and go both ways. Invitations to a lobby are campaign state
+  (through `mutate()`, public to members); the invited player, not a member yet, hears through
+  `friends.changed`. Only friends can be invited.
 - `packages/sim` plays whole campaigns with bots for balance runs. It uses the rules package for
   every rule but mirrors the server's orchestration (round starts, the war lifecycle,
   `settleVictory`) in `src/engine/`: change one, change the other.

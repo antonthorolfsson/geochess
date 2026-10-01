@@ -5,10 +5,12 @@
  * Checkmate Artist.
  */
 import {
-  ARMAGEDDON_BLACK_TIME,
   attackerColor,
+  clockFactors,
   clockModifiers,
   clockTarget,
+  ratingHandicap,
+  type CampaignRules,
   type Color,
   type GameEndReason,
   type WarBoard,
@@ -44,24 +46,22 @@ export function oddsFromEdge(model: ChessModel, edge: number): GameOdds {
 
 /**
  * White's edge in a war's game (or its Armageddon tiebreak): ratings, the colour, and clock time
- * as the war's time control shares it out (`warTimeControl`).
+ * as the war's time control shares it out (`clockFactors`, with the rating handicap where the
+ * rules have one: every simulated player is rated).
  */
 export function whiteEdge(
   model: ChessModel,
+  rules: CampaignRules,
   eloAttacker: number,
   eloDefender: number,
   modifierNet: number,
   armageddon: boolean,
 ): number {
-  const attacker = attackerColor(armageddon);
-  const favored = modifierNet > 0 ? 'defender' : modifierNet < 0 ? 'attacker' : null;
-  const factor = (color: Color) => {
-    const side = color === attacker ? 'attacker' : 'defender';
-    const bonus = side === favored ? 1 + Math.abs(modifierNet) / 100 : 1;
-    return bonus * (armageddon && color === 'black' ? ARMAGEDDON_BLACK_TIME : 1);
-  };
-  const timePct = (factor('white') / factor('black') - 1) * 100;
-  const [eloWhite, eloBlack] = attacker === 'white' ? [eloAttacker, eloDefender] : [eloDefender, eloAttacker];
+  const handicap = ratingHandicap(rules.war, eloAttacker, eloDefender);
+  const factor = clockFactors(rules, { net: modifierNet }, armageddon, handicap);
+  const timePct = (factor.white / factor.black - 1) * 100;
+  const [eloWhite, eloBlack] =
+    attackerColor(armageddon) === 'white' ? [eloAttacker, eloDefender] : [eloDefender, eloAttacker];
   return eloWhite - eloBlack + model.whiteElo + timePct * model.eloPerTimePct;
 }
 
@@ -90,9 +90,9 @@ export function oddsWithModifier(s: SimState, attackerId: string, defenderId: st
   const model = s.cfg.chess;
   const ea = s.byId.get(attackerId)!.elo;
   const ed = s.byId.get(defenderId)!.elo;
-  const first = oddsFromEdge(model, whiteEdge(model, ea, ed, net, false));
+  const first = oddsFromEdge(model, whiteEdge(model, s.rules, ea, ed, net, false));
   if (s.rules.war.draws !== 'armageddon') return { attacker: first.white, defender: first.black, held: first.draw };
-  const second = oddsFromEdge(model, whiteEdge(model, ea, ed, net, true));
+  const second = oddsFromEdge(model, whiteEdge(model, s.rules, ea, ed, net, true));
   // In the tiebreak the attacker is Black and wins a drawn game.
   const attackerSecond = second.black + second.draw;
   return {
@@ -111,7 +111,14 @@ export interface PlayedGame {
 export function playGame(s: SimState, war: SimWar, armageddon: boolean): PlayedGame {
   const model = s.cfg.chess;
   const net = clockModifiers(warBoard(s), war.attackerId, clockTarget(s.rules, war)).net;
-  const edge = whiteEdge(model, s.byId.get(war.attackerId)!.elo, s.byId.get(war.defenderId)!.elo, net, armageddon);
+  const edge = whiteEdge(
+    model,
+    s.rules,
+    s.byId.get(war.attackerId)!.elo,
+    s.byId.get(war.defenderId)!.elo,
+    net,
+    armageddon,
+  );
   const odds = oddsFromEdge(model, edge);
   const r = s.rng.chess();
   const winner: Color | null = r < odds.white ? 'white' : r < odds.white + odds.black ? 'black' : null;

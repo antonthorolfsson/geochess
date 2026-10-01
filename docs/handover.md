@@ -735,6 +735,58 @@ anything) a country to fortify if it wants one, otherwise one war, otherwise it 
 Bots see the turn state, which is public. A person holding the turn keeps the bots waiting, as
 anyone would; the host's "Pass for …" and the turn's deadline cover an away player.
 
+**Rating handicaps** (2026-10-01, at the user's request: "the option to give auto handicaps to
+weaker chess players. If all players sign in via lichess then we use their rating to compare.
+Players that are not using lichess sign in can assign their own elo for the auto handicap if that
+option is toggled on by the host"; not committed when written). The user's calls, asked before
+building: **time odds** (rather than draw or material odds), and ratings **frozen when the draft
+starts**.
+
+- **Settings** (`rules.war`): `handicap` (`off`, `light`, `full`; absent reads `off`, and new
+  campaigns start `off` too) and `selfRatings` (players without an established Lichess rating type
+  one in; off: they play unrated). Lobby: "Rating handicap" under Wars, and the toggle under it.
+- **Ratings** (`packages/rules/src/handicap.ts`, `playerRating`): a seat a bot plays has its
+  level's `BOT_LEVELS` rating (a stand-in too: handicaps follow whoever plays); otherwise the
+  player's Lichess rating for the campaign's kind of game (`lichessPerfFor`: correspondence, or
+  Lichess's own category for the clock, so 3+2 and 5+3 are blitz, 10+5 and 15+10 rapid), or the
+  nearest kind they play if that one is provisional or unplayed (`lichessRatingFor`); otherwise,
+  with `selfRatings`, the number they gave (400 to 3200). A Lichess rating always wins over a typed
+  one. No rating: no handicap in that player's games.
+- **Lichess.** Ratings are kept on the user (`users.lichess_ratings`, `lichess_ratings_at`): read
+  from `/api/account` at sign-in (the token is still revoked at once), and from the public
+  `/api/user/:name` (`ratings/lichess.ts`, `ctx.lichess`, a 5 s timeout) when a Lichess player
+  opens a lobby with handicaps on (`POST /api/campaigns/:id/rating/refresh`, at most every 10
+  minutes; it skips the campaign lock and pushes `campaign.changed` to the player's lobbies) and
+  before the draft freezes them, if more than an hour old (`refreshBeforeFreezing`, outside the
+  lock). Lichess unreachable keeps the old ones. Players who signed in before this have none until
+  one of those reads.
+- **Freezing.** `startDraft` writes each person's rating to `members.rating` (`freezeRatings`).
+  `members.claimed_rating` is the typed one (`PATCH /api/campaigns/:id/me` with `rating`, lobby
+  only). `MemberView.rating` (`seatRating` in `ratings/service.ts`) is live in the lobby, frozen
+  after, the bot's for a bot seat, and null with handicaps off. Public, like the war data.
+- **Time odds** (`ratingHandicap`, `clockFactors` in `war.ts`): gaps under 50 points count for
+  nothing; past that the weaker player gets 8% (light) or 16% (full) more time per 100 points, up
+  to 30% or 60%. In live games the stronger player loses as much (full at a 400-point gap: 8 minutes
+  against 2 at 5+3); in correspondence the stronger keeps their time, so no deadline lands in
+  someone's night. It multiplies with the clock modifiers (whose 25% cap is unchanged) and
+  Armageddon's share, and is worked out when the game is created (`warHandicap` in
+  `wars/service.ts`), so it's baked into the game's `timeControl`.
+- **Web.** The lobby's "Ratings for the handicap" lists every rating and its source, with "Your
+  rating" for players who may type one, "Check Lichess again", and "Link your Lichess account"
+  (the existing OAuth route links to the signed-in player). The stake builder shows a "Handicap"
+  line under the clock; the board already shows each side's time. The rules guide has a "Rating
+  handicap" part and the settings list a row (`handicapText`, `ratingText`, `handicapLine`).
+- **Simulator.** `whiteEdge` now uses `clockFactors`, so the simulator plays the handicap when the
+  rules have one, every simulated player rated at their `elo`. Scenarios `elo-300-light`,
+  `elo-300-full` and `elo-star-full`.
+- **Checked in the browser** (dev server): a live 5+3 lobby with Ann (1850, own), Bo (1450, own) and
+  a level 3 bot (1400); Bo's change after the draft started was refused; Ann's declaration on Russia
+  previewed "Bo +60% time, You −60% (400 points apart)" and the game came out 2:18 + 1.4 s for Ann
+  (60% off, then her +15% supply lines) against 8:00 + 4.8 s for Bo.
+
+Tests: rules `handicap.test.ts`, server `test/handicap.test.ts` (with a fake Lichess; tests never
+reach Lichess, `startTestServer`'s `lichess` option), web `rules-text.test.ts`.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1157,18 +1209,18 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/rules/src/`      | `war.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                            |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                  |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`              |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`) |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                       |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                               |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                    |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                         |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members) |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                                         |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                                                                   |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),
-`/api/campaigns/:id/{invite/reset,me,members/:userId,leave,kick}`, `/api/campaigns/:id/bots` (add) and `…/bots/:botId` (level), `/api/campaigns/:id/players/:userId/stand-in` (put in, take back),
+`/api/campaigns/:id/{invite/reset,me,members/:userId,leave,kick,rating/refresh}`, `/api/campaigns/:id/bots` (add) and `…/bots/:botId` (level), `/api/campaigns/:id/players/:userId/stand-in` (put in, take back),
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
 `…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,

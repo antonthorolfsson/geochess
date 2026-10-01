@@ -27,6 +27,7 @@ import { visibleAccords } from '../diplomacy/accords';
 import { unreadPrivateMessages } from '../diplomacy/chat';
 import { toAccordView } from '../diplomacy/views';
 import { notFound } from '../lib/errors';
+import { seatRating } from '../ratings/service';
 import { victoryViews } from '../victory/views';
 import { relevantWars, trucesFrom, type GameRow } from '../wars/board';
 import { peaceOffersFor, toWarView } from '../wars/views';
@@ -69,6 +70,9 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
           reputation: members.reputation,
           joinedAt: members.joinedAt,
           botLevel: members.botLevel,
+          rating: members.rating,
+          claimedRating: members.claimedRating,
+          lichessRatings: users.lichessRatings,
         })
         .from(members)
         .innerJoin(users, eq(users.id, members.userId))
@@ -160,10 +164,11 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         datasetVersion: c.datasetVersion,
         inviteCode: c.inviteCode,
         createdAt: c.createdAt.toISOString(),
-        members: memberRows.map(({ joinedAt, botLevel, ...m }) => ({
+        members: memberRows.map(({ joinedAt, botLevel, rating, claimedRating, lichessRatings, ...m }) => ({
           ...m,
           joinedAt: joinedAt.toISOString(),
           bot: botLevel === null ? null : { level: botLevel, standIn: !isBotId(m.userId) },
+          rating: seatRating(c.rules, c.status, { botLevel, rating, claimedRating }, lichessRatings),
         })),
         holdings: Object.fromEntries(holdingRows.map((h) => [h.territoryId, h.ownerId])),
         draft: order?.length

@@ -1,4 +1,4 @@
-import { AUTODRAFT_FALLBACKS, DRAFT_LIST_LIMIT, EMPIRE_COLORS, campaignNameSchema } from '@empire/rules';
+import { AUTODRAFT_FALLBACKS, DRAFT_LIST_LIMIT, EMPIRE_COLORS, campaignNameSchema, ratingSchema } from '@empire/rules';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/session';
@@ -72,6 +72,7 @@ export function registerCampaignRoutes(app: FastifyInstance, ctx: AppContext): v
         color: z.number().int().min(0).optional(),
         autodraft: z.boolean().optional(),
         autodraftFallback: z.enum(AUTODRAFT_FALLBACKS).optional(),
+        rating: ratingSchema.nullable().optional(),
       }),
       req.body,
     );

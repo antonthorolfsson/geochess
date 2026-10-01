@@ -8,6 +8,7 @@ import { staticDatasetProvider } from '../src/datasets';
 import { openDatabase } from '../src/db/client';
 import { loadEnv } from '../src/env';
 import type { Notice } from '../src/notifications/notifier';
+import type { LichessClient } from '../src/ratings/lichess';
 import { runDueWork } from '../src/wars/scheduler';
 
 export interface TestServer {
@@ -31,7 +32,7 @@ export interface TestServer {
 export async function startTestServer(
   dataset: Dataset = lineDataset(),
   env: NodeJS.ProcessEnv = {},
-  opts: { random?: () => number; engine?: ChessEngine } = {},
+  opts: { random?: () => number; engine?: ChessEngine; lichess?: LichessClient } = {},
 ): Promise<TestServer> {
   const database = await openDatabase({ dataDir: null });
   const mail: TestServer['mail'] = [];
@@ -48,6 +49,8 @@ export async function startTestServer(
     random: opts.random,
     scheduler: false,
     engine: opts.engine ?? testEngine(),
+    // Tests never reach Lichess: unless a test says otherwise, it can't be reached.
+    lichess: opts.lichess ?? { ratings: async () => null },
   });
   return {
     app,

@@ -70,6 +70,11 @@ when starting new work.**
   before the rules make them public. Chess is Stockfish's lite WASM build in `apps/server/engine/`
   (a child process, `engine.ts`); what each level asks of it is in `chess.ts`, and `BOT_LEVELS` in
   the rules describes the levels to players. A change to the simulator's bots changes live bots too.
+- Rating handicaps (`rules.war.handicap`, off unless the host turns it on) are time odds for the
+  weaker player: the rules are in `packages/rules/src/handicap.ts` (`clockFactors` in `war.ts`
+  applies them), the server side in `apps/server/src/ratings/`. Ratings come from Lichess (kept on
+  the user, read again through the injectable `ctx.lichess`), a bot's level, or the player's own
+  number where the host allows it, and are frozen on the membership when the draft starts.
 - `packages/sim` plays whole campaigns with bots for balance runs. It uses the rules package for
   every rule but mirrors the server's orchestration (round starts, the war lifecycle,
   `settleVictory`) in `src/engine/`: change one, change the other.

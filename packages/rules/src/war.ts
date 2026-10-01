@@ -1,6 +1,7 @@
 import type { Color, LiveClockSpec, TimeControl } from './chess';
 import type { CampaignRules, Pace } from './config';
 import type { TerritoryId } from './dataset';
+import { handicapFactor, type Handicap } from './handicap';
 import {
   ACCORD_MAX_ROUNDS,
   ACCORD_MIN_ROUNDS,
@@ -838,28 +839,54 @@ export function clockModifiers(board: WarBoard, attackerId: UserId, targetId: Te
   return { parts, net: Math.max(-MODIFIER_CAP_PCT, Math.min(MODIFIER_CAP_PCT, raw)) };
 }
 
-/** Each side's clock in a war game: the campaign's time control with the modifiers applied. */
-export function warTimeControl(rules: CampaignRules, modifiers: ClockModifiers, armageddon = false): TimeControl {
+/**
+ * How much of the campaign's time control each colour gets in a war game: the clock modifiers'
+ * bonus for the side they favour, a rating handicap's time odds, and Black's share in Armageddon.
+ */
+export function clockFactors(
+  rules: CampaignRules,
+  modifiers: Pick<ClockModifiers, 'net'>,
+  armageddon = false,
+  handicap: Handicap | null = null,
+): Record<Color, number> {
   const attacker = attackerColor(armageddon);
+  const favored = modifiers.net > 0 ? 'defender' : modifiers.net < 0 ? 'attacker' : null;
   const factor = (color: Color) => {
     const side = color === attacker ? 'attacker' : 'defender';
-    const favored = modifiers.net > 0 ? 'defender' : modifiers.net < 0 ? 'attacker' : null;
     const bonus = side === favored ? 1 + Math.abs(modifiers.net) / 100 : 1;
-    return bonus * (armageddon && color === 'black' ? ARMAGEDDON_BLACK_TIME : 1);
+    return (
+      bonus *
+      handicapFactor(rules.war.pace, handicap, side) *
+      (armageddon && color === 'black' ? ARMAGEDDON_BLACK_TIME : 1)
+    );
   };
+  return { white: factor('white'), black: factor('black') };
+}
+
+/**
+ * Each side's clock in a war game: the campaign's time control with the modifiers, and any
+ * rating handicap, applied.
+ */
+export function warTimeControl(
+  rules: CampaignRules,
+  modifiers: ClockModifiers,
+  armageddon = false,
+  handicap: Handicap | null = null,
+): TimeControl {
+  const factor = clockFactors(rules, modifiers, armageddon, handicap);
   if (rules.war.pace === 'live') {
     const [minutes, increment] = rules.war.liveClock.split('+').map(Number) as [number, number];
     const spec = (color: Color): LiveClockSpec => ({
-      initialMs: Math.round(minutes * 60_000 * factor(color)),
-      incrementMs: Math.round(increment * 1000 * factor(color)),
+      initialMs: Math.round(minutes * 60_000 * factor[color]),
+      incrementMs: Math.round(increment * 1000 * factor[color]),
     });
     return { kind: 'live', white: spec('white'), black: spec('black') };
   }
   const perMove = rules.war.hoursPerMove * 3_600_000;
   return {
     kind: 'correspondence',
-    white: { perMoveMs: Math.round(perMove * factor('white')) },
-    black: { perMoveMs: Math.round(perMove * factor('black')) },
+    white: { perMoveMs: Math.round(perMove * factor.white) },
+    black: { perMoveMs: Math.round(perMove * factor.black) },
   };
 }
 

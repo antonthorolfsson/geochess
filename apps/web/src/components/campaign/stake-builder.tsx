@@ -4,6 +4,7 @@ import {
   STAKE_REJECTION_MESSAGES,
   checkStake,
   clockModifiers,
+  ratingHandicap,
   launchersFor,
   reachableWithin,
   stakeableCountries,
@@ -13,6 +14,7 @@ import {
 } from '@empire/rules';
 import { useMemo } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
+import { handicapLine } from '@/lib/rules-text';
 import { ValueBadge } from '../ui';
 
 export interface StakeDraft {
@@ -79,6 +81,9 @@ export function StakeBuilder({
   const value = valueOf(idx, draft.stake);
   const problem = stakeProblem(model, targetId, draft, opts);
   const modifiers = clockModifiers(board, me, targetId);
+  const defenderId = board.holdings.get(targetId)?.ownerId;
+  const defender = defenderId ? model.membersById.get(defenderId) : undefined;
+  const handicap = ratingHandicap(model.campaign.rules.war, model.me.rating?.rating, defender?.rating?.rating);
 
   const remove = (id: TerritoryId) => {
     const rest = new Set(draft.stake.filter((s) => s !== id));
@@ -165,6 +170,12 @@ export function StakeBuilder({
       )}
 
       <ClockPreview parts={modifiers.parts} net={modifiers.net} />
+      {handicap && defender && (
+        <p className="text-sm text-muted">
+          <span className="label mr-2">Handicap</span>
+          {handicapLine(handicap, model.campaign.rules.war.pace, { attacker: 'You', defender: defender.name })}
+        </p>
+      )}
       {problem && <p className="text-sm text-amber">{problem}</p>}
     </div>
   );

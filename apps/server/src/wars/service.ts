@@ -31,12 +31,14 @@ import {
   tributeOptions,
   turnDeadline,
   valueOf,
+  ratingHandicap,
   warTimeControl,
   warTransfers,
   winnerOf,
   type DeclareWarInput,
   type GameEndReason,
   type GameResult,
+  type Handicap,
   type PeaceTerms,
   type Transfer,
   type WarCounter,
@@ -51,6 +53,7 @@ import { campaigns, games, holdings, members, peaceOffers, wars } from '../db/sc
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { newId } from '../lib/ids';
+import { seatRating } from '../ratings/service';
 import type { Notice } from '../notifications/notifier';
 import { botSeats } from '../bots/ids';
 import { endSeason } from '../victory/finish';
@@ -485,8 +488,9 @@ export async function busyPlayers(scope: MutationScope): Promise<Set<string>> {
  */
 async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow, armageddon = false): Promise<void> {
   const board = await loadBoard(ctx, scope.tx, scope.campaign);
-  const modifiers = clockModifiers(board, war.attackerId, clockTarget(scope.campaign.rules, war));
-  const tc = warTimeControl(scope.campaign.rules, modifiers, armageddon);
+  const rules = scope.campaign.rules;
+  const modifiers = clockModifiers(board, war.attackerId, clockTarget(rules, war));
+  const tc = warTimeControl(rules, modifiers, armageddon, warHandicap(scope, war));
   const attackerWhite = attackerColor(armageddon) === 'white';
   const whiteId = attackerWhite ? war.attackerId : war.defenderId;
   const blackId = attackerWhite ? war.defenderId : war.attackerId;
@@ -511,6 +515,15 @@ async function beginFighting(ctx: AppContext, scope: MutationScope, war: WarRow,
     return;
   }
   await startGame(ctx, scope, game!.id);
+}
+
+/** The rating handicap for a war's game, from the two seats' ratings as they stand (a stand-in plays at its level). */
+function warHandicap(scope: MutationScope, war: WarRow): Handicap | null {
+  const rating = (userId: string) => {
+    const seat = scope.members.find((m) => m.userId === userId);
+    return seat ? seatRating(scope.campaign.rules, scope.campaign.status, seat, null)?.rating : null;
+  };
+  return ratingHandicap(scope.campaign.rules.war, rating(war.attackerId), rating(war.defenderId));
 }
 
 async function startGame(ctx: AppContext, scope: MutationScope, gameId: string): Promise<void> {

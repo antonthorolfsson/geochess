@@ -9,6 +9,9 @@ import {
   DEFAULT_RULES,
   FORTIFY_COST,
   FORTIFY_ROUNDS,
+  HANDICAP_CAP_PCT,
+  HANDICAP_MIN_GAP,
+  HANDICAP_PCT_PER_100,
   HOME_TURF_PCT,
   LIVE_CLOCKS,
   MATCHED_RAISE_MIN_PCT,
@@ -828,6 +831,11 @@ function Battle({ rules, standard }: { rules: CampaignRules; standard: boolean }
   // An example worth reading: a mountain or island target with three of the attacker's countries on its border.
   const defenderEdge = HOME_TURF_PCT + TERRAIN_PCT;
   const attackerEdge = 3 * SUPPLY_LINE_PCT;
+  const scale = (level: 'light' | 'full') =>
+    `${HANDICAP_PCT_PER_100[level]}% more time (up to ${HANDICAP_CAP_PCT[level]}%)`;
+  const handicapScale = standard
+    ? `${scale('light')} with a light handicap, or ${scale('full')} with a full one`
+    : scale(war.handicap === 'full' ? 'full' : 'light');
   return (
     <Section id="battle" title="The battle">
       <p>One game of standard chess, with the attacker playing White.</p>
@@ -876,6 +884,29 @@ function Battle({ rules, standard }: { rules: CampaignRules; standard: boolean }
           </>
         ) : (
           <p>Off in this campaign: both players always get the same time.</p>
+        )}
+      </Part>
+      <Part title="Rating handicap">
+        {war.handicap === 'off' && !standard ? (
+          <p>Off in this campaign: ratings don't change the clocks.</p>
+        ) : (
+          <>
+            <p>
+              {standard ? 'Hosts can give weaker players more time.' : 'Weaker players get more time.'} Each player's
+              rating comes from their Lichess account (the rating for the campaign's kind of game, or the nearest kind
+              they play), or a bot's level.{' '}
+              {standard || war.selfRatings
+                ? `${standard ? 'Hosts can also let players' : 'Players'} without an established Lichess rating give their own. `
+                : 'Players without an established Lichess rating play unrated. '}
+              Ratings are frozen when the draft starts, and a game with an unrated player has no handicap.
+            </p>
+            <p>
+              For every 100 points between the two players, the weaker one gets {handicapScale}. In live games the
+              stronger player has as much less; in correspondence they keep their time, so nobody's deadline lands in
+              the middle of their night. Gaps under {HANDICAP_MIN_GAP} points don't count. The handicap comes on top of
+              the clock modifiers, and the stake builder shows it before you declare.
+            </p>
+          </>
         )}
       </Part>
       <Part title="How games end">

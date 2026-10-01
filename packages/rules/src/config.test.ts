@@ -40,6 +40,8 @@ describe('campaign rules', () => {
         peaceTerms: true,
         recall: true,
         turns: true,
+        handicap: 'off',
+        selfRatings: false,
       },
       victory: {
         mode: 'objectives',

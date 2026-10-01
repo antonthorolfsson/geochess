@@ -86,8 +86,10 @@ export const api = {
   resetInvite: (id: string) => request<{ inviteCode: string }>('POST', `/campaigns/${id}/invite/reset`),
   updateMembership: (
     id: string,
-    input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback },
+    input: { color?: number; autodraft?: boolean; autodraftFallback?: AutodraftFallback; rating?: number | null },
   ) => request('PATCH', `/campaigns/${id}/me`, input),
+  /** Reads the player's Lichess ratings again, for a lobby's handicaps. */
+  refreshRating: (id: string) => request<{ refreshed: boolean }>('POST', `/campaigns/${id}/rating/refresh`),
   /** The host gives another player a free color, in the lobby. */
   setMemberColor: (id: string, userId: string, color: number) =>
     request('PATCH', `/campaigns/${id}/members/${encodeURIComponent(userId)}`, { color }),

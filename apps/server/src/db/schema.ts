@@ -5,8 +5,10 @@ import {
   type CampaignRules,
   type Clocks,
   type GameEndReason,
+  type LichessRatings,
   type PeaceOfferStatus,
   type PeaceTerms,
+  type PlayerRating,
   type SecretMissionSpec,
   type SecretOption,
   type TimeControl,
@@ -38,6 +40,9 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   lichessId: text('lichess_id').unique(),
   lichessUsername: text('lichess_username'),
+  /** The player's Lichess ratings as last read from Lichess (at sign-in, or refreshed), for handicaps. */
+  lichessRatings: jsonb('lichess_ratings').$type<LichessRatings>(),
+  lichessRatingsAt: timestamp('lichess_ratings_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -143,6 +148,10 @@ export const members = pgTable(
     botLevel: integer('bot_level'),
     /** The last round a bot has done its round's diplomacy and fortifying for. */
     botRound: integer('bot_round'),
+    /** The rating a player without an established Lichess rating gives themselves in the lobby. */
+    claimedRating: integer('claimed_rating'),
+    /** The rating this player's games are handicapped by, frozen when the draft starts; null: unrated. */
+    rating: jsonb('rating').$type<PlayerRating>(),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.userId] }),

@@ -520,3 +520,18 @@ VARIANTS['no-turns'] = {
     war: { turns: false },
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// The 1-20 value curve (`values-20`). Its Expansion gain scales by the curve's total (15 → 19),
+// but value gained comes mostly from the top countries, which grew more than the total.
+
+for (const gain of [21, 22]) {
+  VARIANTS[`v20-expansion-${gain}`] = {
+    scenario: 'values-20',
+    variant: {
+      name: `v20-expansion-${gain}`,
+      description: `The 1-20 curve with Expansion at +${gain}.`,
+      patchPublic: patchPublic((spec) => (spec.kind === 'expansion' ? { ...spec, gain } : null)),
+    },
+  };
+}

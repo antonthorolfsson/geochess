@@ -168,7 +168,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const { campaign } = model;
   const me = model.me.userId;
   const router = useRouter();
-  // A page open over the map room: an empire's statistics, or the rules.
+  // A page open over the map room: an empire's statistics, every empire's compared, or the rules.
   const pageSegment = useSelectedLayoutSegment();
   const overPage = pageSegment !== null;
   const { userId: empireOf } = useParams<{ userId?: string }>();
@@ -419,7 +419,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     ? `${model.membersById.get(empireOf)?.name ?? 'Empire'} · `
     : pageSegment === 'rules'
       ? 'Rules · '
-      : '';
+      : pageSegment === 'compare'
+        ? 'Compare empires · '
+        : '';
   useDocumentTitle(`${flag}${page}${campaign.name} · Geo Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);

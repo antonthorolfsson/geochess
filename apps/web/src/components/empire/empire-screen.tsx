@@ -17,7 +17,7 @@ import { formatArea, formatAreaCompact, formatCount, formatUsd, ordinal } from '
 import { useCampaignStats } from '@/lib/queries';
 import { playerName } from '@/lib/wars';
 import { BotTag } from '../campaign/player-name';
-import { useCampaignRoom, useEmpireHref } from '../campaign/room-context';
+import { useCampaignRoom, useCompareHref, useEmpireHref } from '../campaign/room-context';
 import { StandInControls } from '../campaign/stand-in';
 import { EmpireSwatch } from '../hatch';
 import { Notice, Spinner, ValueBadge } from '../ui';
@@ -106,7 +106,7 @@ export function EmpireScreen({ userId }: { userId: string }) {
   );
 }
 
-function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
+export function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
     <section className="min-w-0 border-t border-line pt-4">
       <h2 className="text-xl font-bold">{title}</h2>
@@ -119,6 +119,7 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 function EmpireHeader({ model, userId }: { model: CampaignModel; userId: string }) {
   const { campaign } = model;
   const empireHref = useEmpireHref(campaign.id);
+  const compareHref = useCompareHref(campaign.id);
   // The link that opened the page is now out of reach under it, so focus starts on the heading.
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus({ preventScroll: true }), [userId]);
@@ -159,6 +160,14 @@ function EmpireHeader({ model, userId }: { model: CampaignModel; userId: string 
               {m.userId === model.me.userId ? 'You' : m.name}
             </Link>
           ))}
+          {campaign.status !== 'lobby' && (
+            <Link
+              href={compareHref}
+              className="inline-flex min-h-9 items-center rounded-[3px] px-2 text-[0.95rem] text-muted underline decoration-line-strong underline-offset-4 hover:text-paper"
+            >
+              Compare all
+            </Link>
+          )}
         </nav>
       )}
     </header>

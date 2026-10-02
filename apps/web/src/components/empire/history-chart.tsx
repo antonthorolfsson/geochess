@@ -37,7 +37,8 @@ const readoutLabel = (round: number) => (round === 0 ? 'End of the draft' : `Rou
  * Every empire's size over the campaign, one line each, with the empire the page is about in its
  * own color and its wars marked. Other empires light up from the readout below the chart, which
  * gives every value at a round: the one under the mouse, else the one picked (click, tap or arrow
- * keys), else now. A table view holds the rest.
+ * keys), else now. A table view holds the rest. Without `userId` (the comparison page) every
+ * empire is drawn in its color, and picking one from the readout quiets the rest.
  */
 export function HistoryChart({
   model,
@@ -46,7 +47,7 @@ export function HistoryChart({
 }: {
   model: CampaignModel;
   history: HistoryView;
-  userId: string;
+  userId: string | null;
 }) {
   const isDesktop = useIsDesktop();
   const [measure, setMeasure] = useState<Measure>('value');
@@ -105,11 +106,12 @@ export function HistoryChart({
   const valueAt = (i: number, u: string) => points[i]![measure][u] ?? 0;
   const active = hover ?? picked;
   const shown = active ?? last;
-  const me = model.membersById.get(userId);
+  const me = userId === null ? undefined : model.membersById.get(userId);
   const lineOf = (u: string) => empireColor(model.membersById.get(u)?.color ?? 0).line;
 
   // This empire's wars that moved territory, by the round they ended in.
-  const myWars = history.wars.filter((w) => w.transfers.some((t) => t.from === userId || t.to === userId));
+  const myWars =
+    userId === null ? [] : history.wars.filter((w) => w.transfers.some((t) => t.from === userId || t.to === userId));
   const warRounds = new Set(myWars.map((w) => w.round));
 
   if (asTable) {
@@ -204,7 +206,9 @@ export function HistoryChart({
     setPicked((at) => clamp(move(at ?? last)));
   };
 
-  const others = members.filter((m) => m.userId !== userId && m.userId !== highlight);
+  // Comparing, every line is in color until one is picked out.
+  const allLit = userId === null && highlight === null;
+  const others = allLit ? [] : members.filter((m) => m.userId !== userId && m.userId !== highlight);
   /** A picked round in words, for screen readers. */
   const pickedText = (i: number) =>
     `${readoutLabel(points[i]!.round)}: ${[...members]
@@ -218,7 +222,11 @@ export function HistoryChart({
       change: shown > 0 ? valueAt(shown, m.userId) - valueAt(shown - 1, m.userId) : null,
     }))
     .sort((a, b) => b.value - a.value || a.member.name.localeCompare(b.member.name));
-  const emphasized = [highlight, userId].filter((u): u is string => u !== null && u !== userId).concat(userId);
+  const emphasized = allLit
+    ? members.map((m) => m.userId)
+    : [highlight, userId].filter((u): u is string => u !== null && u !== userId).concat(userId ?? []);
+  /** The line whose latest value is written at its end. */
+  const labelled = userId ?? highlight;
 
   return (
     <div className="space-y-3">
@@ -283,7 +291,7 @@ export function HistoryChart({
                 d={path(u)}
                 fill="none"
                 stroke={lineOf(u)}
-                strokeWidth={u === userId ? 2.5 : 2}
+                strokeWidth={u === labelled ? 2.5 : 2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
@@ -323,7 +331,7 @@ export function HistoryChart({
               ),
             )}
             {points.map((p, i) =>
-              warRounds.has(p.round) ? (
+              userId !== null && warRounds.has(p.round) ? (
                 <circle
                   key={p.round}
                   cx={x(i)}
@@ -335,14 +343,16 @@ export function HistoryChart({
                 />
               ) : null,
             )}
-            <text
-              x={x(last) + 12}
-              y={y(valueAt(last, userId))}
-              dy="0.32em"
-              className="fill-paper text-[12px] font-semibold tabular-nums"
-            >
-              {valueAt(last, userId)}
-            </text>
+            {labelled !== null && (
+              <text
+                x={x(last) + 12}
+                y={y(valueAt(last, labelled))}
+                dy="0.32em"
+                className="fill-paper text-[12px] font-semibold tabular-nums"
+              >
+                {valueAt(last, labelled)}
+              </text>
+            )}
           </svg>
         )}
       </div>
@@ -396,7 +406,8 @@ function Readout({
 }: {
   id: string;
   model: CampaignModel;
-  userId: string;
+  /** The empire the page is about; null on the comparison page. */
+  userId: string | null;
   round: number;
   now: boolean;
   /** Back to the latest round, when an earlier one is picked. */
@@ -425,7 +436,7 @@ function Readout({
       <ul className="divide-y divide-line rounded-[3px] border border-line">
         {rows.map(({ member, value, change }) => {
           const mine = member.userId === userId;
-          const lit = mine || member.userId === highlight;
+          const lit = mine || member.userId === highlight || (userId === null && highlight === null);
           const row = (
             <>
               <span
@@ -463,7 +474,7 @@ function Readout({
           );
         })}
       </ul>
-      {wars.length > 0 && (
+      {userId !== null && wars.length > 0 && (
         <ul className="space-y-1 text-[0.95rem]">
           {wars.map((w) => (
             <li key={w.warId}>

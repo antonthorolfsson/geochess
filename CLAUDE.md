@@ -86,8 +86,9 @@ when starting new work.**
 - `apps/web` is Next.js 16. Its bundled docs in `apps/web/node_modules/next/dist/docs/` are the
   reference, since APIs differ from older versions (async `params`, `proxy.ts`, Turbopack default).
   Pages are thin server components that hand off to client screens in `src/components/`. The
-  campaign screen lives in `app/c/[id]/layout.tsx`, so pages under it (an empire's statistics) open
-  over the map room without resetting it; they read it with `useCampaignRoom()`.
+  campaign screen lives in `app/c/[id]/layout.tsx`, so pages under it (an empire's statistics,
+  every empire compared) open over the map room without resetting it; they read it with
+  `useCampaignRoom()`.
 - Local database is embedded PGlite (`apps/server/.data/`), so no setup is needed; set
   `DATABASE_URL` for Postgres.
 - Production is https://geochess.xyz and deploys on every push to `main`: the web app on Vercel,

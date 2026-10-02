@@ -1,6 +1,6 @@
 /**
  * One campaign, told round by round: `pnpm --filter @empire/sim trace --scenario baseline
- * --players 4 --seed 7 [--pace correspondence] [--mission-rules 2] [--last-round none]`.
+ * --players 4 --seed 7 [--pace correspondence] [--mission-rules 2] [--last-round none] [--dataset 2026.1]`.
  */
 import { missionName, valueOfSet } from '@empire/rules';
 import { loadDataset } from '../dataset';
@@ -19,14 +19,15 @@ const cfg = scenarioConfig(args.get('scenario') ?? 'baseline', {
   debug: true,
   ...(args.has('mission-rules') && { missionVersion: Number(args.get('mission-rules')) }),
   ...(lastRound !== undefined && { lastRound: lastRound === 'none' ? null : Number(lastRound) }),
+  ...(args.has('dataset') && { dataset: args.get('dataset')! }),
 });
-const idx = loadDataset();
+const idx = loadDataset(cfg.dataset ?? undefined);
 const s = runScenarioCampaign(cfg, seed, idx);
 
 const out: string[] = [];
 out.push(
   `${cfg.scenario} · ${players} players · ${cfg.pace} · ${cfg.draftMode} draft · seed ${seed} · ` +
-    `mission rules ${s.rules.victory.version} · last round ${s.rules.victory.lastRound ?? 'none'}`,
+    `dataset ${idx.dataset.version} · mission rules ${s.rules.victory.version} · last round ${s.rules.victory.lastRound ?? 'none'}`,
 );
 out.push('Public missions:');
 for (const spec of s.publicSpecs) out.push(`  ${missionName(spec)}: ${JSON.stringify(spec)}`);

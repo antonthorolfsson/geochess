@@ -69,6 +69,8 @@ export interface SimConfig {
   roundCap: number;
   /** The mission rules version the campaign plays (the game's current one by default). */
   missionVersion: number;
+  /** The dataset version played (null: the latest). */
+  dataset: string | null;
   /**
    * The season's last round, after which the most points (then value) win, as the host sets it; null
    * plays on to the points to win. Ignored in horizon mode.

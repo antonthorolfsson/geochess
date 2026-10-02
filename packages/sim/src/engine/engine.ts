@@ -170,7 +170,7 @@ function endSeason(s: SimState): void {
 }
 
 export function runCampaign(cfg: SimConfig, seed: number, opts: RunOptions): SimState {
-  const s = createState(cfg, opts.idx ?? loadDataset(), seed);
+  const s = createState(cfg, opts.idx ?? loadDataset(cfg.dataset ?? undefined), seed);
   const { bots } = opts;
   setupPublicMissions(s);
   runDraft(s, bots.draftPick);

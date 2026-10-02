@@ -61,7 +61,7 @@ export function greedyBots(knobs: BotKnobs): Bots {
       const odds = warOdds(s, war.attackerId, war.defenderId, clockId, board);
       // A matched raise's country comes with the target; a paid counter's token comes to the attacker.
       const won = value(s, counter.kind === 'raise' && counter.added ? [targetId, counter.added] : [targetId]);
-      const u = odds.attacker * won - odds.defender * value(s, stake) + (counter.tokens ?? 0);
+      const u = odds.attacker * won - odds.defender * value(s, stake) + (counter.tokens ?? 0) * knobs.tokenValue;
       if (u <= 0) return { kind: 'withdraw' };
       return counter.kind === 'raise' ? { kind: 'accept', stake } : { kind: 'accept' };
     },

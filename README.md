@@ -15,7 +15,7 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 - Invite-only campaigns: create one, share the invite link, pick your empire color, set the rules.
 - The map: Natural Earth shapes rendered with d3-geo, pinch and pan zoom, ownership shown as
   translucent colors with hatching, tappable dots for microstates, sea lanes, country search.
-- The country dataset: game values 1–10 from blended real-world data, land borders and sea lanes,
+- The country dataset: game values 1–20 from blended real-world data, land borders and sea lanes,
   terrain tags and real statistics, built by a versioned pipeline.
 - The snake draft of the full map, with a contiguous or free draft mode and live updates over
   WebSockets. Each player can keep a private draft list that auto-draft works through, skipping
@@ -176,7 +176,7 @@ clearly labeled estimates. Opening names come from the
 
 Every map decision (disputed territories, microstate regions, sea lanes, game values) lives in
 hand-editable YAML under `packages/data/config/`, and each build writes a review report to
-[packages/data/datasets/2026.1/REPORT.md](packages/data/datasets/2026.1/REPORT.md). Read it with
+[packages/data/datasets/2026.2/REPORT.md](packages/data/datasets/2026.2/REPORT.md). Read it with
 your group before the first campaign.
 
 ## License

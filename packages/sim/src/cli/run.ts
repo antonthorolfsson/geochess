@@ -4,7 +4,7 @@
  *   pnpm sim --scenario baseline,secrets --players 2-8 --paces live,correspondence --seeds 400
  *
  * `--mission-rules 2` plays an earlier mission rules version, `--last-round 30` (or `none`) another
- * season length than new campaigns get.
+ * season length than new campaigns get, `--dataset 2026.1` another dataset than the latest.
  *
  * Records go to `out/<name>/shard-*.jsonl` (one line per campaign). Campaigns already recorded
  * there are skipped, so an interrupted run picks up where it stopped.
@@ -34,6 +34,7 @@ const workers = Number(args.get('workers') ?? Math.max(1, availableParallelism()
 const missionVersion = args.has('mission-rules') ? Number(args.get('mission-rules')) : undefined;
 const lastRoundArg = args.get('last-round');
 const lastRound = lastRoundArg === undefined ? undefined : lastRoundArg === 'none' ? null : Number(lastRoundArg);
+const dataset = args.get('dataset');
 const out = path.resolve(here, '../../out', args.get('out') ?? scenarios.join('+').replace(/[:/]/g, '-'));
 mkdirSync(out, { recursive: true });
 
@@ -60,6 +61,7 @@ for (let seed = seedStart; seed < seedStart + seeds; seed++) {
           seed,
           ...(missionVersion !== undefined && { missionVersion }),
           ...(lastRound !== undefined && { lastRound }),
+          ...(dataset !== undefined && { dataset }),
         };
         if (!done.has(key(job))) jobs.push(job);
       }

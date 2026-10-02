@@ -59,12 +59,8 @@ import type { Answer, Bots } from './index';
 import type { BotKnobs } from './knobs';
 import { missionModels, openSlots, visibleSlots, worldAfter, type BattleEvent, type MissionModel } from './valuation';
 
-/** What a war token is worth when it isn't at the cap, in country value. */
-const TOKEN_VALUE = 1;
-/** What a withdrawn war is worth to the defender: the attacker wasted a token. */
-const WITHDRAWAL_VALUE = 0.3;
-/** What declaring a war the attacker will withdraw from is worth to them: nothing, and a token gone. */
-const WASTED = -1;
+/** What a withdrawn war is worth to the defender, in war tokens: the attacker wasted a token. */
+const WITHDRAWAL_TOKENS = 0.3;
 
 // ---------------------------------------------------------------------------------------------
 // The draft
@@ -392,14 +388,14 @@ function bestPlanFor(ctx: Ctx, targetId: TerritoryId, keep: ReadonlySet<Territor
         ? attackValue(ctx, { targetId, defenderId, launchId: plan.launchId, stake: raised.stake })
         : -Infinity;
       // Meeting a token raise earns the defender's token.
-      const bonus = style === 'token' ? TOKEN_VALUE : 0;
+      const bonus = style === 'token' ? ctx.knobs.tokenValue : 0;
       // A defender with a mission at stake raises whenever they can; others now and then.
       const raiseChance =
         raisedBefore !== null || contested(ctx, { targetId, defenderId, launchId: plan.launchId, stake: plan.stake })
           ? 1
           : ctx.knobs.raiseRate;
       // After a raise: fight on the bigger stake if it's worth it, else withdraw, a wasted declaration.
-      const afterRaise = raisedValue + bonus > 0 ? raisedValue + bonus : WASTED;
+      const afterRaise = raisedValue + bonus > 0 ? raisedValue + bonus : -ctx.knobs.tokenValue;
       u = (1 - raiseChance) * asDeclared + raiseChance * afterRaise;
       if (raised && raisedValue > u) {
         // Staking the raise up front takes the option away from the defender.
@@ -464,7 +460,9 @@ function declareFor(s: SimState, player: SimPlayer, knobs: BotKnobs): Declaratio
   const atCap = player.tokens >= s.rules.war.tokenCap;
   let threshold = atCap ? knobs.declareThresholdAtCap : knobs.declareThreshold;
   // Keep two tokens for Lightning Campaign, unless this war is worth it anyway.
-  if (knobs.saveForLightning && player.tokens < 2 && lightningOpen(s, player.id) && !atCap) threshold += TOKEN_VALUE;
+  if (knobs.saveForLightning && player.tokens < 2 && lightningOpen(s, player.id) && !atCap) {
+    threshold += knobs.tokenValue;
+  }
   if (best.u <= threshold) return null;
   return {
     targetId: best.targetId,
@@ -590,7 +588,7 @@ function peaceValueFor(s: SimState, knobs: BotKnobs, war: SimWar, terms: PeaceTe
     progressLoss(ctx, ctx.mine, lost) +
     exactSwing(ctx, userId, ctx.mine, after) +
     rivalSwing(ctx, attacking ? war.defenderId : war.attackerId, after) +
-    tokens * TOKEN_VALUE
+    tokens * knobs.tokenValue
   );
 }
 
@@ -683,7 +681,7 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
           met !== null && (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake, { added: id }) > 0);
         consider(
           { kind: 'raise', territoryId: id },
-          goesAhead ? defendValue(ctx, war, [war.targetId, id], met.stake) : WITHDRAWAL_VALUE,
+          goesAhead ? defendValue(ctx, war, [war.targetId, id], met.stake) : WITHDRAWAL_TOKENS * knobs.tokenValue,
         );
       }
     } else {
@@ -693,9 +691,9 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
         // The attacker gets the token for meeting a token raise.
         const goesAhead =
           met !== null &&
-          (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake) + cost * TOKEN_VALUE > 0);
-        const u = goesAhead ? defendValue(ctx, war, [war.targetId], met.stake) : WITHDRAWAL_VALUE;
-        consider({ kind: 'raise' }, u - cost * TOKEN_VALUE);
+          (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake) + cost * knobs.tokenValue > 0);
+        const u = goesAhead ? defendValue(ctx, war, [war.targetId], met.stake) : WITHDRAWAL_TOKENS * knobs.tokenValue;
+        consider({ kind: 'raise' }, u - cost * knobs.tokenValue);
       }
     }
   }
@@ -706,9 +704,9 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
     if (tokens >= cost) {
       for (const id of redirectOptions(board, active)) {
         const clockId = clockTarget(s.rules, { targetId: id, redirectedFrom: war.targetId });
-        const goesAhead = attackerValue(s, knobs, war, id, war.stake, { clockId }) + cost * TOKEN_VALUE > 0;
-        const u = goesAhead ? defendValue(ctx, war, [id], war.stake, clockId) : WITHDRAWAL_VALUE;
-        consider({ kind: 'redirect', targetId: id }, u - cost * TOKEN_VALUE);
+        const goesAhead = attackerValue(s, knobs, war, id, war.stake, { clockId }) + cost * knobs.tokenValue > 0;
+        const u = goesAhead ? defendValue(ctx, war, [id], war.stake, clockId) : WITHDRAWAL_TOKENS * knobs.tokenValue;
+        consider({ kind: 'redirect', targetId: id }, u - cost * knobs.tokenValue);
       }
     }
     const fightOn = attackerValue(s, knobs, war, war.targetId, war.stake);
@@ -723,8 +721,8 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
         consider({ kind: 'tribute', territoryId: id }, taken ? -cost : accept);
       }
       for (let k = 1; k <= tokens; k++) {
-        const taken = k * TOKEN_VALUE >= fightOn;
-        consider({ kind: 'tribute', tokens: k }, taken ? -k * TOKEN_VALUE : accept);
+        const taken = k * knobs.tokenValue >= fightOn;
+        consider({ kind: 'tribute', tokens: k }, taken ? -k * knobs.tokenValue : accept);
         if (taken) break;
       }
     } else {
@@ -739,8 +737,8 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
         offer({ ...WHITE_PEACE, toAttacker: [id], accordRounds }, -cost);
       }
       for (let k = 1; k <= Math.min(tokens, PEACE_MAX_TOKENS); k++) {
-        if (k * TOKEN_VALUE < fightOn) continue;
-        offer({ ...WHITE_PEACE, tokensToAttacker: k, accordRounds }, -k * TOKEN_VALUE);
+        if (k * knobs.tokenValue < fightOn) continue;
+        offer({ ...WHITE_PEACE, tokensToAttacker: k, accordRounds }, -k * knobs.tokenValue);
         break;
       }
     }
@@ -813,7 +811,7 @@ function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
         added: counter.added ?? null,
       });
       // A token raise's token comes to the attacker for meeting it.
-      const bonus = (counter.tokens ?? 0) * TOKEN_VALUE;
+      const bonus = (counter.tokens ?? 0) * knobs.tokenValue;
       return u + bonus > 0 ? { kind: 'accept', stake: raised.stake } : { kind: 'withdraw' };
     }
     case 'redirect': {
@@ -824,7 +822,7 @@ function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
         stake: war.stake,
         clockId: clockTarget(s.rules, { targetId: counter.targetId, redirectedFrom: war.targetId }),
       });
-      const bonus = (counter.tokens ?? 0) * TOKEN_VALUE;
+      const bonus = (counter.tokens ?? 0) * knobs.tokenValue;
       return u + bonus > 0 ? { kind: 'accept' } : { kind: 'withdraw' };
     }
     case 'tribute': {
@@ -836,7 +834,7 @@ function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
       });
       const offer = counter.territoryId
         ? attackerTributeValue(s, knobs, war, counter.territoryId)
-        : counter.tokens * TOKEN_VALUE;
+        : counter.tokens * knobs.tokenValue;
       return offer >= fightOn ? { kind: 'accept' } : { kind: 'refuse' };
     }
   }

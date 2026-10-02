@@ -31,7 +31,12 @@ export function CampaignRulesScreen() {
           Each round step by step, with the settings this campaign plays with.
         </p>
       </header>
-      <RulesGuide variant="campaign" rules={campaign.rules} settingsNote={settingsNote} />
+      <RulesGuide
+        variant="campaign"
+        rules={campaign.rules}
+        datasetVersion={campaign.datasetVersion}
+        settingsNote={settingsNote}
+      />
     </article>
   );
 }

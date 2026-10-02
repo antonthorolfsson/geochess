@@ -1,4 +1,12 @@
-import { STAT_KEYS, validateGraph, type Dataset, type LonLat, type StatKey, type Territory } from '@empire/rules';
+import {
+  MAX_VALUE,
+  STAT_KEYS,
+  validateGraph,
+  type Dataset,
+  type LonLat,
+  type StatKey,
+  type Territory,
+} from '@empire/rules';
 import type { LandResult } from './adjacency';
 import type { CanonReport, TerritoryPlan } from './canon';
 import { VALUE_METRICS, type CanonConfig, type SeaLaneConfig, type ValuesConfig } from './config';
@@ -228,7 +236,7 @@ function values(r: ReportInput): string[] {
   const counts = new Map<number, number>();
   for (const t of r.dataset.territories) counts.set(t.value, (counts.get(t.value) ?? 0) + 1);
   const histogram: string[] = [];
-  for (let v = 10; v >= 1; v--) {
+  for (let v = MAX_VALUE; v >= 1; v--) {
     const n = counts.get(v) ?? 0;
     const bar = '█'.repeat(n).padEnd(40);
     histogram.push(`${String(v).padStart(2)} │ ${bar} ${String(n).padStart(3)}  (target ${targets.get(v) ?? 0})`);

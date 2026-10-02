@@ -1,5 +1,5 @@
 /** A finished campaign as one JSON line: what the report aggregates. */
-import { valueOfSet, type UserId } from '@empire/rules';
+import { valueOfSet, type TerritoryId, type UserId } from '@empire/rules';
 import { heldBy } from './engine/state';
 import type { SimState, WarStats } from './engine/types';
 
@@ -9,6 +9,8 @@ export interface PlayerRecord {
   elo: number;
   drafted: number;
   draftedCount: number;
+  /** The countries drafted. Unset in older records. */
+  draftedIds?: TerritoryId[];
   final: number;
   finalCount: number;
   vp: number;
@@ -75,6 +77,10 @@ export interface CampaignRecord {
   wars: WarStats;
   /** Wars declared in each round, from round 1. */
   warsByRound: number[];
+  /** Countries that changed hands in wars: round, country, from, to. Unset in older records. */
+  transfers?: [number, TerritoryId, UserId, UserId][];
+  /** The dataset version played. Unset in older records. */
+  dataset?: string;
   accords: SimState['accordStats'];
   tokensWasted: number;
   ms: number;
@@ -113,6 +119,7 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
       elo: p.elo,
       drafted: valueOfSet(s.idx, p.baseline),
       draftedCount: p.baseline.size,
+      draftedIds: [...p.baseline].sort(),
       final: valueOfSet(s.idx, held),
       finalCount: held.size,
       vp: s.points.get(p.id) ?? 0,
@@ -180,6 +187,15 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
     draftComplete: s.draftComplete.map((d) => ({ p: d.userId, key: d.missionKey, kind: d.kind })),
     wars: s.stats,
     warsByRound,
+    transfers: s.wars.flatMap((w) =>
+      w.transfers.map((t): [number, TerritoryId, UserId, UserId] => [
+        w.resolvedRound ?? w.declaredRound,
+        t.territoryId,
+        t.from,
+        t.to,
+      ]),
+    ),
+    dataset: s.idx.dataset.version,
     accords: s.accordStats,
     tokensWasted: s.tokensWasted,
     ms: Math.round(ms),

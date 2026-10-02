@@ -14,7 +14,7 @@ import {
 } from '@empire/rules';
 import { loadDataset, runScenarioCampaign, scenarioConfig, type SimAction, type SimState } from '@empire/sim';
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { campaignResults, campaigns, holdings, missionAwards, missionPlayers, wars } from '../src/db/schema';
 import { ORIGINAL_ANSWERS, signIn, startTestServer, type Client, type TestServer } from './helpers';
 
@@ -24,13 +24,19 @@ const FOOLS_MATE = 'f2f3 e7e5 g2g4 d8h4'.split(' ');
 /** Knights out and back twice: the starting position a third time, a draw at once. */
 const THREEFOLD = 'g1f3 g8f6 f3g1 f6g8 g1f3 g8f6 f3g1 f6g8'.split(' ');
 
-const idx = loadDataset();
+/** A server per dataset, its only one, so the campaigns replayed on it play that dataset. */
+const servers = new Map<string, TestServer>();
 let server: TestServer;
-beforeAll(async () => {
-  server = await startTestServer(idx.dataset);
-});
+async function serverFor(version: string): Promise<TestServer> {
+  let s = servers.get(version);
+  if (!s) {
+    s = await startTestServer(loadDataset(version).dataset);
+    servers.set(version, s);
+  }
+  return s;
+}
 afterAll(async () => {
-  await server.close();
+  for (const s of servers.values()) await s.close();
 });
 
 /** Plays one simulated campaign again through the API, from the end of the draft. */
@@ -74,7 +80,7 @@ async function replay(s: SimState, label: string) {
       campaignId,
       userId: idOf.get(p.id)!,
       baseline,
-      baselineValue: valueOfSet(idx, baseline),
+      baselineValue: valueOfSet(s.idx, baseline),
       seed: 1,
       options: option ? [option] : [],
       noSecret: !option,
@@ -317,7 +323,10 @@ const CASES: {
   { scenario: 'free', players: 5, seed: 8 },
   { scenario: 'baseline', players: 3, seed: 9, lastRound: 4 },
   { scenario: 'free', players: 4, seed: 10, lastRound: 5 },
-  { scenario: 'baseline', players: 4, seed: 2, version: 2 },
+  // Campaigns created before values ran 1 to 20: dataset 2026.1, mission rules 3 (and 2).
+  { scenario: 'values-10', players: 4, seed: 2 },
+  { scenario: 'values-10', players: 3, seed: 1, lastRound: 4 },
+  { scenario: 'values-10', players: 4, seed: 2, version: 2 },
   { scenario: 'baseline', players: 3, seed: 11, original: true },
   { scenario: 'free', players: 4, seed: 12, original: true },
   // Reserves meeting token raises at once, a fortified country, declarations called off and peace.
@@ -339,6 +348,8 @@ describe('the simulator replayed through the server', () => {
         ...(original && { war: ORIGINAL_ANSWERS }),
         ...(tokens && { war: { raise: 'token' }, bots: { recallRate: 0.05 } }),
       });
+      const idx = loadDataset(cfg.dataset ?? undefined);
+      server = await serverFor(idx.dataset.version);
       const s = runScenarioCampaign(cfg, seed, idx);
       if (lastRound !== undefined) expect(s.endedByLimit, 'the season should end on points').toBe(true);
       const got = await replay(

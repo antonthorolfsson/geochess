@@ -31,9 +31,14 @@ describe('rules in words', () => {
 
   it('tabulates stakes the way the war rules check them', () => {
     const table = stakeTable(DEFAULT_RULES);
-    expect(table.map((row) => row.value)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(table.map((row) => row.stake)).toEqual([1, 2, 3, 4, 4, 5, 6, 7, 8, 8]);
-    expect(table.map((row) => row.raised)).toEqual([2, 3, 4, 5, 7, 8, 9, 10, 12, 13]);
+    expect(table.map((row) => row.value)).toEqual([1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20]);
+    expect(table.map((row) => row.stake)).toEqual([1, 2, 3, 4, 4, 5, 7, 8, 10, 12, 16]);
+    expect(table.map((row) => row.raised)).toEqual([2, 3, 4, 5, 7, 8, 10, 13, 15, 19, 25]);
+    // A campaign on a map whose values run 1 to 10 shows each of them.
+    const older = stakeTable(DEFAULT_RULES, 10);
+    expect(older.map((row) => row.value)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(older.map((row) => row.stake)).toEqual([1, 2, 3, 4, 4, 5, 6, 7, 8, 8]);
+    expect(older.map((row) => row.raised)).toEqual([2, 3, 4, 5, 7, 8, 9, 10, 12, 13]);
   });
 
   it('lists the settings a campaign plays with', () => {

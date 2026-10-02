@@ -19,7 +19,7 @@ first, then the plan._
 **Phase 1 (Foundation)** is complete: sign-in (Lichess OAuth with PKCE, email links, email and
 password, development sign-in by name), lobbies with invite links and empire colors, the d3-geo map with hatching,
 microstates, sea lanes and search, the snake draft with private draft lists and auto-draft, the
-empire panel, dataset `2026.1` (188 territories), PWA shell, CI and Prettier.
+empire panel, dataset `2026.1` (188 territories; `2026.2` since 2026-10-02), PWA shell, CI and Prettier.
 
 **Phase 2 (War loop)** is complete and verified in the browser on desktop and phone:
 
@@ -835,6 +835,34 @@ Defaults taken while building (not asked; easy to change): a report stands if un
 unanswered declaration goes ahead), rather than waiting forever; either player can return the game
 online alone, as the way out of a dispute; only games underway (not queued live games) can move.
 
+**Country values 1 to 20** (2026-10-02, at the user's request: a superpower should be worth five
+or six median countries, not three). New campaigns play dataset `2026.2` and mission rules
+version 4; campaigns already created keep `2026.1` (values 1 to 10) and their version. The
+simulator's case is in the balance report's
+[A 1–20 value curve](balance-report.md#a-120-value-curve).
+
+- **Data.** `config/values.yaml` ranks the same scores against a 1–20 distribution: China and the
+  United States 20, India 18, Russia 17, Brazil and Indonesia 16, Japan, Germany and Canada 15
+  (Germany by override, with Japan), and so on down; values 1–3 barely move. The map is worth 928
+  instead of 718. The pipeline takes values up to `MAX_VALUE` (20). `2026.2` was built from
+  `2026.1`'s statistics with the new curve (the World Bank isn't reachable from the cloud
+  container), so `pnpm data:build` with the cached downloads should rebuild it unchanged.
+- **Rules.** `DATASET_VALUE_SCALES` (`dataset.ts`): 1 for `2026.1`, 1.29 for `2026.2`.
+  `MISSION_RULES_V4` carries `valueScale: 1.29`: Expansion +22, Regional Power 26–71, Two Theater
+  10, Measured Expansion 26 (21 to reveal), Strategic Positions targets worth 3–15, Hidden Triangle
+  2–12, Great Powers counts countries worth 13 or more, and target fit scaled the same way. A data
+  test checks that the latest dataset's scale matches the current version's. Rules stored without
+  a mission version now read as version 3 (they're on `2026.1`); `DEFAULT_RULES` names version 4.
+- **Bots.** Knobs counted in value (`vpValue`, the declaring thresholds, `betrayMargin`,
+  `draftNoise` and a new `tokenValue`, the worth of a war token, formerly fixed at 1) are written
+  for 1–10 and scaled by the campaign's dataset (`knobsFor`): live bots look it up per campaign,
+  the simulator per run.
+- **Simulator.** `baseline` plays the latest dataset; `values-10` plays `2026.1` with mission rules
+  3, as campaigns created before. Records note the dataset, the countries drafted and every
+  country that changed hands. The parity test replays `values-10` campaigns on a `2026.1` server.
+- **Web.** The rules guide says 1 to 20 (1 to 10 for a campaign on `2026.1`, from its
+  `datasetVersion`), and its stake table shows targets 1–6, 8, 10, 12, 15 and 20.
+
 Tests: rules `over-the-board.test.ts`, server `test/over-the-board.test.ts`.
 
 ### Victory defaults taken while building (not asked; easy to change)
@@ -1026,7 +1054,7 @@ All at the proposed defaults.
 - **Map canon:** de facto borders per Natural Earth (Crimea with Russia; a one-line flip is in
   `packages/data/config/canon.yaml`), Western Sahara whole, Taiwan and Kosovo separate,
   Somaliland in Somalia, Northern Cyprus in Cyprus, 6 microstate regions, value overrides for
-  Germany (9) and Western Sahara (2). The friend group should review `REPORT.md`.
+  Germany (15, with Japan) and Western Sahara (2). The friend group should review `REPORT.md`.
 - **Web push on real devices** is untested end to end: it needs VAPID keys, a production build
   served over HTTPS, and (on iOS) the app on the home screen.
 - **Secret missions still uneven after version 3** (see the report's
@@ -1262,7 +1290,7 @@ Smaller follow-ups, none blocking:
 | Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                               |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                    |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/` and `2026.2/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                      |
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                         |
 | `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members) |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                                         |

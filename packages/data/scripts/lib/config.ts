@@ -1,4 +1,4 @@
-import { STAT_KEYS, type Continent, type LonLat, type StatKey, type TerritoryKind } from '@empire/rules';
+import { MAX_VALUE, STAT_KEYS, type Continent, type LonLat, type StatKey, type TerritoryKind } from '@empire/rules';
 import type { BBox } from './types';
 import {
   asArray,
@@ -351,7 +351,7 @@ export type ValueMetric = (typeof VALUE_METRICS)[number];
 
 export interface ValuesConfig {
   weights: Record<ValueMetric, number>;
-  /** Share of territories per value for 10 down to 2; value 1 takes the rest. */
+  /** Share of territories per value for the top value down to 2; value 1 takes the rest. */
   shares: Map<number, number>;
   overrides: Map<string, { value: number; reason: string | null }>;
 }
@@ -375,7 +375,9 @@ export function loadValues(): ValuesConfig {
   for (const [k, v] of Object.entries(asOptionalRecord(root['distribution'], `${file} distribution`))) {
     const value = Number(k);
     const where = `${file} distribution.${k}`;
-    if (!Number.isInteger(value) || value < 2 || value > 10) fail(where, 'keys are values 2-10 (1 takes the rest)');
+    if (!Number.isInteger(value) || value < 2 || value > MAX_VALUE) {
+      fail(where, `keys are values 2-${MAX_VALUE} (1 takes the rest)`);
+    }
     const share = asNumber(v, where);
     if (share < 0 || share > 1) fail(where, 'share must be within [0, 1]');
     shares.set(value, share);
@@ -392,8 +394,8 @@ export function loadValues(): ValuesConfig {
           return { value: asNumber(r['value'], `${where}.value`), reason: asString(r['reason'], `${where}.reason`) };
         })()
       : { value: asNumber(v, where), reason: null };
-    if (!Number.isInteger(spec.value) || spec.value < 1 || spec.value > 10) {
-      fail(where, 'value must be an integer 1-10');
+    if (!Number.isInteger(spec.value) || spec.value < 1 || spec.value > MAX_VALUE) {
+      fail(where, `value must be an integer 1-${MAX_VALUE}`);
     }
     overrides.set(asId(id, where), spec);
   }

@@ -74,7 +74,8 @@ harmless.
    without the figure hold 10% or more of the population. Estimates fill gaps or replace misleading
    figures, each with its source; if an area is still missing it is computed from the geometry.
 6. **Values** (`config/values.yaml`): a weighted score over log-scaled, normalized metrics,
-   turned into 1-10 by rank against a target distribution, then hand overrides.
+   turned into 1-20 by rank against a target distribution, then hand overrides (1-10 before
+   dataset 2026.2).
 7. **Terrain and micro** (`config/terrain.yaml`, `canon.yaml` `micro`), and **anchors**: the pole
    of inaccessibility of each territory's largest polygon (hand-placed for regions).
 8. **Checks**: `validateGraph` from `@empire/rules`, id format, values, lane symmetry, a list of

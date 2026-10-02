@@ -2,7 +2,7 @@
  * Builds a versioned dataset from Natural Earth shapes, World Bank statistics and the hand-edited
  * decisions in config/. Usage: `pnpm --filter @empire/data generate [--refresh]`.
  */
-import { validateGraph, type Dataset, type LonLat, type SeaLane, type Territory } from '@empire/rules';
+import { MAX_VALUE, validateGraph, type Dataset, type LonLat, type SeaLane, type Territory } from '@empire/rules';
 import path from 'node:path';
 import type { GeometryCollection } from 'topojson-specification';
 import { coastline, landBorders } from './lib/adjacency';
@@ -22,7 +22,7 @@ import { computeMicro, computeTerrain } from './lib/terrain';
 import { pairKey } from './lib/types';
 import { computeValues } from './lib/values';
 
-const VERSION = '2026.1';
+const VERSION = '2026.2';
 
 // Tuned to keep map.topo.json around 330 KB: detailed enough to zoom into Europe or the Caribbean
 // on a phone while staying quick to download and render.
@@ -203,7 +203,7 @@ function validateDataset(dataset: Dataset): string[] {
   const byId = new Map(dataset.territories.map((t) => [t.id, t]));
   for (const t of dataset.territories) {
     if (!ID_PATTERN.test(t.id)) problems.push(`${t.id}: invalid id`);
-    if (!Number.isInteger(t.value) || t.value < 1 || t.value > 10) problems.push(`${t.id}: value ${t.value}`);
+    if (!Number.isInteger(t.value) || t.value < 1 || t.value > MAX_VALUE) problems.push(`${t.id}: value ${t.value}`);
   }
   const lanes = new Set(dataset.seaLanes.map((l) => pairKey(l.a, l.b)));
   for (const l of dataset.seaLanes) {

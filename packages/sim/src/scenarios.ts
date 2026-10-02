@@ -13,7 +13,7 @@ import {
   type SecretOption,
 } from '@empire/rules';
 import { makeBots } from './bots';
-import { DEFAULT_KNOBS, type BotKnobs } from './bots/knobs';
+import { DEFAULT_KNOBS, knobsFor, type BotKnobs } from './bots/knobs';
 import { DEFAULT_CHESS } from './engine/chess';
 import { runCampaign } from './engine/engine';
 import type { SecretChooser } from './engine/lifecycle';
@@ -41,6 +41,7 @@ export function baseConfig(overrides: ConfigOverrides = {}): SimConfig {
     mode: 'normal',
     roundCap: 40,
     missionVersion: CURRENT_MISSION_RULES,
+    dataset: null,
     lastRound: DEFAULT_LAST_ROUND,
     war: {},
     chess: DEFAULT_CHESS,
@@ -166,6 +167,11 @@ export const SCENARIOS: Record<string, Scenario> = {
   },
   'waves-1': { description: 'One declaration wave per round.', config: { waves: 1 } },
   'waves-3': { description: 'Three declaration waves per round.', config: { waves: 3 } },
+  'values-10': {
+    description:
+      'Dataset 2026.1, with country values 1-10, and mission rules version 3: what campaigns created before 2 October 2026 play.',
+    config: { dataset: '2026.1', missionVersion: 3 },
+  },
 };
 
 /** A scenario's configuration (or a what-if variant's, as `whatif:<name>`), with overrides. */
@@ -223,5 +229,5 @@ export function forcedChooser(seed: number): SecretChooser {
 
 export function runScenarioCampaign(cfg: SimConfig, seed: number, idx: DatasetIndex): SimState {
   const chooser = cfg.bots.secretChoice === 'forced' ? forcedChooser(seed) : undefined;
-  return runCampaign(cfg, seed, { bots: makeBots(cfg.bots, chooser), idx });
+  return runCampaign(cfg, seed, { bots: makeBots(knobsFor(cfg.bots, idx.dataset.version), chooser), idx });
 }

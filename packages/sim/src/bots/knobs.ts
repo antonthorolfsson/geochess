@@ -1,8 +1,13 @@
+import { valueScale } from '@empire/rules';
+
 /**
  * How the bots play. The defaults aim at a competent, casual friend group: players chase their
  * missions and block claims they can see, mostly accept wars, raise now and then, fortify what
  * their missions lean on, sign accords with neighbours they don't want to fight and rarely break
  * them.
+ *
+ * Knobs counted in country value are written for values 1-10 (dataset 2026.1); bots playing
+ * another dataset have them scaled by its value scale (`knobsFor`).
  */
 export interface BotKnobs {
   /** `standard` chases missions; `greedy` plays on country value alone, with no diplomacy. */
@@ -21,6 +26,8 @@ export interface BotKnobs {
   secretChoice: 'ease' | 'rank1' | 'random' | 'forced';
   /** What one victory point is worth, in country value. */
   vpValue: number;
+  /** What a war token is worth when it isn't at the cap, in country value. */
+  tokenValue: number;
   /** The share of a mission's worth credited for progress toward it (the rest comes on completion). */
   progressWeight: number;
   /** Least utility for a declaration, with tokens to spare and with tokens at the cap. */
@@ -66,6 +73,7 @@ export const DEFAULT_KNOBS: BotKnobs = {
   draftNoise: 1,
   secretChoice: 'ease',
   vpValue: 4,
+  tokenValue: 1,
   progressWeight: 0.5,
   declareThreshold: 0.4,
   declareThresholdAtCap: -0.5,
@@ -84,3 +92,22 @@ export const DEFAULT_KNOBS: BotKnobs = {
   topK: 6,
   saveForLightning: true,
 };
+
+/** The knobs counted in country value. */
+const VALUE_KNOBS = [
+  'draftNoise',
+  'vpValue',
+  'tokenValue',
+  'declareThreshold',
+  'declareThresholdAtCap',
+  'betrayMargin',
+] as const satisfies readonly (keyof BotKnobs)[];
+
+/** The knobs for a campaign on this dataset version: those counted in value scaled to its values. */
+export function knobsFor(knobs: BotKnobs, datasetVersion: string): BotKnobs {
+  const scale = valueScale(datasetVersion);
+  if (scale === 1) return knobs;
+  const scaled = { ...knobs };
+  for (const k of VALUE_KNOBS) scaled[k] = knobs[k] * scale;
+  return scaled;
+}

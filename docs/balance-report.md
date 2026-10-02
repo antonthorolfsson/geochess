@@ -857,6 +857,78 @@ per cell, players 2 / 4 / 6 / 8.
 To rerun: `pnpm sim --scenario baseline,whatif:no-turns --players 2-8 --seeds 100 --out turns`, then
 `pnpm sim:report turns --compare baseline`.
 
+## A 1–20 value curve
+
+_Added 2 October 2026. Country values run 1 to 10 and are given out by rank, so a superpower (10)
+is worth about three median countries (3–4). This tries a steeper curve where it is worth five or
+six: the same scores (`values.yaml` weights) ranked against 1–20, with the two superpowers at 20,
+the next six at 15–18 and the bottom half barely moved. The world's total value goes from 718 to
+928 (×1.29). Only the simulator plays it (`values-20`, in `packages/sim/src/value-curves.ts`); the
+shipped dataset is unchanged._
+
+Since every war rule compares one value to another (a stake of 80%, a raise of 125%), doubling
+every value would change nothing. The shape is what matters. Mission numbers that add up value
+(Expansion, Regional Power, Two Theater, Measured Expansion) are scaled by the total, single-country
+bands move tier to tier, and Great Powers counts countries worth 13 or more (today's set less
+Turkey). They play as trial mission rules 103. The bots' value units (`vpValue`, the declaring
+thresholds, `betrayMargin`) are scaled by 1.29 as well. Their fixed worth of a war token (1) is not.
+
+The same bots on the same seeds, 2–8 players, live and correspondence, 300 seeds each (4,200
+campaigns a curve):
+
+| All tables                                                | 1–10 today  | 1–20        |
+| --------------------------------------------------------- | ----------- | ----------- |
+| Median win round                                          | 12          | 12          |
+| Won on points at the last round                           | 17%         | 14%         |
+| Declarations per player per round                         | 0.94        | 0.94        |
+| Defender raises                                           | 24%         | 22%         |
+| Attacker wins (of games)                                  | 55%         | 55%         |
+| Value changing hands per campaign (% of world)            | 54%         | 66%         |
+| Great-power transfers per campaign (14 worth 8+ today)    | 15.4        | 16.5        |
+| Campaigns where China or the US changes hands             | 88%         | 94%         |
+| Win rate of the richest draft (1.00 = fair)               | 1.03        | 1.10        |
+| Win rate of whoever drafted China or the US (1.00 = fair) | 0.99        | 1.01        |
+| First pick / last pick win rate (1.00 = fair)             | 1.00 / 1.05 | 1.01 / 1.00 |
+| Biggest empire at the end (% of world)                    | 32%         | 34%         |
+
+- **Each war is worth more; the game isn't longer.** Bots declare, raise and win the chess as
+  often. About a fifth more of the world's value changes hands, because the countries won and lost
+  are worth more.
+- **Superpowers are not out of reach.** A target worth 20 needs a stake of 16, but the bots still
+  take China or the US in 94% of campaigns. People may hold their great powers back more than
+  bots, which value countries consistently.
+- **A strong draft counts a little more, at four players most clearly.** The richest drafter wins
+  1.10 times a fair share, against 1.03 today; at four players 1.30 against 1.06. Other table
+  sizes move both ways by more than their noise (about ±0.14), so the combined figure is the one to
+  trust. Draft order stays fair.
+- **Redirects were already gone.** The steep top leaves fewer countries of each value to redirect
+  to, but with nearby redirects that cost a token (the default) bots almost never redirect on
+  either curve.
+- **Expansion needs +22, not the scaled +19.** Value gained comes mostly from the top countries,
+  which grew more than the total. Other missions stay within noise of today.
+
+Expansion's gain, on the first 150 of those seeds (2,100 campaigns each):
+
+| Players scoring Expansion | 1–10 today (+15) | 1–20, +19 | 1–20, +21 | 1–20, +22 |
+| ------------------------- | ---------------- | --------- | --------- | --------- |
+| All tables                | 37.1%            | 41.9%     | 39.4%     | 38.3%     |
+| 2 players                 | 50.2%            | 54.8%     | 51.3%     | 49.8%     |
+| 3–4 players               | 43.9%            | 47.6%     | 46.5%     | 46.3%     |
+| 5–6 players               | 36.5%            | 42.8%     | 39.4%     | 37.1%     |
+| 7–8 players               | 32.5%            | 37.0%     | 34.6%     | 34.0%     |
+| Won on points             | 17.1%            | 13.9%     | 14.9%     | 16.7%     |
+
+At +22 the share ended on points also returns to today's. The curve now plays Expansion at +22;
+`whatif:v20-expansion-19` and `-21` are the others.
+
+Adopting it means the curve in `values.yaml` as a new dataset version (2026.2), its mission numbers
+as mission rules version 4, the bots' value knobs scaled the same way, and the rules guide's "1 to
+10" text. Stored campaigns keep their dataset and missions.
+
+To rerun: `pnpm sim --scenario baseline,values-20 --players 2-8 --paces live,correspondence --seeds 300 --out values-20`,
+then `pnpm sim:report values-20 --compare baseline --missions`. The Expansion runs add
+`whatif:v20-expansion-19,whatif:v20-expansion-21` to the scenarios.
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,

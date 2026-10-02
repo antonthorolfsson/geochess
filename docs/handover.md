@@ -1013,6 +1013,11 @@ All at the proposed defaults.
 
 ## What still needs the user
 
+- **A 1–20 value curve?** Simulated only (see the report's
+  [A 1–20 value curve](balance-report.md#a-120-value-curve)): superpowers worth five or six median
+  countries instead of three. Wars are worth more, the game is as long and draft order stays fair;
+  a rich draft wins a little more often. Adopting it is a new dataset version, mission rules
+  version 4 (Expansion at +22) and scaled bot knobs.
 - **Planning the playtest** (Phase 5): who plays, which pace, the rules to start from, and which
   numbers to watch (the plan names country values, the token economy, the stake range, time
   controls and round length).

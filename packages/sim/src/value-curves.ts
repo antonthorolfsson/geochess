@@ -62,8 +62,10 @@ export const VALUE_CURVES: Record<string, ValueCurve> = {
     missionRules: {
       ...MISSION_RULES_V3,
       version: 103,
-      // Sums of value grow with the curve's total.
-      expansion: { gain: scaled(MISSION_RULES_V3.expansion.gain) },
+      // Sums of value grow with the curve's total; Expansion more, since value is gained mostly in
+      // the top countries, which grew more than the total. At 19 (scaled) players score it about
+      // 5 points more often than today; at 22 the same as today (`whatif:v20-expansion-<gain>`).
+      expansion: { gain: 22 },
       regionalPower: {
         ...MISSION_RULES_V3.regionalPower,
         value: [scaled(MISSION_RULES_V3.regionalPower.value[0]), scaled(MISSION_RULES_V3.regionalPower.value[1])],

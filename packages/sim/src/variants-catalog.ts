@@ -522,10 +522,10 @@ VARIANTS['no-turns'] = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// The 1-20 value curve (`values-20`). Its Expansion gain scales by the curve's total (15 → 19),
-// but value gained comes mostly from the top countries, which grew more than the total.
+// The 1-20 value curve (`values-20`) plays Expansion at +22. Scaled by the curve's total it would
+// be 19, but value gained comes mostly from the top countries, which grew more than the total.
 
-for (const gain of [21, 22]) {
+for (const gain of [19, 21]) {
   VARIANTS[`v20-expansion-${gain}`] = {
     scenario: 'values-20',
     variant: {

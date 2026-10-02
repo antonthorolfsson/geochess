@@ -859,19 +859,21 @@ To rerun: `pnpm sim --scenario baseline,whatif:no-turns --players 2-8 --seeds 10
 
 ## A 1–20 value curve
 
-_Added 2 October 2026. Country values run 1 to 10 and are given out by rank, so a superpower (10)
-is worth about three median countries (3–4). This tries a steeper curve where it is worth five or
-six: the same scores (`values.yaml` weights) ranked against 1–20, with the two superpowers at 20,
-the next six at 15–18 and the bottom half barely moved. The world's total value goes from 718 to
-928 (×1.29). Only the simulator plays it (`values-20`, in `packages/sim/src/value-curves.ts`); the
-shipped dataset is unchanged._
+_Added 2 October 2026, and adopted the same day: new campaigns play dataset `2026.2` with mission
+rules version 4. Country values ran 1 to 10, given out by rank, so a superpower (10) was worth
+about three median countries (3–4). The new curve makes it five or six: the same scores
+(`values.yaml` weights) ranked against 1–20, with the two superpowers at 20, the next seven at
+15–18 and the bottom half barely moved. The world's total value goes from 718 to 928 (×1.29).
+The first runs below tried the curve in the simulator before it was adopted; the last checks it as
+built._
 
 Since every war rule compares one value to another (a stake of 80%, a raise of 125%), doubling
 every value would change nothing. The shape is what matters. Mission numbers that add up value
 (Expansion, Regional Power, Two Theater, Measured Expansion) are scaled by the total, single-country
 bands move tier to tier, and Great Powers counts countries worth 13 or more (today's set less
-Turkey). They play as trial mission rules 103. The bots' value units (`vpValue`, the declaring
-thresholds, `betrayMargin`) are scaled by 1.29 as well. Their fixed worth of a war token (1) is not.
+Turkey). The trial ran them as mission rules 103. The bots' value units (`vpValue`, the declaring
+thresholds, `betrayMargin`) are scaled by 1.29 as well; in the trial their worth of a war token
+stayed at 1.
 
 The same bots on the same seeds, 2–8 players, live and correspondence, 300 seeds each (4,200
 campaigns a curve):
@@ -897,10 +899,10 @@ campaigns a curve):
 - **Superpowers are not out of reach.** A target worth 20 needs a stake of 16, but the bots still
   take China or the US in 94% of campaigns. People may hold their great powers back more than
   bots, which value countries consistently.
-- **A strong draft counts a little more, at four players most clearly.** The richest drafter wins
-  1.10 times a fair share, against 1.03 today; at four players 1.30 against 1.06. Other table
-  sizes move both ways by more than their noise (about ±0.14), so the combined figure is the one to
-  trust. Draft order stays fair.
+- **A strong draft seemed to count a little more, at four players most clearly.** The richest
+  drafter won 1.10 times a fair share, against 1.03 today; at four players 1.30 against 1.06. Other
+  table sizes moved both ways by more than their noise (about ±0.14). As built it didn't hold up
+  (below). Draft order stays fair.
 - **Redirects were already gone.** The steep top leaves fewer countries of each value to redirect
   to, but with nearby redirects that cost a token (the default) bots almost never redirect on
   either curve.
@@ -918,16 +920,35 @@ Expansion's gain, on the first 150 of those seeds (2,100 campaigns each):
 | 7–8 players               | 32.5%            | 37.0%     | 34.6%     | 34.0%     |
 | Won on points             | 17.1%            | 13.9%     | 14.9%     | 16.7%     |
 
-At +22 the share ended on points also returns to today's. The curve now plays Expansion at +22;
-`whatif:v20-expansion-19` and `-21` are the others.
+At +22 the share ended on points also returns to today's.
 
-Adopting it means the curve in `values.yaml` as a new dataset version (2026.2), its mission numbers
-as mission rules version 4, the bots' value knobs scaled the same way, and the rules guide's "1 to
-10" text. Stored campaigns keep their dataset and missions.
+**As built.** Dataset `2026.2`, mission rules version 4 (the trial's numbers with Expansion at
++22), and the bots' value knobs scaled by 1.29, the worth of a war token now among them
+(`knobsFor`). Against `values-10`, which plays `2026.1` with version 3 as campaigns created before
+do, on the first 150 seeds (2,100 campaigns each):
 
-To rerun: `pnpm sim --scenario baseline,values-20 --players 2-8 --paces live,correspondence --seeds 300 --out values-20`,
-then `pnpm sim:report values-20 --compare baseline --missions`. The Expansion runs add
-`whatif:v20-expansion-19,whatif:v20-expansion-21` to the scenarios.
+| All tables                                                | 1–10 (`values-10`) | 1–20 as built |
+| --------------------------------------------------------- | ------------------ | ------------- |
+| Median win round                                          | 12                 | 12            |
+| Won on points at the last round                           | 17%                | 17%           |
+| Declarations per player per round                         | 0.94               | 0.94          |
+| Defender raises                                           | 24%                | 21%           |
+| Attacker wins (of games)                                  | 54%                | 55%           |
+| Value changing hands per campaign (% of world)            | 54%                | 68%           |
+| Campaigns where China or the US changes hands             | 89%                | 94%           |
+| Win rate of the richest draft (1.00 = fair)               | 1.05               | 1.04          |
+| Win rate of whoever drafted China or the US (1.00 = fair) | 1.01               | 0.99          |
+| First pick / last pick win rate (1.00 = fair)             | 1.01 / 1.03        | 1.01 / 1.05   |
+| Players scoring Expansion                                 | 37.1%              | 38.3%         |
+
+Every mission is scored about as often as on 1–10 (within a point; Expansion 3–4 players about two
+points more), and so are the secret missions. `values-10` plays the same campaigns as the 1–10 runs
+above, seed for seed. The four-player edge of the richest draft in the first run (1.30) isn't
+there (1.07, as on 1–10): it was noise.
+
+To rerun: `pnpm sim --scenario baseline,values-10 --players 2-8 --paces live,correspondence --seeds 150 --out values`,
+then `pnpm sim:report values --missions`. The trial's scenarios are gone; `--dataset 2026.1`
+replays anything on the old values.
 
 ## Limitations
 

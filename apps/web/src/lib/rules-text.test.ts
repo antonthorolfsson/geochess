@@ -46,6 +46,7 @@ describe('rules in words', () => {
     expect(standard).toMatchObject({
       Victory: 'First to 7 points',
       'Last round': 'Round 25, then the most points win',
+      'Level on points': 'The largest population, then the most land, then the largest GDP',
       'Claims are held': '24 hours after the next round starts',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
@@ -67,6 +68,12 @@ describe('rules in words', () => {
     expect(liveSettings.Victory).toBe('Open-ended');
     expect(liveSettings['Claims are held']).toBeUndefined();
     expect(liveSettings['Last round']).toBeUndefined();
+    expect(liveSettings['Level on points']).toBeUndefined();
+    // Campaigns stored before the real-world tiebreak keep the one they started with.
+    const stored = parseRules({ victory: { mode: 'objectives', lastRound: 20 } });
+    expect(Object.fromEntries(settingsList(stored).map((s) => [s.label, s.value]))['Level on points']).toBe(
+      'The most valuable empire',
+    );
     expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',

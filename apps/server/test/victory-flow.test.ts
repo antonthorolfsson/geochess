@@ -476,6 +476,88 @@ describe('the season', () => {
     expect((await ann.post(`/api/campaigns/${id}/round/next`)).status).toBe(409);
   });
 
+  /**
+   * Plays a three-round season in which nobody scores, so everyone ends level on points. `stored`
+   * strips the tiebreak from the rules, as campaigns created before it stored them.
+   */
+  async function levelSeason(stored = false) {
+    const { ann, bo, cy, id, view, nextRound } = await table();
+    const kinds = ['expansion', 'campaign_veteran', 'across_the_seas', 'lightning_campaign'];
+    expect((await ann.put(`/api/campaigns/${id}/victory/missions`, { kinds })).status).toBe(200);
+    expect((await ann.patch(`/api/campaigns/${id}`, { rules: { victory: { lastRound: 3 } } })).status).toBe(200);
+    if (stored) {
+      const { rules } = await view();
+      const { tiebreak: _, ...victory } = rules.victory;
+      await server.app.ctx.db
+        .update(campaigns)
+        .set({ rules: { ...rules, victory } as never })
+        .where(eq(campaigns.id, id));
+    }
+    expect((await view()).victory!.tiebreak).toBe(stored ? 'value' : 'realWorld');
+    expect((await ann.post(`/api/campaigns/${id}/draft/start`)).status).toBe(200);
+    expect((await ann.post(`/api/campaigns/${id}/draft/end`)).status).toBe(200);
+    for (const c of [ann, bo, cy]) {
+      const options = (await view(c)).mySecret!.options!;
+      expect((await c.post(`/api/campaigns/${id}/secret`, { optionId: options[0]!.id })).status).toBe(200);
+    }
+    // Secrets nobody completes: three countries of a rival that never change hands.
+    const start = await view();
+    const owned = (userId: string) => Object.entries(start.holdings).flatMap(([t, o]) => (o === userId ? [t] : []));
+    for (const [player, rival] of [
+      [ANN, BO],
+      [BO, CY],
+      [CY, ANN],
+    ] as const) {
+      const secret = { kind: 'hidden_triangle', territories: owned(rival).slice(-3), need: 3, reveal: 3 };
+      await server.app.ctx.db
+        .update(missionPlayers)
+        .set({ secret: secret as never })
+        .where(and(eq(missionPlayers.campaignId, id), eq(missionPlayers.userId, player)));
+    }
+    for (let round = 1; round <= 3; round++) {
+      server.clock.advance(25 * HOUR);
+      await nextRound();
+    }
+    const done = await view(bo);
+    expect(done.status).toBe('finished');
+    const byId = new Map(dataset.territories.map((t) => [t.id, t]));
+    // Summed in id order, as the server sums them, so fractional areas add up to the same figure.
+    const total = (userId: string, of: (t: Dataset['territories'][number]) => number) =>
+      owned(userId)
+        .sort()
+        .reduce((sum, t) => sum + of(byId.get(t)!), 0);
+    return { result: done.victory!.result!, total };
+  }
+
+  it('settles a tie on points by population, then land area, then GDP', async () => {
+    const { result, total } = await levelSeason();
+    expect(result).toMatchObject({ seasonEnd: true, tiebreak: 'realWorld' });
+    expect(result.standings.map((s) => s.points)).toEqual([0, 0, 0]);
+    const people = (userId: string) => total(userId, (t) => t.stats.population ?? 0);
+    const largest = [ANN, BO, CY].sort((a, b) => people(b) - people(a))[0]!;
+    expect(result.winners).toEqual([largest]);
+    expect(result.standings.map((s) => s.userId)[0]).toBe(largest);
+    expect(result.standings[0]!.measures).toEqual([
+      people(largest),
+      total(largest, (t) => t.stats.areaKm2 ?? 0),
+      total(largest, (t) => t.stats.gdpNominalUsd ?? 0),
+    ]);
+    // The game value would have crowned someone else.
+    const value = (userId: string) => total(userId, (t) => t.value);
+    expect([ANN, BO, CY].sort((a, b) => value(b) - value(a))[0]).not.toBe(largest);
+    const order = result.standings.map((s) => s.measures![0]!);
+    expect([...order].sort((a, b) => b - a)).toEqual(order);
+  });
+
+  it('keeps the most valuable empire for campaigns stored before the real-world tiebreak', async () => {
+    const { result, total } = await levelSeason(true);
+    expect(result).toMatchObject({ seasonEnd: true, tiebreak: 'value' });
+    const value = (userId: string) => total(userId, (t) => t.value);
+    const richest = [ANN, BO, CY].sort((a, b) => value(b) - value(a))[0]!;
+    expect(result.winners).toEqual([richest]);
+    expect(result.standings[0]!.measures).toEqual([value(richest)]);
+  });
+
   it('is off for campaigns stored before it existed', async () => {
     const { ann, id, view } = await table();
     // As a version 2 campaign stored its rules: no last round.

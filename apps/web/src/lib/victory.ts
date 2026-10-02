@@ -2,16 +2,23 @@ import {
   durationText,
   missionName,
   missionRequirement,
+  SEASON_MEASURE_NAMES,
+  joinWords,
   missionTargets,
+  seasonDecider,
+  tiebreakText,
   type ClaimView,
   type Evaluation,
   type MissionSpec,
   type MissionView,
+  type SeasonStanding,
   type TerritoryId,
   type VictoryPlayerView,
+  type VictoryResultView,
   type WarView,
 } from '@empire/rules';
 import type { CampaignModel } from './campaign';
+import { formatAreaCompact, formatCount, formatInt, formatUsd } from './format';
 import { timeLeft } from './wars';
 
 /** A mission as someone plays it: public missions belong to everyone, a secret one to its player. */
@@ -143,3 +150,36 @@ export function claimTiming(model: CampaignModel, claim: ClaimView, now: number)
 /** Claims by other players: positions the viewer has until the claim scores to break. */
 export const rivalClaims = (model: CampaignModel) =>
   (model.campaign.victory?.claims ?? []).filter((c) => c.userId !== model.me.userId);
+
+/** Each tiebreak measure as the thing that decided, with how to show its figures. */
+const DECIDERS = {
+  value: [{ text: 'the more valuable empire', format: formatInt }],
+  realWorld: [
+    { text: 'the larger population', format: formatCount },
+    { text: 'the more land', format: formatAreaCompact },
+    { text: 'the larger GDP', format: formatUsd },
+  ],
+};
+
+/**
+ * How a season that ran to its last round was decided, said after "the most points won": nothing
+ * when points alone did it; for a single winner level on points with the best of the rest, the
+ * measure that separated them and both figures (", then the larger population: 812M to 640M");
+ * for winners who share it, that they were level on the tiebreak too.
+ */
+export function tiebreakClause(result: VictoryResultView): string {
+  const [first] = result.standings;
+  if (!result.seasonEnd || !first) return '';
+  // Results stored before the real-world tiebreak were all decided by value, and kept no measures.
+  const tiebreak = result.tiebreak ?? 'value';
+  if (result.winners.length > 1) {
+    return `, and the winners were level on ${joinWords(SEASON_MEASURE_NAMES[tiebreak])} too`;
+  }
+  const rest = result.standings.find((s) => !result.winners.includes(s.userId));
+  if (!rest || rest.points !== first.points) return '';
+  const decider =
+    first.measures && rest.measures ? seasonDecider(first as SeasonStanding, rest as SeasonStanding) : null;
+  if (decider === null) return `, then ${tiebreakText(tiebreak)}`;
+  const { text, format } = DECIDERS[tiebreak][decider]!;
+  return `, then ${text}: ${format(first.measures![decider]!)} to ${format(rest.measures![decider]!)}`;
+}

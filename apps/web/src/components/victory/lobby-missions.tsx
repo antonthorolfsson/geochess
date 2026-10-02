@@ -13,6 +13,7 @@ import {
   missionTargets,
   publicMissionIssue,
   selectionMs,
+  tiebreakText,
   type PublicMissionKind,
   type TerritoryId,
   type VictoryMode,
@@ -113,7 +114,7 @@ export function LobbyMissions({
               first to {cfg.points.toWin} wins. A completed position scores once it has been held through the next full
               round and {durationText(holdMs(rules))} after that round starts.{' '}
               {lastRound !== null
-                ? `If nobody has ${cfg.points.toWin} when round ${lastRound} ends, the most points win, then the most valuable empire.`
+                ? `If nobody has ${cfg.points.toWin} when round ${lastRound} ends, the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`
                 : 'There is no last round: the campaign goes on until someone reaches it.'}
             </p>
 

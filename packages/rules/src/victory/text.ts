@@ -12,6 +12,7 @@ import {
   type MissionKind,
   type MissionRules,
   type MissionSpec,
+  type SeasonTiebreak,
   type SecretMissionSpec,
 } from './catalog';
 import type { ProgressPart } from './evaluate';
@@ -71,6 +72,18 @@ export const kindName = (kind: MissionKind, cfg: MissionRules) =>
 
 /** A mission that tends to take a long campaign, as the version judges it. */
 export const isLongMission = (kind: MissionKind, cfg: MissionRules) => cfg.long.includes(kind);
+
+/** The season tiebreak's measures in words, in the order of `seasonMeasures`. */
+export const SEASON_MEASURE_NAMES: Record<SeasonTiebreak, readonly string[]> = {
+  value: ['game value'],
+  realWorld: ['population', 'land area', 'GDP'],
+};
+
+/** What decides the season between players level on points: "the most valuable empire". */
+export const tiebreakText = (tiebreak: SeasonTiebreak) =>
+  tiebreak === 'value'
+    ? 'the most valuable empire'
+    : 'the largest population, then the most land, then the largest GDP';
 
 /** A holding or choosing time in words: "10 minutes", "24 hours", "2 days". */
 export function durationText(ms: number): string {

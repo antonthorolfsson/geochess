@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CURRENT_MISSION_RULES, VICTORY_MODES, publicMissionSpecSchema } from './victory/catalog';
+import { CURRENT_MISSION_RULES, SEASON_TIEBREAKS, VICTORY_MODES, publicMissionSpecSchema } from './victory/catalog';
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
@@ -184,6 +184,11 @@ export const victoryRulesSchema = z.object({
    * existed read as null, so no campaign underway gains an end.
    */
   lastRound: z.number().int().min(2).max(100).nullable().default(null),
+  /**
+   * What decides the season between players level on points. Rules stored before 2026-10-02 read
+   * as `value`, the tiebreak those campaigns started with; new campaigns use real-world size.
+   */
+  tiebreak: z.enum(SEASON_TIEBREAKS).default('value'),
 });
 
 /** Every host setting for a campaign. Stored as JSON on the campaign; grows with each phase. */
@@ -210,11 +215,11 @@ export function parseRules(input: unknown): CampaignRules {
 
 /**
  * The settings a new campaign starts with: the revised war answers, Objectives, its public
- * missions generated on creation, and a last round.
+ * missions generated on creation, and a last round settled on points, then real-world size.
  */
 export const DEFAULT_RULES: CampaignRules = parseRules({
   war: REVISED_WAR_RULES,
-  victory: { mode: 'objectives', version: CURRENT_MISSION_RULES, lastRound: DEFAULT_LAST_ROUND },
+  victory: { mode: 'objectives', version: CURRENT_MISSION_RULES, lastRound: DEFAULT_LAST_ROUND, tiebreak: 'realWorld' },
 });
 
 /** The round after which an Objectives campaign ends on points, or null if it plays on. */

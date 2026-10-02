@@ -50,10 +50,15 @@ describe('campaign rules', () => {
         holdMinutes: null,
         selectionMinutes: null,
         lastRound: 25,
+        tiebreak: 'realWorld',
       },
     });
     expect(
-      parseRules({ draft: {}, war: REVISED_WAR_RULES, victory: { mode: 'objectives', version: 4, lastRound: 25 } }),
+      parseRules({
+        draft: {},
+        war: REVISED_WAR_RULES,
+        victory: { mode: 'objectives', version: 4, lastRound: 25, tiebreak: 'realWorld' },
+      }),
     ).toEqual(DEFAULT_RULES);
   });
 
@@ -98,6 +103,7 @@ describe('campaign rules', () => {
       holdMinutes: null,
       selectionMinutes: null,
       lastRound: null,
+      tiebreak: 'value',
     });
     expect(parseRules(undefined).victory.mode).toBe('open');
   });

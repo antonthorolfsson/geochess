@@ -4,6 +4,7 @@ import type { TerritoryId } from '../dataset';
 import {
   MISSION_RULES_V1,
   MISSION_RULES_V3,
+  MISSION_RULES_V4,
   PUBLIC_MISSION_KINDS,
   missionInfo,
   type PublicMissionKind,
@@ -77,6 +78,7 @@ const quarters = {
 };
 const free: CampaignRules = parseRules({ victory: { mode: 'objectives' }, draft: { mode: 'free' } });
 const v2: CampaignRules = parseRules({ victory: { mode: 'objectives', version: 2 } });
+const v3: CampaignRules = parseRules({ victory: { mode: 'objectives', version: 3 } });
 
 describe('seeded randomness', () => {
   it('repeats for the same seed and differs between seeds', () => {
@@ -195,7 +197,7 @@ describe('public missions', () => {
 
   it('carry version 3’s numbers: records and giants harder, positions needing a conquest', () => {
     const kinds: PublicMissionKind[] = ['kingslayer', 'campaign_veteran', 'across_the_seas', 'lightning_campaign'];
-    expect(generatePublicMissions(kinds, idx, DEFAULT_RULES, Math.random)).toEqual({
+    expect(generatePublicMissions(kinds, idx, v3, Math.random)).toEqual({
       missions: [
         { kind: 'kingslayer', lead: 4 },
         { kind: 'campaign_veteran', wins: 4, opponents: 3, attackWins: 4, attackOnly: true },
@@ -203,17 +205,17 @@ describe('public missions', () => {
         { kind: 'lightning_campaign', wins: 2 },
       ],
     });
-    expect(generatePublicMission('great_powers', idx, DEFAULT_RULES, Math.random)).toEqual({
+    expect(generatePublicMission('great_powers', idx, v3, Math.random)).toEqual({
       kind: 'great_powers',
       minValue: 8,
       count: 3,
       newCount: 3,
     });
-    expect(generatePublicMission('one_billion', idx, DEFAULT_RULES, Math.random)).toEqual({
+    expect(generatePublicMission('one_billion', idx, v3, Math.random)).toEqual({
       kind: 'one_billion',
       people: 2_000_000_000,
     });
-    expect(generatePublicMission('great_expanse', idx, DEFAULT_RULES, Math.random)).toEqual({
+    expect(generatePublicMission('great_expanse', idx, v3, Math.random)).toEqual({
       kind: 'great_expanse',
       areaKm2: 20_000_000,
     });
@@ -229,6 +231,25 @@ describe('public missions', () => {
       'great_powers',
       'campaign_veteran',
     ]);
+  });
+
+  it('carry version 4’s numbers, written for values 1 to 20', () => {
+    expect(DEFAULT_RULES.victory.version).toBe(4);
+    expect(MISSION_RULES_V4.valueScale).toBe(1.29);
+    expect(generatePublicMission('expansion', idx, DEFAULT_RULES, Math.random)).toEqual({
+      kind: 'expansion',
+      gain: 22,
+    });
+    expect(generatePublicMission('expansion', idx, v3, Math.random)).toEqual({ kind: 'expansion', gain: 15 });
+    expect(MISSION_RULES_V4).toMatchObject({
+      regionalPower: { value: [26, 71] },
+      strategicPositions: { value: [3, 15] },
+      greatPowers: { minValue: 13, count: 3, newCount: 3 },
+      hiddenTriangle: { value: [2, 12] },
+      twoTheater: { netValue: 10 },
+      measuredExpansion: { gain: 26, revealGain: 21 },
+      fit: { value: 0.062, freeValue: 21 },
+    });
   });
 
   it('keep The Great Connection and Mare Nostrum to tables of four or fewer, from version 3', () => {

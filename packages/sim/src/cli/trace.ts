@@ -3,7 +3,7 @@
  * --players 4 --seed 7 [--pace correspondence] [--mission-rules 2] [--last-round none]`.
  */
 import { missionName, valueOfSet } from '@empire/rules';
-import { datasetFor } from '../dataset';
+import { loadDataset } from '../dataset';
 import { heldBy } from '../engine/state';
 import { runScenarioCampaign, scenarioConfig } from '../scenarios';
 import { parseArgs } from './args';
@@ -20,7 +20,7 @@ const cfg = scenarioConfig(args.get('scenario') ?? 'baseline', {
   ...(args.has('mission-rules') && { missionVersion: Number(args.get('mission-rules')) }),
   ...(lastRound !== undefined && { lastRound: lastRound === 'none' ? null : Number(lastRound) }),
 });
-const idx = datasetFor(cfg.values);
+const idx = loadDataset(cfg.dataset ?? undefined);
 const s = runScenarioCampaign(cfg, seed, idx);
 
 const out: string[] = [];

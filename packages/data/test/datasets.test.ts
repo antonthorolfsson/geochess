@@ -1,4 +1,14 @@
-import { BOT_NAMES, STAT_KEYS, validateGraph, type Dataset } from '@empire/rules';
+import {
+  BOT_NAMES,
+  CURRENT_MISSION_RULES,
+  DATASET_VALUE_SCALES,
+  MAX_VALUE,
+  STAT_KEYS,
+  missionRules,
+  validateGraph,
+  valueScale,
+  type Dataset,
+} from '@empire/rules';
 import { geoArea } from 'd3-geo';
 import type { Geometry } from 'geojson';
 import { readFileSync } from 'node:fs';
@@ -40,12 +50,18 @@ describe(`dataset ${index.latest} (latest)`, () => {
     }
   });
 
-  it('gives every territory an integer value from 1 to 10', () => {
+  it('gives every territory an integer value from 1 to 20', () => {
     for (const t of dataset.territories) {
       expect(Number.isInteger(t.value), t.id).toBe(true);
       expect(t.value, t.id).toBeGreaterThanOrEqual(1);
-      expect(t.value, t.id).toBeLessThanOrEqual(10);
+      expect(t.value, t.id).toBeLessThanOrEqual(MAX_VALUE);
     }
+    expect(Math.max(...dataset.territories.map((t) => t.value))).toBe(MAX_VALUE);
+  });
+
+  it('is on the value scale that new campaigns’ mission rules are written for', () => {
+    for (const v of index.versions) expect(DATASET_VALUE_SCALES[v], v).toBeDefined();
+    expect(valueScale(index.latest)).toBe(missionRules(CURRENT_MISSION_RULES).valueScale);
   });
 
   it('has statistics metadata for every figure', () => {

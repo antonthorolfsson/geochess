@@ -52,7 +52,7 @@ export interface Territory {
   continent: Continent;
   /** UN geoscheme subregion, e.g. "Western Europe". */
   subregion: string;
-  /** Game value, an integer from 1 to 10. */
+  /** Game value, an integer from 1 to 20 (1 to 10 before dataset 2026.2). */
   value: number;
   /** Land neighbors, sorted. */
   land: TerritoryId[];
@@ -92,3 +92,20 @@ export interface Dataset {
   territories: Territory[];
   seaLanes: SeaLane[];
 }
+
+/** The highest game value a territory can have. */
+export const MAX_VALUE = 20;
+
+/**
+ * Each dataset's value scale against 2026.1's, whose values run 1 to 10. From 2026.2 they run 1 to
+ * 20, steeper at the top (a superpower is worth five or six median countries rather than three),
+ * and the map is worth 1.29 times as much (928 against 718). Mission numbers counted in value come
+ * in versions written for one scale (`MissionRules.valueScale`); the bots' habits are written for
+ * 1-10 and multiplied by it. Datasets not listed (test maps) are on the 1-10 scale.
+ */
+export const DATASET_VALUE_SCALES: Readonly<Record<string, number>> = { '2026.1': 1, '2026.2': 1.29 };
+
+export const valueScale = (datasetVersion: string): number => DATASET_VALUE_SCALES[datasetVersion] ?? 1;
+
+/** The highest value a territory can have in this dataset version. */
+export const topValueOf = (datasetVersion: string): number => (valueScale(datasetVersion) === 1 ? 10 : MAX_VALUE);

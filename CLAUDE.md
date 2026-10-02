@@ -49,8 +49,11 @@ when starting new work.**
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target
   generation and claim blockers are in `packages/rules/src/victory/`; the server side is in
-  `apps/server/src/victory/`. Tuning means a new version (version 3 since 2026-09-29); stored
-  campaigns keep theirs. `settleVictory()` runs inside every `mutate()` (reveals, claims, awards,
+  `apps/server/src/victory/`. Tuning means a new version (version 4 since 2026-10-02); stored
+  campaigns keep theirs. Numbers counted in country value are written for one dataset value scale
+  (`MissionRules.valueScale`, `DATASET_VALUE_SCALES`): values run 1 to 20 from dataset 2026.2 and 1
+  to 10 before, so new campaigns pair the latest dataset with the current version, and the bots'
+  value knobs are scaled to each campaign's dataset (`knobsFor`). `settleVictory()` runs inside every `mutate()` (reveals, claims, awards,
   the finish). A campaign's last round (`rules.victory.lastRound`) ends it on points when the host
   moves on from it (`endSeason`). A player's secret mission and options are private until
   `mission.revealed`: never put them in events, pushes, notices or another player's view before

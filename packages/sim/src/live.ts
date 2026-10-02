@@ -16,8 +16,8 @@ import {
   type TurnState,
   type UserId,
 } from '@empire/rules';
-import type { Answer } from './bots';
-import { DEFAULT_KNOBS, type BotKnobs } from './bots/knobs';
+import type { Answer, Bots } from './bots';
+import { DEFAULT_KNOBS, knobsFor, type BotKnobs } from './bots/knobs';
 import {
   PROPOSED_ACCORD_ROUNDS,
   accepts,
@@ -73,12 +73,12 @@ export function liveState(c: LiveCampaign): SimState {
     mode: 'normal',
     roundCap: Infinity,
     missionVersion: c.rules.victory.version,
-    values: null,
+    dataset: c.idx.dataset.version,
     lastRound: c.rules.victory.lastRound ?? null,
     war: {},
     chess: DEFAULT_CHESS,
     elo: { kind: 'equal' },
-    bots: DEFAULT_KNOBS,
+    bots: knobsFor(DEFAULT_KNOBS, c.idx.dataset.version),
     variant: null,
     debug: false,
     trace: false,
@@ -149,21 +149,33 @@ export interface LiveBots {
   accept(s: SimState, accord: SimAccord): boolean;
 }
 
-export function liveBots(knobs: BotKnobs = DEFAULT_KNOBS): LiveBots {
-  const bots = standardBots(knobs);
+export function liveBots(base: BotKnobs = DEFAULT_KNOBS): LiveBots {
+  // Each campaign's bots play with the knobs scaled to its dataset's values.
+  const byDataset = new Map<string, { knobs: BotKnobs; bots: Bots }>();
+  const at = (s: SimState) => {
+    const version = s.idx.dataset.version;
+    let entry = byDataset.get(version);
+    if (!entry) {
+      const knobs = knobsFor(base, version);
+      entry = { knobs, bots: standardBots(knobs) };
+      byDataset.set(version, entry);
+    }
+    return entry;
+  };
   return {
     draftPick(s, userId) {
       const owners = new Map([...s.holdings].map(([id, h]) => [id, h.ownerId]));
       const legal = legalPicks(s.idx, s.rules, owners, userId);
-      return legal.length > 0 ? bots.draftPick(s, userId, legal) : null;
+      return legal.length > 0 ? at(s).bots.draftPick(s, userId, legal) : null;
     },
-    chooseSecret: (s, player) => bots.chooseSecret(s, player, player.options),
-    respond: (s, war) => bots.respond(s, war),
-    reply: (s, war) => bots.reply(s, war),
-    answerPeace: (s, war, offer) => bots.answerPeace(s, war, offer),
-    fortify: (s, player) => bots.fortify(s, player),
-    declare: (s, player) => bots.declare(s, player, 0),
+    chooseSecret: (s, player) => at(s).bots.chooseSecret(s, player, player.options),
+    respond: (s, war) => at(s).bots.respond(s, war),
+    reply: (s, war) => at(s).bots.reply(s, war),
+    answerPeace: (s, war, offer) => at(s).bots.answerPeace(s, war, offer),
+    fortify: (s, player) => at(s).bots.fortify(s, player),
+    declare: (s, player) => at(s).bots.declare(s, player, 0),
     renounce(s, player) {
+      const { knobs } = at(s);
       if (!knobs.accords || s.round < 1) return null;
       const appetiteOf = appetites(s, knobs);
       const mine = s.accords.filter(
@@ -171,9 +183,12 @@ export function liveBots(knobs: BotKnobs = DEFAULT_KNOBS): LiveBots {
       );
       return mine.find((a) => breaksAccord(s, knobs, player.id, a, appetiteOf)) ?? null;
     },
-    propose: (s, player, blocked) =>
-      knobs.accords ? proposalPartner(s, knobs, player.id, appetites(s, knobs), blocked) : null,
+    propose(s, player, blocked) {
+      const { knobs } = at(s);
+      return knobs.accords ? proposalPartner(s, knobs, player.id, appetites(s, knobs), blocked) : null;
+    },
     accept(s, accord) {
+      const { knobs } = at(s);
       if (!knobs.accords) return false;
       return accepts(s, knobs, accord.recipientId, accord.proposerId, appetites(s, knobs)(accord.recipientId));
     },

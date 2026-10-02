@@ -56,10 +56,13 @@ describe('a campaign with bots', () => {
     // The bots take their turns, declaring and passing, until declaring is over for the round.
     v = await view();
     expect(v.turns?.current).toBeNull();
-    const passed = v.events.filter((e) => e.type === 'turn.passed' && isBotId(e.actorId ?? ''));
-    expect(passed.length).toBeGreaterThan(0);
     const declared = v.events.filter((e) => e.type === 'war.declared' && isBotId(e.actorId ?? ''));
     expect(declared.length).toBeGreaterThan(0);
+    // Each bot took its turn: it declared, or passed.
+    const took = new Set(
+      v.events.filter((e) => ['turn.passed', 'war.declared'].includes(e.type)).map((e) => e.actorId ?? ''),
+    );
+    for (const bot of bots) expect(took.has(bot), bot).toBe(true);
     for (const w of v.wars) {
       // Bots answer at once, and wars between bots are fought to the end.
       if (isBotId(w.defenderId)) expect(w.status, `war on ${w.targetId}`).not.toBe('declared');

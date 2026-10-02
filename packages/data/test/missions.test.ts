@@ -1,5 +1,6 @@
 import {
   EMPTY_HISTORY,
+  CURRENT_MISSION_RULES,
   MISSION_RULES_V1,
   MISSION_RULES_V2,
   PUBLIC_MISSION_KINDS,
@@ -11,6 +12,7 @@ import {
   generatePublicMissions,
   hopDistances,
   indexDataset,
+  missionRules,
   parseRules,
   pickerAt,
   publicMissionIssue,
@@ -35,8 +37,11 @@ const readJson = <T>(...parts: string[]): T => JSON.parse(readFileSync(path.join
 const index = readJson<{ latest: string; versions: string[] }>('index.json');
 const dataset = readJson<Dataset>(index.latest, 'territories.json');
 const idx = indexDataset(dataset);
-const objectives = parseRules({ victory: { mode: 'objectives' } });
-const freeDraft = parseRules({ victory: { mode: 'objectives' }, draft: { mode: 'free' } });
+const objectives = parseRules({ victory: { mode: 'objectives', version: CURRENT_MISSION_RULES } });
+const freeDraft = parseRules({
+  victory: { mode: 'objectives', version: CURRENT_MISSION_RULES },
+  draft: { mode: 'free' },
+});
 
 /** A whole-map draft where everyone takes the most valuable legal country, in a seeded snake order. */
 function simulateDraft(players: string[], rules = objectives, seed = 1): Map<TerritoryId, string> {
@@ -103,7 +108,7 @@ describe(`missions on ${index.latest}`, () => {
   });
 
   it('finds regions of workable size for Regional Power, never a whole continent', () => {
-    const regions = regionsFor(idx, MISSION_RULES_V1);
+    const regions = regionsFor(idx, missionRules(CURRENT_MISSION_RULES));
     expect(regions.length).toBeGreaterThanOrEqual(5);
     for (const r of regions) {
       expect(r.territories.length).toBeGreaterThanOrEqual(5);

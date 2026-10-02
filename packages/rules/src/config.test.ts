@@ -45,16 +45,16 @@ describe('campaign rules', () => {
       },
       victory: {
         mode: 'objectives',
-        version: 3,
+        version: 4,
         publicMissions: [],
         holdMinutes: null,
         selectionMinutes: null,
         lastRound: 25,
       },
     });
-    expect(parseRules({ draft: {}, war: REVISED_WAR_RULES, victory: { mode: 'objectives', lastRound: 25 } })).toEqual(
-      DEFAULT_RULES,
-    );
+    expect(
+      parseRules({ draft: {}, war: REVISED_WAR_RULES, victory: { mode: 'objectives', version: 4, lastRound: 25 } }),
+    ).toEqual(DEFAULT_RULES);
   });
 
   it('gives campaigns stored before seasons no last round', () => {
@@ -89,7 +89,8 @@ describe('campaign rules', () => {
 
   it('reads rules stored before victory missions as open-ended, never as Objectives', () => {
     const stored = { maxPlayers: 4, draft: { mode: 'free' }, war: { pace: 'live' } };
-    // They play no missions, so the version only counts if the host switches a lobby to Objectives.
+    // They play no missions, so the version only counts if the host switches a lobby to Objectives:
+    // then version 3, written for the 1-10 values of their dataset (2026.1).
     expect(parseRules(stored).victory).toEqual({
       mode: 'open',
       version: 3,

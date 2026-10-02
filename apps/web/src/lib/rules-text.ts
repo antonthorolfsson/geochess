@@ -1,5 +1,6 @@
 import {
   MATCHED_RAISE_MIN_PCT,
+  MAX_VALUE,
   RESPONSE_WINDOW_TEXT,
   TURN_WINDOW_TEXT,
   durationText,
@@ -65,13 +66,16 @@ export function raisedRowLabel(rules: CampaignRules): string | null {
   return fortify ? 'Fortified' : null;
 }
 
-/** What a stake must be worth against a target of each value, as declared and after a raise (or fortified). */
-export function stakeTable(rules: CampaignRules): { value: number; stake: number; raised: number }[] {
-  return Array.from({ length: 10 }, (_, i) => ({
-    value: i + 1,
-    stake: stakeFloor(rules, i + 1),
-    raised: raiseFloor(rules, i + 1),
-  }));
+/** Target values the stake table shows on a map whose values run 1 to 20: every low value, then steps. */
+const STAKE_TABLE_VALUES_20 = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+
+/**
+ * What a stake must be worth against a target of each value, as declared and after a raise (or
+ * fortified), for a map whose values run 1 to `top`.
+ */
+export function stakeTable(rules: CampaignRules, top = MAX_VALUE): { value: number; stake: number; raised: number }[] {
+  const values = top === 10 ? Array.from({ length: 10 }, (_, i) => i + 1) : STAKE_TABLE_VALUES_20;
+  return values.map((value) => ({ value, stake: stakeFloor(rules, value), raised: raiseFloor(rules, value) }));
 }
 
 /** The host's settings, in the words the rules use. */

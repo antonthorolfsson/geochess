@@ -624,6 +624,8 @@ export interface StraitTemplate {
  */
 export interface MissionRules {
   version: number;
+  /** The dataset value scale its numbers counted in value are written for (`valueScale`). */
+  valueScale: number;
   points: { public: number; secret: number; toWin: number };
   /** The public missions this version offers the host. */
   publicKinds: readonly PublicMissionKind[];
@@ -762,6 +764,7 @@ export interface MissionRules {
  */
 export const MISSION_RULES_V1: MissionRules = {
   version: 1,
+  valueScale: 1,
   points: { public: 2, secret: 3, toWin: 7 },
   publicKinds: [
     'expansion',
@@ -963,21 +966,37 @@ export const MISSION_RULES_V3: MissionRules = {
   checkmateArtist: { wins: 3 },
 };
 
-const MISSION_RULES: Record<number, MissionRules> = { 1: MISSION_RULES_V1, 2: MISSION_RULES_V2, 3: MISSION_RULES_V3 };
+/**
+ * Version 4 plays datasets from 2026.2, whose values run 1 to 20 (`DATASET_VALUE_SCALES`). Numbers
+ * that add up value grow with the map's total (×1.29); Expansion more, to +22, since value is gained
+ * mostly in the top countries, which grew most (at +19 players scored it a fifth more often than on
+ * 1-10). Bands of single countries move tier to tier, and Great Powers counts countries worth 13 or
+ * more: those worth 8 or more on 1-10 but Turkey. The simulator's findings are in
+ * docs/balance-report.md ("A 1-20 value curve").
+ */
+export const MISSION_RULES_V4: MissionRules = {
+  ...MISSION_RULES_V3,
+  version: 4,
+  valueScale: 1.29,
+  expansion: { gain: 22 },
+  regionalPower: { ...MISSION_RULES_V3.regionalPower, value: [26, 71] },
+  strategicPositions: { ...MISSION_RULES_V3.strategicPositions, value: [3, 15] },
+  greatPowers: { ...MISSION_RULES_V3.greatPowers, minValue: 13 },
+  hiddenTriangle: { ...MISSION_RULES_V3.hiddenTriangle, value: [2, 12] },
+  twoTheater: { ...MISSION_RULES_V3.twoTheater, netValue: 10 },
+  measuredExpansion: { ...MISSION_RULES_V3.measuredExpansion, gain: 26, revealGain: 21 },
+  fit: { ...MISSION_RULES_V3.fit, value: 0.062, freeValue: 21 },
+};
+
+const MISSION_RULES: Record<number, MissionRules> = {
+  1: MISSION_RULES_V1,
+  2: MISSION_RULES_V2,
+  3: MISSION_RULES_V3,
+  4: MISSION_RULES_V4,
+};
 
 /** The mission rules version new campaigns are created with. */
-export const CURRENT_MISSION_RULES = MISSION_RULES_V3.version;
-
-/** Versions from here up hold numbers the simulator tries out; no campaign is created with one. */
-export const TRIAL_MISSION_RULES_FROM = 100;
-
-/** Makes trial numbers readable under their version, so generation and evaluation use them like any other. */
-export function registerTrialMissionRules(rules: MissionRules): void {
-  if (rules.version < TRIAL_MISSION_RULES_FROM) {
-    throw new Error(`Trial mission rules need a version of ${TRIAL_MISSION_RULES_FROM} or more`);
-  }
-  MISSION_RULES[rules.version] = rules;
-}
+export const CURRENT_MISSION_RULES = MISSION_RULES_V4.version;
 
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {

@@ -13,14 +13,13 @@ import {
   type SecretOption,
 } from '@empire/rules';
 import { makeBots } from './bots';
-import { DEFAULT_KNOBS, type BotKnobs } from './bots/knobs';
+import { DEFAULT_KNOBS, knobsFor, type BotKnobs } from './bots/knobs';
 import { DEFAULT_CHESS } from './engine/chess';
 import { runCampaign } from './engine/engine';
 import type { SecretChooser } from './engine/lifecycle';
 import type { SimConfig, SimState } from './engine/types';
 import { missionWorld } from './engine/world';
 import { hashSeed } from './random';
-import { VALUE_CURVES } from './value-curves';
 import { VARIANTS } from './variants-catalog';
 
 /** Live wars finish in the round they're declared; correspondence wars often run on. */
@@ -42,7 +41,7 @@ export function baseConfig(overrides: ConfigOverrides = {}): SimConfig {
     mode: 'normal',
     roundCap: 40,
     missionVersion: CURRENT_MISSION_RULES,
-    values: null,
+    dataset: null,
     lastRound: DEFAULT_LAST_ROUND,
     war: {},
     chess: DEFAULT_CHESS,
@@ -168,9 +167,10 @@ export const SCENARIOS: Record<string, Scenario> = {
   },
   'waves-1': { description: 'One declaration wave per round.', config: { waves: 1 } },
   'waves-3': { description: 'Three declaration waves per round.', config: { waves: 3 } },
-  'values-20': {
-    description: VALUE_CURVES.v20!.description,
-    config: { values: 'v20', missionVersion: VALUE_CURVES.v20!.missionRules.version, bots: VALUE_CURVES.v20!.bots },
+  'values-10': {
+    description:
+      'Dataset 2026.1, with country values 1-10, and mission rules version 3: what campaigns created before 2 October 2026 play.',
+    config: { dataset: '2026.1', missionVersion: 3 },
   },
 };
 
@@ -229,5 +229,5 @@ export function forcedChooser(seed: number): SecretChooser {
 
 export function runScenarioCampaign(cfg: SimConfig, seed: number, idx: DatasetIndex): SimState {
   const chooser = cfg.bots.secretChoice === 'forced' ? forcedChooser(seed) : undefined;
-  return runCampaign(cfg, seed, { bots: makeBots(cfg.bots, chooser), idx });
+  return runCampaign(cfg, seed, { bots: makeBots(knobsFor(cfg.bots, idx.dataset.version), chooser), idx });
 }

@@ -79,8 +79,8 @@ export interface CampaignRecord {
   warsByRound: number[];
   /** Countries that changed hands in wars: round, country, from, to. Unset in older records. */
   transfers?: [number, TerritoryId, UserId, UserId][];
-  /** The value curve played (null: the dataset's own values). Unset in older records. */
-  values?: string | null;
+  /** The dataset version played. Unset in older records. */
+  dataset?: string;
   accords: SimState['accordStats'];
   tokensWasted: number;
   ms: number;
@@ -195,7 +195,7 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
         t.to,
       ]),
     ),
-    values: s.cfg.values,
+    dataset: s.idx.dataset.version,
     accords: s.accordStats,
     tokensWasted: s.tokensWasted,
     ms: Math.round(ms),

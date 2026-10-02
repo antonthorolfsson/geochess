@@ -134,7 +134,7 @@ export function Stat({ label, value, note }: { label: string; value: ReactNode; 
 export function ValueBadge({ value, className = '' }: { value: number; className?: string }) {
   return (
     <span
-      title={`Game value ${value} of 10`}
+      title={`Game value ${value}`}
       className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[3px] border border-line-strong px-1 text-sm font-bold tabular-nums ${className}`}
     >
       {value}

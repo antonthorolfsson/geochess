@@ -15,6 +15,7 @@ import {
   HOME_TURF_PCT,
   LIVE_CLOCKS,
   MATCHED_RAISE_MIN_PCT,
+  MAX_VALUE,
   PEACE_MAX_TOKENS,
   MIN_PLAYERS,
   MISSIONS,
@@ -41,6 +42,7 @@ import {
   reservesAllowed,
   selectionMs,
   stakeFloor,
+  topValueOf,
   type CampaignRules,
 } from '@empire/rules';
 import Link from 'next/link';
@@ -67,7 +69,7 @@ const orWords = (items: readonly string[]) =>
  * - `campaign`: one campaign's rules, with its own settings first.
  */
 export type RulesGuideProps = { level?: 2 | 3 } & (
-  { variant: 'standard' } | { variant: 'campaign'; rules: CampaignRules; settingsNote: string }
+  { variant: 'standard' } | { variant: 'campaign'; rules: CampaignRules; datasetVersion: string; settingsNote: string }
 );
 
 /** The heading level of the guide's sections; their parts are one below. */
@@ -81,6 +83,8 @@ export function RulesGuide(props: RulesGuideProps) {
   const { level = 2 } = props;
   const standard = props.variant === 'standard';
   const rules = props.variant === 'campaign' ? props.rules : DEFAULT_RULES;
+  // Campaigns keep the values of the map they started on; new ones run 1 to 20.
+  const top = props.variant === 'campaign' ? topValueOf(props.datasetVersion) : MAX_VALUE;
   useScrollToHash();
   const settings = (
     <Section id="settings" title={standard ? 'Host settings' : "This campaign's settings"}>
@@ -125,10 +129,10 @@ export function RulesGuide(props: RulesGuideProps) {
           </ul>
         </nav>
         {!standard && settings}
-        <Idea rules={rules} />
+        <Idea rules={rules} top={top} />
         <StartToFinish rules={rules} />
         <EachRound rules={rules} standard={standard} />
-        <DeclaringWar rules={rules} standard={standard} />
+        <DeclaringWar rules={rules} standard={standard} top={top} />
         <Answers rules={rules} standard={standard} />
         <Battle rules={rules} standard={standard} />
         <AfterWar rules={rules} standard={standard} />
@@ -215,7 +219,7 @@ function Settings({ rules }: { rules: CampaignRules }) {
   );
 }
 
-function Idea({ rules }: { rules: CampaignRules }) {
+function Idea({ rules, top }: { rules: CampaignRules; top: number }) {
   const { war } = rules;
   const players =
     rules.maxPlayers > MIN_PLAYERS ? `${inWords(MIN_PLAYERS)} to ${inWords(rules.maxPlayers)}` : inWords(MIN_PLAYERS);
@@ -223,8 +227,12 @@ function Idea({ rules }: { rules: CampaignRules }) {
     {
       term: 'Value',
       text:
-        'Each country is worth 1 to 10, from its real economy, population and area. Most are worth 4 or less; only ' +
-        'a handful reach 9 or 10. Empires are ranked by total value.',
+        top === 10
+          ? 'Each country is worth 1 to 10, from its real economy, population and area. Most are worth 4 or less; ' +
+            'only a handful reach 9 or 10. Empires are ranked by total value.'
+          : `Each country is worth 1 to ${top}, from its real economy, population and area. Most are worth 4 or ` +
+            `less; about a dozen great powers are worth 13 or more, and only China and the United States reach ${top}. ` +
+            'Empires are ranked by total value.',
     },
     {
       term: 'War tokens',
@@ -515,7 +523,7 @@ function InlineLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-function DeclaringWar({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
+function DeclaringWar({ rules, standard, top }: { rules: CampaignRules; standard: boolean; top: number }) {
   const { war } = rules;
   const example = stakeFloor(rules, 6);
   return (
@@ -572,7 +580,7 @@ function DeclaringWar({ rules, standard }: { rules: CampaignRules; standard: boo
           worth at least {war.stakeFloorPct}% of the target's value, rounded up. There's no upper limit. Win and you
           take the target; lose and the defender takes the whole stake.
         </p>
-        <StakeTable rules={rules} />
+        <StakeTable rules={rules} top={top} />
         <p className="text-muted">
           A target worth 6 needs a stake of at least {example}: say, the country you attack from, worth {example - 2},
           and a connected one worth 2. The stake builder suggests the cheapest stake, and you can add or remove
@@ -615,8 +623,8 @@ function DeclaringWar({ rules, standard }: { rules: CampaignRules; standard: boo
   );
 }
 
-function StakeTable({ rules }: { rules: CampaignRules }) {
-  const rows = stakeTable(rules);
+function StakeTable({ rules, top }: { rules: CampaignRules; top: number }) {
+  const rows = stakeTable(rules, top);
   const cell = 'px-1 py-1.5 text-center tabular-nums';
   return (
     <div className="overflow-x-auto">

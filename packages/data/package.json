@@ -7,8 +7,7 @@
   "type": "module",
   "exports": {
     "./datasets/*": "./datasets/*",
-    "./openings/*": "./openings/*",
-    "./values": "./scripts/lib/values.ts"
+    "./openings/*": "./openings/*"
   },
   "scripts": {
     "generate": "tsx scripts/build.ts",

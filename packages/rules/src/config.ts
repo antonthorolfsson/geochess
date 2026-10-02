@@ -155,8 +155,11 @@ export const DEFAULT_LAST_ROUND = 25;
  */
 export const victoryRulesSchema = z.object({
   mode: z.enum(VICTORY_MODES).default('open'),
-  /** The mission rules version (thresholds and generation limits) the campaign was created with. */
-  version: z.number().int().min(1).default(CURRENT_MISSION_RULES),
+  /**
+   * The mission rules version (thresholds and generation limits) the campaign was created with.
+   * Rules stored without one are on dataset 2026.1, whose values version 3 is written for.
+   */
+  version: z.number().int().min(1).default(3),
   /** The public missions and their targets, generated in the lobby and locked when the draft starts. */
   publicMissions: z.array(publicMissionSpecSchema).max(8).default([]),
   /** Least time a claim is held after the next round starts, in minutes; null for the pace's default. */
@@ -211,7 +214,7 @@ export function parseRules(input: unknown): CampaignRules {
  */
 export const DEFAULT_RULES: CampaignRules = parseRules({
   war: REVISED_WAR_RULES,
-  victory: { mode: 'objectives', lastRound: DEFAULT_LAST_ROUND },
+  victory: { mode: 'objectives', version: CURRENT_MISSION_RULES, lastRound: DEFAULT_LAST_ROUND },
 });
 
 /** The round after which an Objectives campaign ends on points, or null if it plays on. */

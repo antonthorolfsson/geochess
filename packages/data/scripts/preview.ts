@@ -6,7 +6,7 @@
  *   pnpm --filter @empire/data preview               # world plus regional crops
  *   pnpm --filter @empire/data preview -20,19,-1,37  # adds a custom crop: west,south,east,north
  */
-import type { Dataset, LonLat } from '@empire/rules';
+import { MAX_VALUE, type Dataset, type LonLat } from '@empire/rules';
 import { geoGraticule10, geoNaturalEarth1, geoPath, type GeoProjection } from 'd3-geo';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 import { execFileSync } from 'node:child_process';
@@ -16,7 +16,7 @@ import { feature, mesh } from 'topojson-client';
 import type { GeometryCollection, Topology } from 'topojson-specification';
 import { DATASETS_DIR, RAW_DIR } from './lib/paths';
 
-/** Sequential ramp for values 1-10. */
+/** Sequential ramp from value 1 to the top value. */
 const RAMP = [
   '#fff7bc',
   '#fee391',
@@ -29,6 +29,7 @@ const RAMP = [
   '#5c1a03',
   '#3d1102',
 ];
+const rampOf = (value: number) => RAMP[Math.round(((value - 1) / (MAX_VALUE - 1)) * (RAMP.length - 1))];
 
 interface View {
   name: string;
@@ -103,7 +104,7 @@ function render(dataset: Dataset, topology: Topology, view: View): string {
   ];
   for (const f of features.features as Feature<Geometry, { name: string }>[]) {
     const t = byId.get(String(f.id));
-    const fill = t ? RAMP[t.value - 1] : '#ff00ff';
+    const fill = t ? rampOf(t.value) : '#ff00ff';
     out.push(svgPath(draw(f), `fill="${fill}"`, `${String(f.id)} ${f.properties.name} (${t?.value})`));
   }
   out.push(svgPath(draw(mesh(topology, object, (a, b) => a !== b)), 'fill="none" stroke="#3b2f2f" stroke-width="0.6"'));
@@ -117,8 +118,8 @@ function render(dataset: Dataset, topology: Topology, view: View): string {
     const p = projection(t.anchor);
     if (!p || p[0] < 0 || p[1] < 0 || p[0] > view.width || p[1] > view.height) continue;
     const [x, y] = [p[0].toFixed(1), p[1].toFixed(1)];
-    if (t.micro) out.push(`<circle cx="${x}" cy="${y}" r="4" fill="${RAMP[t.value - 1]}" stroke="#000"/>`);
-    if (view.labels || t.value >= 7) {
+    if (t.micro) out.push(`<circle cx="${x}" cy="${y}" r="4" fill="${rampOf(t.value)}" stroke="#000"/>`);
+    if (view.labels || t.value >= 10) {
       const style = `font-family="Helvetica" font-size="${view.labels ? 11 : 10}" text-anchor="middle"`;
       const halo = 'fill="#000" stroke="#fff" stroke-width="2.5" paint-order="stroke"';
       out.push(`<text x="${x}" y="${(p[1] - 6).toFixed(1)}" ${style} ${halo}>${t.id} ${t.value}</text>`);

@@ -6,6 +6,7 @@ import {
   missionName,
   partAmount,
   revealRule,
+  tiebreakText,
   type ClaimView,
   type Evaluation,
   type MissionView,
@@ -26,6 +27,7 @@ import {
   pointsRace,
   progressOf,
   requirementText,
+  tiebreakClause,
   titleOf,
   victoryPlayer,
 } from '@/lib/victory';
@@ -507,7 +509,7 @@ function ScoringNote({ model }: { model: CampaignModel }) {
         after that round starts. Players who cross the line together are ranked by points; equal points share the
         victory.
         {v.lastRound !== null &&
-          ` If nobody has ${v.pointsToWin} when round ${v.lastRound} ends, the most points win, then the most valuable empire.`}
+          ` If nobody has ${v.pointsToWin} when round ${v.lastRound} ends, the most points win, then ${tiebreakText(v.tiebreak)}.`}
       </p>
     </section>
   );
@@ -523,13 +525,9 @@ function FinalResults({ model, result, onSelectCountry }: PanelProps & { result:
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)} share the victory` : `${names[0]} wins`;
   const iWon = result.winners.includes(model.me.userId);
   const [open, setOpen] = useState<string | null>(null);
-  const [first, second] = result.standings;
-  // At the end of the season, level on points means the most valuable empire won.
-  const onValue = result.seasonEnd && first && second && first.points === second.points;
+  const [first] = result.standings;
   const how = result.seasonEnd
-    ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${
-        onValue ? ', then the most valuable empire' : ''
-      }. `
+    ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${tiebreakClause(result)}. `
     : iWon && names.length === 1
       ? `You reached ${first?.points ?? 0} points. `
       : '';

@@ -50,11 +50,16 @@ describe('campaign rules', () => {
         holdMinutes: null,
         selectionMinutes: null,
         lastRound: 25,
+        tiebreak: 'realWorld',
       },
     });
-    expect(parseRules({ draft: {}, war: REVISED_WAR_RULES, victory: { mode: 'objectives', lastRound: 25 } })).toEqual(
-      DEFAULT_RULES,
-    );
+    expect(
+      parseRules({
+        draft: {},
+        war: REVISED_WAR_RULES,
+        victory: { mode: 'objectives', lastRound: 25, tiebreak: 'realWorld' },
+      }),
+    ).toEqual(DEFAULT_RULES);
   });
 
   it('gives campaigns stored before seasons no last round', () => {
@@ -97,6 +102,7 @@ describe('campaign rules', () => {
       holdMinutes: null,
       selectionMinutes: null,
       lastRound: null,
+      tiebreak: 'value',
     });
     expect(parseRules(undefined).victory.mode).toBe('open');
   });

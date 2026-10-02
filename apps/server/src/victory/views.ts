@@ -92,6 +92,7 @@ export async function victoryViews(
     secretPoints: cfg.points.secret,
     holdMs: holdMs(campaign.rules),
     lastRound: lastRoundOf(campaign.rules),
+    tiebreak: campaign.rules.victory.tiebreak,
     publicMissions,
     players: memberIds.map((userId) => {
       const player = byUser.get(userId);

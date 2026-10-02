@@ -5,9 +5,12 @@
  * wins, and players who cross it together are ranked by their totals (equal totals share it).
  */
 import type { CampaignRules } from '../config';
+import type { TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
-import { missionRules } from './catalog';
+import type { DatasetIndex } from '../graph';
+import { missionRules, type SeasonTiebreak } from './catalog';
 import { durationText } from './text';
+import { statOfSet, valueOfSet } from './world';
 
 /** The first round a claim started in round `startedRound` can score in. */
 export const claimEligibleRound = (startedRound: number) => startedRound + 2;
@@ -48,19 +51,64 @@ export function claimTimeServed(claim: ClaimTiming, round: number, now: number):
   return round >= claimEligibleRound(claim.startedRound) && claim.eligibleAt !== null && now >= claim.eligibleAt;
 }
 
+/** An empire's measures for the season's tiebreak, in the order they count (see `seasonMeasures`). */
+export type SeasonMeasures = readonly number[];
+
+/**
+ * What an empire is measured by when players are level on points at the end of the season, in
+ * order: its game value, or (`realWorld`) its population, then its land area, then its nominal
+ * GDP. Unknown figures count as zero.
+ */
+export function seasonMeasures(
+  idx: DatasetIndex,
+  held: Iterable<TerritoryId>,
+  tiebreak: SeasonTiebreak,
+): SeasonMeasures {
+  // In a fixed order, so the same empire always sums to the same figures.
+  const ids = [...held].sort();
+  if (tiebreak === 'value') return [valueOfSet(idx, ids)];
+  return [statOfSet(idx, ids, 'population'), statOfSet(idx, ids, 'areaKm2'), statOfSet(idx, ids, 'gdpNominalUsd')];
+}
+
+export interface SeasonStanding {
+  points: number;
+  measures: SeasonMeasures;
+}
+
+/** Orders standings for the end of the season: most points first, then the tiebreak's measures. */
+export function compareSeason(a: SeasonStanding, b: SeasonStanding): number {
+  if (a.points !== b.points) return b.points - a.points;
+  for (let i = 0; i < Math.max(a.measures.length, b.measures.length); i++) {
+    const d = (b.measures[i] ?? 0) - (a.measures[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/**
+ * Which of the tiebreak's measures separated two standings level on points: its index in
+ * `seasonMeasures`, or null when the points differ or they're level on every measure too.
+ */
+export function seasonDecider(a: SeasonStanding, b: SeasonStanding): number | null {
+  if (a.points !== b.points) return null;
+  for (let i = 0; i < Math.max(a.measures.length, b.measures.length); i++) {
+    if ((a.measures[i] ?? 0) !== (b.measures[i] ?? 0)) return i;
+  }
+  return null;
+}
+
 /**
  * Who wins when the season's last round ends and nobody has reached the points to win: the most
- * points, then the most valuable empire; players level on both share it. Sorted by id.
+ * points, then the campaign's tiebreak (`seasonMeasures`); players level on all of it share the
+ * victory. Sorted by id.
  */
-export function seasonWinners(standings: ReadonlyMap<UserId, { points: number; value: number }>): UserId[] {
-  let best: { points: number; value: number } | null = null;
-  for (const s of standings.values()) {
-    if (!best || s.points > best.points || (s.points === best.points && s.value > best.value)) best = s;
-  }
+export function seasonWinners(standings: ReadonlyMap<UserId, SeasonStanding>): UserId[] {
+  let best: SeasonStanding | null = null;
+  for (const s of standings.values()) if (!best || compareSeason(s, best) < 0) best = s;
   if (!best) return [];
   const top = best;
   return [...standings]
-    .filter(([, s]) => s.points === top.points && s.value === top.value)
+    .filter(([, s]) => compareSeason(s, top) === 0)
     .map(([userId]) => userId)
     .sort();
 }

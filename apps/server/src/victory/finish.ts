@@ -1,7 +1,9 @@
 import {
   SECRET_MISSION_KEY,
+  compareSeason,
   heldBy,
   missionRules,
+  seasonMeasures,
   seasonWinners,
   valueOfSet,
   type MissionWorld,
@@ -41,7 +43,8 @@ export interface Finish {
  * The host moves on from the season's last round: the campaign ends instead of starting another.
  * Missions are brought up to date first, in case something done at the last moment (a game just
  * ended, a claim's time just up) scores, which could still take someone to the points to win. Then
- * the most points win, then the most valuable empire; players level on both share it.
+ * the most points win, then the campaign's tiebreak (`seasonMeasures`); players level on all of it
+ * share the victory.
  */
 export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<void> {
   const mark = { campaign: scope.campaign, events: scope.log.events.length };
@@ -59,10 +62,11 @@ export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<
   const players = await loadPlayers(tx, campaign.id);
   const world = await loadWorld(ctx, tx, campaign, memberIds, players);
   const points = pointsOf(await loadAwards(tx, campaign.id), memberIds);
+  const tiebreak = campaign.rules.victory.tiebreak;
   const standings = new Map(
     memberIds.map((id) => [
       id,
-      { points: points.get(id) ?? 0, value: valueOfSet(world.idx, heldBy(world.owners, id)) },
+      { points: points.get(id) ?? 0, measures: seasonMeasures(world.idx, heldBy(world.owners, id), tiebreak) },
     ]),
   );
   await finishCampaign(ctx, scope, { players, world, points, winners: seasonWinners(standings), seasonEnd: true });
@@ -88,11 +92,13 @@ export async function finishCampaign(
   const now = ctx.now();
   const round = campaign.round;
   const seasonEnd = finish.seasonEnd ?? false;
+  const tiebreak = campaign.rules.victory.tiebreak;
   const placeholder: VictoryResultView = {
     winners: finish.winners,
     round,
     finishedAt: now.toISOString(),
     seasonEnd,
+    tiebreak,
     standings: [],
     holdings: {},
   };
@@ -146,17 +152,19 @@ export async function finishCampaign(
         userId,
         points: finish.points.get(userId) ?? 0,
         value: valueOfSet(idx, held),
+        measures: [...seasonMeasures(idx, held, tiebreak)],
         countries: held.length,
         awards: awards.filter((a) => a.userId === userId),
         secret,
       };
     })
-    .sort((a, b) => b.points - a.points || b.value - a.value || (a.userId < b.userId ? -1 : 1));
+    .sort((a, b) => compareSeason(a, b) || (a.userId < b.userId ? -1 : 1));
   const snapshot: VictoryResultView = {
     winners: finish.winners,
     round,
     finishedAt: now.toISOString(),
     seasonEnd,
+    tiebreak,
     standings,
     holdings: Object.fromEntries(owners),
   };

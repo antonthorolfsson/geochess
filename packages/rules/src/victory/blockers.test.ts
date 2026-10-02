@@ -3,7 +3,17 @@ import { DEFAULT_RULES, parseRules } from '../config';
 import type { WarBoard } from '../war';
 import { claimBlockers, possibleTransfers, type OpenWar } from './blockers';
 import type { MissionSpec } from './catalog';
-import { claimEligibleRound, claimTimeServed, holdMs, selectionMs, victoryWinners } from './claims';
+import {
+  claimEligibleRound,
+  claimTimeServed,
+  compareSeason,
+  holdMs,
+  seasonDecider,
+  seasonMeasures,
+  seasonWinners,
+  selectionMs,
+  victoryWinners,
+} from './claims';
 import { all, buildMap, makeWorld } from './test-maps';
 
 const ANN = 'ann';
@@ -218,5 +228,84 @@ describe('winners', () => {
     ]);
     expect(victoryWinners(points, 7)).toEqual([ANN, CY]);
     expect(victoryWinners(new Map([...points].reverse()), 7)).toEqual([ANN, CY]);
+  });
+});
+
+describe('the end of the season', () => {
+  const world = buildMap({
+    // Same value everywhere, so only the real-world figures tell the empires apart.
+    BIG: { v: 3, people: 50_000_000, area: 100_000, gdp: 1e11 },
+    WIDE: { v: 3, people: 50_000_000, area: 900_000, gdp: 1e10 },
+    RICH: { v: 3, people: 50_000_000, area: 100_000, gdp: 9e11 },
+    SMALL: { v: 5, people: 2_000_000, area: 10_000 },
+  });
+  const standing = (points: number, held: string[], tiebreak: 'value' | 'realWorld' = 'realWorld') => ({
+    points,
+    measures: seasonMeasures(world, held, tiebreak),
+  });
+
+  it('measures population, then land area, then GDP, or the game value', () => {
+    expect(seasonMeasures(world, ['BIG', 'SMALL'], 'realWorld')).toEqual([52_000_000, 110_000, 1e11]);
+    expect(seasonMeasures(world, ['BIG', 'SMALL'], 'value')).toEqual([8]);
+  });
+
+  it('goes to the most points, whatever the tiebreak says', () => {
+    const standings = new Map([
+      [ANN, standing(5, ['SMALL'])],
+      [BO, standing(4, ['BIG', 'WIDE', 'RICH'])],
+    ]);
+    expect(seasonWinners(standings)).toEqual([ANN]);
+    expect(seasonDecider(standings.get(ANN)!, standings.get(BO)!)).toBeNull();
+  });
+
+  it('breaks a tie on points by population first', () => {
+    const standings = new Map([
+      [ANN, standing(4, ['WIDE'])],
+      [BO, standing(4, ['BIG', 'SMALL'])],
+      [CY, standing(2, ['RICH'])],
+    ]);
+    expect(seasonWinners(standings)).toEqual([BO]);
+    expect(seasonDecider(standings.get(BO)!, standings.get(ANN)!)).toBe(0);
+  });
+
+  it('then by land area, then by GDP', () => {
+    const wide = new Map([
+      [ANN, standing(4, ['BIG'])],
+      [BO, standing(4, ['WIDE'])],
+    ]);
+    expect(seasonWinners(wide)).toEqual([BO]);
+    expect(seasonDecider(wide.get(ANN)!, wide.get(BO)!)).toBe(1);
+
+    const rich = new Map([
+      [ANN, standing(4, ['BIG'])],
+      [BO, standing(4, ['RICH'])],
+    ]);
+    expect(seasonWinners(rich)).toEqual([BO]);
+    expect(seasonDecider(rich.get(ANN)!, rich.get(BO)!)).toBe(2);
+  });
+
+  it('is shared by players level on points and every measure', () => {
+    const standings = new Map([
+      [CY, standing(4, ['BIG'])],
+      [ANN, standing(4, ['BIG'])],
+      [BO, standing(3, ['WIDE'])],
+    ]);
+    expect(seasonWinners(standings)).toEqual([ANN, CY]);
+    expect(seasonDecider(standings.get(ANN)!, standings.get(CY)!)).toBeNull();
+  });
+
+  it('keeps the most valuable empire for campaigns stored with that tiebreak', () => {
+    const standings = new Map([
+      [ANN, standing(4, ['SMALL'], 'value')],
+      [BO, standing(4, ['BIG'], 'value')],
+    ]);
+    expect(seasonWinners(standings)).toEqual([ANN]);
+    expect(parseRules({ victory: { mode: 'objectives' } }).victory.tiebreak).toBe('value');
+    expect(DEFAULT_RULES.victory.tiebreak).toBe('realWorld');
+  });
+
+  it('sorts standings most points first, then by the tiebreak', () => {
+    const sorted = [standing(4, ['BIG']), standing(5, ['SMALL']), standing(4, ['WIDE'])].sort(compareSeason);
+    expect(sorted.map((s) => s.measures[1])).toEqual([10_000, 900_000, 100_000]);
   });
 });

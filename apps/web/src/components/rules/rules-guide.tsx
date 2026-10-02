@@ -41,6 +41,7 @@ import {
   reservesAllowed,
   selectionMs,
   stakeFloor,
+  tiebreakText,
   type CampaignRules,
 } from '@empire/rules';
 import Link from 'next/link';
@@ -1139,7 +1140,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         {points.public * 2 + points.secret}, and all four public ones make {points.public * 4}, so a player can win
         without their secret.
         {last !== null &&
-          ` If nobody has ${points.toWin} when round ${last} ends, the campaign ends anyway, and the most points win.`}
+          ` If nobody has ${points.toWin} when round ${last} ends, the campaign ends anyway, and the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`}
         {standard && ' (The host can pick another last round, or none, in the lobby.)'}
         {!standard && ' (The host can instead make a campaign open-ended in the lobby: no missions and no fixed end.)'}
       </p>
@@ -1243,9 +1244,12 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         ) : (
           <p>
             Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. When the
-            host moves on from it, the campaign ends as if someone had won: the most victory points win, then the most
-            valuable empire, and players level on both share the victory. Claims still waiting to score don't count, so
-            a position has to be complete by round {last - 2} to score in time.
+            host moves on from it, the campaign ends as if someone had won: the most victory points win.{' '}
+            {rules.victory.tiebreak === 'value'
+              ? 'Players level on points are separated by the most valuable empire, and players level on both share the victory.'
+              : "Players level on points are separated by their empires' real-world size: the largest population wins; if that's level too, the most land area; then the largest GDP. Players level on all of it share the victory."}{' '}
+            Claims still waiting to score don't count, so a position has to be complete by round {last - 2} to score in
+            time.
           </p>
         )}
       </Part>

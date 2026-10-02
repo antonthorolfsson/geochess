@@ -15,6 +15,14 @@ import type { UserId } from '../draft';
 export const VICTORY_MODES = ['objectives', 'open'] as const;
 export type VictoryMode = (typeof VICTORY_MODES)[number];
 
+/**
+ * What decides the season between players level on points when its last round ends: `value`, the
+ * most valuable empire (as campaigns created before 2026-10-02 play), or `realWorld`, the largest
+ * population, then the most land, then the largest GDP.
+ */
+export const SEASON_TIEBREAKS = ['value', 'realWorld'] as const;
+export type SeasonTiebreak = (typeof SEASON_TIEBREAKS)[number];
+
 export const PUBLIC_MISSION_KINDS = [
   'expansion',
   'regional_power',

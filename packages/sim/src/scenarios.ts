@@ -20,6 +20,7 @@ import type { SecretChooser } from './engine/lifecycle';
 import type { SimConfig, SimState } from './engine/types';
 import { missionWorld } from './engine/world';
 import { hashSeed } from './random';
+import { VALUE_CURVES } from './value-curves';
 import { VARIANTS } from './variants-catalog';
 
 /** Live wars finish in the round they're declared; correspondence wars often run on. */
@@ -41,6 +42,7 @@ export function baseConfig(overrides: ConfigOverrides = {}): SimConfig {
     mode: 'normal',
     roundCap: 40,
     missionVersion: CURRENT_MISSION_RULES,
+    values: null,
     lastRound: DEFAULT_LAST_ROUND,
     war: {},
     chess: DEFAULT_CHESS,
@@ -166,6 +168,10 @@ export const SCENARIOS: Record<string, Scenario> = {
   },
   'waves-1': { description: 'One declaration wave per round.', config: { waves: 1 } },
   'waves-3': { description: 'Three declaration waves per round.', config: { waves: 3 } },
+  'values-20': {
+    description: VALUE_CURVES.v20!.description,
+    config: { values: 'v20', missionVersion: VALUE_CURVES.v20!.missionRules.version, bots: VALUE_CURVES.v20!.bots },
+  },
 };
 
 /** A scenario's configuration (or a what-if variant's, as `whatif:<name>`), with overrides. */

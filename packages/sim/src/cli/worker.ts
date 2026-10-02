@@ -1,6 +1,6 @@
 /** A runner's child process: plays its share of the campaigns and appends one JSON line per campaign. */
 import { appendFileSync, readFileSync } from 'node:fs';
-import { loadDataset } from '../dataset';
+import { datasetFor } from '../dataset';
 import { recordOf } from '../record';
 import { runScenarioCampaign, scenarioConfig } from '../scenarios';
 
@@ -16,7 +16,6 @@ export interface Job {
 
 const [jobFile, outFile, errFile] = process.argv.slice(2) as [string, string, string];
 const jobs = JSON.parse(readFileSync(jobFile, 'utf8')) as Job[];
-const idx = loadDataset();
 for (const job of jobs) {
   const cfg = scenarioConfig(job.scenario, {
     players: job.players,
@@ -26,7 +25,7 @@ for (const job of jobs) {
   });
   const started = performance.now();
   try {
-    const s = runScenarioCampaign(cfg, job.seed, idx);
+    const s = runScenarioCampaign(cfg, job.seed, datasetFor(cfg.values));
     appendFileSync(outFile, `${JSON.stringify(recordOf(s, performance.now() - started))}\n`);
   } catch (error) {
     appendFileSync(errFile, `${JSON.stringify({ job, error: String((error as Error).stack ?? error) })}\n`);

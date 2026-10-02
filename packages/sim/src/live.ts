@@ -73,6 +73,7 @@ export function liveState(c: LiveCampaign): SimState {
     mode: 'normal',
     roundCap: Infinity,
     missionVersion: c.rules.victory.version,
+    values: null,
     lastRound: c.rules.victory.lastRound ?? null,
     war: {},
     chess: DEFAULT_CHESS,

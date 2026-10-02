@@ -5,7 +5,7 @@
  */
 import { heldBy, lastRoundOf, seasonWinners, shuffled, valueOfSet, type UserId } from '@empire/rules';
 import type { Bots } from '../bots';
-import { loadDataset } from '../dataset';
+import { datasetFor, type loadDataset } from '../dataset';
 import { checkInvariants } from './invariants';
 import { beginSelection, nextRound, openCampaign, recordTimeline, runDraft, setupPublicMissions } from './lifecycle';
 import { createState } from './state';
@@ -167,7 +167,7 @@ function endSeason(s: SimState): void {
 }
 
 export function runCampaign(cfg: SimConfig, seed: number, opts: RunOptions): SimState {
-  const s = createState(cfg, opts.idx ?? loadDataset(), seed);
+  const s = createState(cfg, opts.idx ?? datasetFor(cfg.values), seed);
   const { bots } = opts;
   setupPublicMissions(s);
   runDraft(s, bots.draftPick);

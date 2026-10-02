@@ -1,6 +1,8 @@
 import type { RealStats } from '@empire/rules';
 import { VALUE_METRICS, type ValueMetric, type ValuesConfig } from './config';
 
+export { loadValues } from './config';
+
 export interface ValueRow {
   id: string;
   name: string;
@@ -18,9 +20,12 @@ export interface ValueRow {
 export interface ValuesResult {
   /** Sorted by score, highest first. */
   rows: ValueRow[];
-  /** Target number of territories per value (10 down to 1). */
+  /** Target number of territories per value (the top value down to 1). */
   targets: Map<number, number>;
 }
+
+/** The highest value the shares give out (values.yaml allows up to 10; trial curves go higher). */
+const topValue = (shares: ReadonlyMap<number, number>) => Math.max(10, ...shares.keys());
 
 /**
  * Counts per value from the configured shares. Boundaries are rounded cumulative shares, so the
@@ -30,7 +35,7 @@ export function valueTargets(n: number, shares: ReadonlyMap<number, number>): Ma
   const targets = new Map<number, number>();
   let cumulative = 0;
   let placed = 0;
-  for (let value = 10; value >= 2; value--) {
+  for (let value = topValue(shares); value >= 2; value--) {
     cumulative += shares.get(value) ?? 0;
     const boundary = Math.min(n, Math.round(cumulative * n));
     targets.set(value, boundary - placed);
@@ -79,7 +84,7 @@ export function computeValues(
   const targets = valueTargets(scored.length, cfg.shares);
   const rows: ValueRow[] = [];
   let rank = 0;
-  for (let value = 10; value >= 1; value--) {
+  for (let value = topValue(cfg.shares); value >= 1; value--) {
     for (let k = 0; k < (targets.get(value) ?? 0); k++, rank++) {
       const s = scored[rank]!;
       const o = cfg.overrides.get(s.id) ?? null;

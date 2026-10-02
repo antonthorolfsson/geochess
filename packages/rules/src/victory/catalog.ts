@@ -968,6 +968,17 @@ const MISSION_RULES: Record<number, MissionRules> = { 1: MISSION_RULES_V1, 2: MI
 /** The mission rules version new campaigns are created with. */
 export const CURRENT_MISSION_RULES = MISSION_RULES_V3.version;
 
+/** Versions from here up hold numbers the simulator tries out; no campaign is created with one. */
+export const TRIAL_MISSION_RULES_FROM = 100;
+
+/** Makes trial numbers readable under their version, so generation and evaluation use them like any other. */
+export function registerTrialMissionRules(rules: MissionRules): void {
+  if (rules.version < TRIAL_MISSION_RULES_FROM) {
+    throw new Error(`Trial mission rules need a version of ${TRIAL_MISSION_RULES_FROM} or more`);
+  }
+  MISSION_RULES[rules.version] = rules;
+}
+
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {
   const rules = MISSION_RULES[version];

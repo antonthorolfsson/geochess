@@ -837,6 +837,32 @@ online alone, as the way out of a dispute; only games underway (not queued live 
 
 Tests: rules `over-the-board.test.ts`, server `test/over-the-board.test.ts`.
 
+**Compare empires** (GitHub issue #12, 2026-10-02: "a statistics page that compares all empires
+with beautiful charts"). `/c/[id]/compare` opens over the map room like an empire page. It needs
+nothing new from the server: it draws `GET …/stats` (every empire's record already) and the
+campaign view.
+
+- **Leaders**: tiles for the most victory points, value, people, economy, land, military spending,
+  wars won, chess score (level scores go to whoever played more) and reputation; players level
+  share a tile.
+- **The race**: the empire page's `HistoryChart` with `userId={null}`, so every empire's line is
+  in its color until one is picked from the readout, which quiets the rest.
+- **Shares of the world**: a bar per measure (value, countries and the six real-world figures)
+  split between the empires in their colors and hatching, the rest of the map unclaimed in olive.
+  Picking an empire from the key or a bar reads its figures out beside every bar.
+- **Wars and chess**: a row per empire, won in its color, drawn grey and lost as an outline, the
+  bar's length the number fought or played; the figure is won–drawn–lost for wars and the score
+  for chess. **Diplomacy**: reputation as bars either side of where everyone started (100), with
+  accords in words. **By the numbers**: every figure in a sortable table.
+- Empires are in standings order (points, then value) in every chart. The logic is in
+  `lib/compare.ts`, with tests.
+- **Ways in**: "Compare" beside the standings' Empires heading, "Compare empires" in the Empire
+  tab, and "Compare all" in an empire page's Other empires row.
+- **Checked in the browser** (dev server, desktop and phone): Field Marshal's "Compare Check"
+  (Field Marshal and six bots, eight rounds of bot wars).
+
+Tests since: web 65.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1265,8 +1291,8 @@ Smaller follow-ups, none blocking:
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                    |
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                         |
 | `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members) |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                                         |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                                                                   |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                           |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                              |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

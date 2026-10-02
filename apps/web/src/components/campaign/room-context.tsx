@@ -30,3 +30,9 @@ export function useEmpireHref(campaignId: string): (userId: string) => string {
   const query = useSearchParams().toString();
   return (userId) => `/c/${campaignId}/empire/${userId}${query ? `?${query}` : ''}`;
 }
+
+/** The link to every empire compared, keeping the address's query like `useEmpireHref`. */
+export function useCompareHref(campaignId: string): string {
+  const query = useSearchParams().toString();
+  return `/c/${campaignId}/compare${query ? `?${query}` : ''}`;
+}

@@ -6,11 +6,12 @@ import { totalValue, type CampaignModel } from '@/lib/campaign';
 import { formatArea, formatCount, formatUsd, ordinal } from '@/lib/format';
 import { Stat, ValueBadge } from '../ui';
 import { PlayerName } from './player-name';
-import { useEmpireHref } from './room-context';
+import { useCompareHref, useEmpireHref } from './room-context';
 
 /** A first look at the player's empire, with a link to its full statistics page. */
 export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelect(id: TerritoryId): void }) {
   const empireHref = useEmpireHref(model.campaign.id);
+  const compareHref = useCompareHref(model.campaign.id);
   const ids = model.holdingsByUser.get(model.me.userId) ?? [];
   const all = model.idx.dataset.territories;
   const mine = ids
@@ -46,9 +47,14 @@ export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelec
           <PlayerName member={model.me} size="lg" />
         </div>
         {model.campaign.status !== 'lobby' && (
-          <Link href={empireHref(model.me.userId)} className="btn btn-ghost btn-sm">
-            Full statistics
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={empireHref(model.me.userId)} className="btn btn-ghost btn-sm">
+              Full statistics
+            </Link>
+            <Link href={compareHref} className="btn btn-ghost btn-sm">
+              Compare empires
+            </Link>
+          </div>
         )}
       </header>
 

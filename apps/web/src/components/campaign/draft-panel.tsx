@@ -2,6 +2,7 @@
 
 import type { TerritoryId } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { api, errorMessage } from '@/lib/api';
 import { totalValue, type CampaignModel } from '@/lib/campaign';
 import { relativeTime } from '@/lib/format';
@@ -11,7 +12,7 @@ import { EmpireSwatch } from '../hatch';
 import { Notice } from '../ui';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
-import { useEmpireHref } from './room-context';
+import { useCompareHref, useEmpireHref } from './room-context';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 
@@ -189,6 +190,7 @@ function UpNext({ model }: { model: CampaignModel }) {
 
 export function Standings({ model }: { model: CampaignModel }) {
   const empireHref = useEmpireHref(model.campaign.id);
+  const compareHref = useCompareHref(model.campaign.id);
   const { status, victory } = model.campaign;
   // In an Objectives campaign victory points are the race; value stays beside them.
   const showPoints = victory !== null && (status === 'active' || status === 'finished');
@@ -208,7 +210,14 @@ export function Standings({ model }: { model: CampaignModel }) {
   );
   return (
     <section>
-      <h2 className="label mb-2">Empires</h2>
+      <div className="mb-1 flex min-h-9 items-center justify-between gap-2">
+        <h2 className="label">Empires</h2>
+        {status !== 'lobby' && (
+          <Link href={compareHref} className="btn btn-ghost btn-sm">
+            Compare
+          </Link>
+        )}
+      </div>
       <table className="w-full text-[0.95rem]">
         <thead>
           <tr className="text-left">

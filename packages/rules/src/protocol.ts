@@ -7,7 +7,7 @@ import type { AutodraftFallback } from './draft';
 import type { PlayerRating } from './handicap';
 import type { Opening } from './openings';
 import type { ResultReport } from './over-the-board';
-import type { MissionSpec, SecretMissionSpec } from './victory/catalog';
+import type { MissionSpec, SeasonTiebreak, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
 import type { PeaceTerms, Transfer, Truce, WarCounter, WarOutcome } from './war';
@@ -378,14 +378,21 @@ export interface VictoryResultView {
   finishedAt: string;
   /**
    * Nobody reached the points to win: the season's last round ended and the most points (then the
-   * most valuable empire) won. Unset in results stored before seasons existed.
+   * tiebreak) won. Unset in results stored before seasons existed.
    */
   seasonEnd?: boolean;
-  /** Every player, most points first. Secret missions are all revealed here, done or not. */
+  /** What decided between players level on points. Unset in results stored before 2026-10-02. */
+  tiebreak?: SeasonTiebreak;
+  /**
+   * Every player, most points first, then by the tiebreak. Secret missions are all revealed here,
+   * done or not.
+   */
   standings: {
     userId: string;
     points: number;
     value: number;
+    /** The tiebreak's measures (`seasonMeasures`). Unset in results stored before 2026-10-02. */
+    measures?: number[];
     countries: number;
     awards: AwardView[];
     secret: { mission: MissionView; completed: boolean } | null;
@@ -404,6 +411,8 @@ export interface VictoryView {
   holdMs: number;
   /** The season's last round, after which the most points win; null if the campaign plays on. */
   lastRound: number | null;
+  /** What decides the season between players level on points. */
+  tiebreak: SeasonTiebreak;
   publicMissions: MissionView[];
   players: VictoryPlayerView[];
   /** Claims waiting to score. */

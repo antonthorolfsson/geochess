@@ -399,10 +399,17 @@ host sets one in the lobby. What the simulator says about the result is in the r
   open-ended campaigns). The lobby offers rounds 15, 20, 25 or 30, or none. In the last round the
   war room says so and the host's button reads **End the campaign**: `nextRound` then calls
   `endSeason` (`victory/finish.ts`), which brings missions up to date (something just done could
-  still take someone to 7), then gives the win to the most points, then the most valuable empire
-  (`seasonWinners`), players level on both sharing it. The result and the `campaign.won` event carry
-  `seasonEnd`; the missions panel and the dispatches say how it ended. Claims still waiting don't
-  count.
+  still take someone to 7), then gives the win to the most points, then the campaign's tiebreak
+  (`seasonWinners`), players level on all of it sharing it. The result and the `campaign.won` event
+  carry `seasonEnd`; the missions panel and the dispatches say how it ended. Claims still waiting
+  don't count.
+- **Tiebreak** (`rules.victory.tiebreak`, GitHub issue #11, 2026-10-02): players level on points at
+  the end of the season are separated by the largest population, then the most land area, then the
+  largest nominal GDP (`realWorld`, `seasonMeasures` in `victory/claims.ts`). Rules stored before
+  it read as `value`, the most valuable empire, which those campaigns started with; new campaigns
+  get `realWorld` through `DEFAULT_RULES`. There's no lobby control. The result keeps the tiebreak
+  and each player's measures, so the final results name what decided it ("then the larger
+  population: 812M to 640M"); the rules pages and the settings list say which tiebreak applies.
 - **Simulator:** campaigns play the current version with a last round of 25; `--mission-rules 2`
   and `--last-round none` replay the report's setup. `endSeason` is mirrored in `engine.ts` (a
   `{ t: 'end' }` action), records carry the version and last round, and the bots value the version

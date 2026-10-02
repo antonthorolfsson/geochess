@@ -4,13 +4,22 @@ import {
   type CampaignView,
   type ClaimView,
   type MissionView,
+  type VictoryResultView,
   type VictoryView,
   type WarView,
 } from '@empire/rules';
 import { lineDataset } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
 import { buildModel } from './campaign';
-import { claimTiming, findMission, missionOverlay, pointsRace, progressOf, rivalClaims } from './victory';
+import {
+  claimTiming,
+  findMission,
+  missionOverlay,
+  pointsRace,
+  progressOf,
+  rivalClaims,
+  tiebreakClause,
+} from './victory';
 
 const idx = indexDataset(lineDataset());
 const member = (userId: string, color: number) => ({
@@ -74,6 +83,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       secretPoints: 3,
       holdMs: 24 * 3_600_000,
       lastRound: null,
+      tiebreak: 'realWorld',
       publicMissions: [positions],
       players: [
         { userId: 'ann', points: 4, awards: [], ready: true, secret: null, progress: { p0: evaluation(2) } },
@@ -214,5 +224,53 @@ describe('claims', () => {
     const blocked = { ...claim, blockedBy: ['w1'] };
     const model = buildModel(view({ claims: [blocked] }, { wars: [war] }), user('ann'), idx)!;
     expect(claimTiming(model, blocked, 0).blockers).toEqual([war]);
+  });
+});
+
+describe('the end of the season', () => {
+  const standing = (userId: string, points: number, measures?: number[]) => ({
+    userId,
+    points,
+    value: 10,
+    ...(measures && { measures }),
+    countries: 3,
+    awards: [],
+    secret: null,
+  });
+  const result = (
+    winners: string[],
+    standings: VictoryResultView['standings'],
+    more: Partial<VictoryResultView> = {},
+  ) => ({
+    winners,
+    round: 25,
+    finishedAt: '2026-01-01T00:00:00.000Z',
+    seasonEnd: true,
+    tiebreak: 'realWorld' as const,
+    standings,
+    holdings: {},
+    ...more,
+  });
+
+  it('says nothing more when points alone decided it', () => {
+    expect(tiebreakClause(result(['ann'], [standing('ann', 6, [1, 1, 1]), standing('bo', 5, [9, 9, 9])]))).toBe('');
+    expect(tiebreakClause(result(['ann'], [standing('ann', 9)], { seasonEnd: false }))).toBe('');
+  });
+
+  it('names the measure that separated players level on points, with both figures', () => {
+    const byPeople = result(['ann'], [standing('ann', 5, [812e6, 1e6, 1e12]), standing('bo', 5, [640e6, 9e6, 9e12])]);
+    expect(tiebreakClause(byPeople)).toBe(', then the larger population: 812M to 640M');
+    const byGdp = result(['bo'], [standing('bo', 5, [5e6, 2e5, 3.2e11]), standing('ann', 5, [5e6, 2e5, 1.5e11])]);
+    expect(tiebreakClause(byGdp)).toBe(', then the larger GDP: $320B to $150B');
+  });
+
+  it('says the winners who share it were level on the tiebreak too', () => {
+    const shared = result(['ann', 'bo'], [standing('ann', 5, [1, 2, 3]), standing('bo', 5, [1, 2, 3])]);
+    expect(tiebreakClause(shared)).toBe(', and the winners were level on population, land area and GDP too');
+  });
+
+  it('reads results stored before the real-world tiebreak as decided by value', () => {
+    const stored = result(['ann'], [standing('ann', 5), standing('bo', 5)], { tiebreak: undefined });
+    expect(tiebreakClause(stored)).toBe(', then the most valuable empire');
   });
 });

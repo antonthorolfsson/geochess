@@ -8,6 +8,7 @@ import {
   raiseFloor,
   selectionMs,
   stakeFloor,
+  tiebreakText,
   type CampaignRules,
   type Handicap,
   type LiveClock,
@@ -74,6 +75,8 @@ export function stakeTable(rules: CampaignRules): { value: number; stake: number
   }));
 }
 
+const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** The host's settings, in the words the rules use. */
 export function settingsList(rules: CampaignRules): { label: string; value: string }[] {
   const { war, victory } = rules;
@@ -89,6 +92,9 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
             label: 'Last round',
             value: victory.lastRound === null ? 'None' : `Round ${victory.lastRound}, then the most points win`,
           },
+          ...(victory.lastRound === null
+            ? []
+            : [{ label: 'Level on points', value: sentenceCase(tiebreakText(victory.tiebreak)) }]),
           { label: 'Claims are held', value: `${durationText(holdMs(rules))} after the next round starts` },
           { label: 'Time to choose a secret', value: durationText(selectionMs(rules)) },
         ]

@@ -3,7 +3,7 @@
  * Each round: diplomacy, then waves of declarations (in turns, where the rules have them), answers,
  * replies and the games that are due.
  */
-import { heldBy, lastRoundOf, seasonWinners, shuffled, valueOfSet, type UserId } from '@empire/rules';
+import { heldBy, lastRoundOf, seasonMeasures, seasonWinners, shuffled, type UserId } from '@empire/rules';
 import type { Bots } from '../bots';
 import { loadDataset } from '../dataset';
 import { checkInvariants } from './invariants';
@@ -149,7 +149,7 @@ function playRound(s: SimState, bots: Bots): void {
 
 /**
  * The host moves on from the last round (the server's `endSeason`): missions are brought up to
- * date, and unless that finishes the campaign, the most points win, then the most valuable empire.
+ * date, and unless that finishes the campaign, the most points win, then the campaign's tiebreak.
  */
 function endSeason(s: SimState): void {
   s.actions.push({ t: 'end' });
@@ -159,7 +159,10 @@ function endSeason(s: SimState): void {
   const standings = new Map(
     s.players.map((p) => [
       p.id,
-      { points: s.points.get(p.id) ?? 0, value: valueOfSet(s.idx, heldBy(world.owners, p.id)) },
+      {
+        points: s.points.get(p.id) ?? 0,
+        measures: seasonMeasures(s.idx, heldBy(world.owners, p.id), s.rules.victory.tiebreak),
+      },
     ]),
   );
   s.endedByLimit = true;

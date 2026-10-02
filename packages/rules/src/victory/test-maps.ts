@@ -14,9 +14,10 @@ export interface Place {
   micro?: boolean;
   /** Longitude and latitude of the label point. */
   at?: [number, number];
-  /** Population and area in km², for the missions that count them. */
+  /** Population, area in km² and nominal GDP, for the missions and tiebreaks that count them. */
   people?: number;
   area?: number;
+  gdp?: number;
 }
 
 /** A dataset from a list of places; borders are made symmetric. */
@@ -47,7 +48,7 @@ export function buildMap(places: Record<string, Place>): DatasetIndex {
         terrain: p.terrain ?? [],
         micro: p.micro ?? false,
         anchor: p.at ?? [0, 0],
-        stats: { ...t.stats, areaKm2: p.area ?? null },
+        stats: { ...t.stats, areaKm2: p.area ?? null, gdpNominalUsd: p.gdp ?? null },
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : 1));

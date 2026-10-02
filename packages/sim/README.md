@@ -77,7 +77,7 @@ A variant (`src/variants.ts`) changes the missions without touching the game: pa
 they're generated or dealt (a public patch can also pick new targets), keep kinds out of play, add
 a condition on completion, change the points or the host's war settings, or set another last round.
 The variants in the catalog before "Tuning mission rules version 3" were written against version 2:
-run them with `--mission-rules 2 --last-round none` to compare them as the report did. Add it to `src/variants-catalog.ts`, then run it with
+run them with `--dataset 2026.1 --mission-rules 2 --last-round none` to compare them as the report did. Add it to `src/variants-catalog.ts`, then run it with
 the same seeds as the scenario it's compared with:
 
 ```bash
@@ -88,18 +88,16 @@ pnpm sim:report whatif-<name> --compare baseline
 Generation parameters (how targets are chosen and options dealt) are read from the catalog by
 version and can't be varied here.
 
-## Trying another value curve
+## Datasets and value scales
 
-A value curve (`src/value-curves.ts`) plays the map with other country values: the same scores
-as `packages/data/config/values.yaml`, ranked against another distribution. Mission numbers that
-count value and the bots' value units move with the curve, so each curve brings trial mission
-rules (registered under a version of 100 or more, which no campaign is created with) and bot
-knobs. `values-20` plays the 1–20 curve:
+Campaigns play the latest dataset unless a scenario names another (`dataset` in its config, or
+`--dataset 2026.1` on the command line). Country values run 1 to 20 from dataset 2026.2 and 1 to 10
+before; mission rules versions are written for one scale (version 4 for 1–20, earlier ones for
+1–10), and the bots' knobs counted in value are scaled to the dataset played (`knobsFor`).
+`values-10` plays what campaigns created before 2 October 2026 play, dataset 2026.1 with mission
+rules 3:
 
 ```bash
-pnpm sim --scenario baseline,values-20 --players 2-8 --paces live,correspondence --seeds 300 --out values-20
-pnpm sim:report values-20 --compare baseline --missions
+pnpm sim --scenario baseline,values-10 --players 2-8 --paces live,correspondence --seeds 300 --out values
+pnpm sim:report values --compare baseline --missions
 ```
-
-A curve the game adopts goes into `values.yaml` and a new dataset version, with its mission
-numbers as a new mission rules version.

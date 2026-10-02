@@ -946,17 +946,22 @@ then `pnpm sim:report values-20 --compare baseline --missions`. The Expansion ru
   once its wars are fought. Correspondence wars last 0–2 extra rounds by assumption.
 - **What-ifs can't touch generation.** How targets are picked and how options are dealt is read
   from the catalog by version, so those changes are marked unvalidated.
-- **One map.** Everything is on `2026.1`. Missions tied to named countries (the named regions, the
-  routes, Mare Nostrum, Seven Wonders) depend on how that map's borders and sea lanes fall.
+- **One map.** Everything before [A 1–20 value curve](#a-120-value-curve) is on `2026.1`; `2026.2`
+  has the same borders and sea lanes with other values. Missions tied to named countries (the named
+  regions, the routes, Mare Nostrum, Seven Wonders) depend on how that map's borders and sea lanes
+  fall.
 
 ## Rerunning
 
-The runs above were on version 2 with no last round. The simulator now plays what a new campaign
-plays (version 3, a last round of 25), so add `--mission-rules 2 --last-round none` to repeat them:
+The runs above were on dataset `2026.1` (values 1 to 10), the first ones with mission rules version
+2 and no last round. The simulator now plays what a new campaign plays (dataset `2026.2`, version
+4, a last round of 25), so add `--dataset 2026.1` to repeat any run before
+[A 1–20 value curve](#a-120-value-curve), with `--mission-rules 3` from
+[Version 3, as built](#version-3-as-built) on, and `--mission-rules 2 --last-round none` before it:
 
 ```bash
-pnpm sim --scenario baseline --players 2-8 --paces live,correspondence --seeds 400 --mission-rules 2 --last-round none --out baseline
-pnpm sim --scenario secrets --players 2-8 --paces live --seeds 400 --mission-rules 2 --last-round none --out secrets
+pnpm sim --scenario baseline --players 2-8 --paces live,correspondence --seeds 400 --dataset 2026.1 --mission-rules 2 --last-round none --out baseline
+pnpm sim --scenario secrets --players 2-8 --paces live --seeds 400 --dataset 2026.1 --mission-rules 2 --last-round none --out secrets
 pnpm sim:report baseline                        # tables in packages/sim/out/baseline/report.md
 pnpm sim:report whatif baseline --compare baseline
 pnpm --filter @empire/sim trace --scenario baseline --players 4 --seed 7   # one campaign, round by round

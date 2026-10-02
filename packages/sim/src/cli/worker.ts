@@ -9,9 +9,10 @@ export interface Job {
   players: number;
   pace: 'live' | 'correspondence';
   seed: number;
-  /** Overrides from the command line: another mission rules version, or last round (null: none). */
+  /** Overrides from the command line: another mission rules version, last round (null: none) or dataset. */
   missionVersion?: number;
   lastRound?: number | null;
+  dataset?: string;
 }
 
 const [jobFile, outFile, errFile] = process.argv.slice(2) as [string, string, string];
@@ -22,6 +23,7 @@ for (const job of jobs) {
     pace: job.pace,
     ...(job.missionVersion !== undefined && { missionVersion: job.missionVersion }),
     ...(job.lastRound !== undefined && { lastRound: job.lastRound }),
+    ...(job.dataset !== undefined && { dataset: job.dataset }),
   });
   const started = performance.now();
   try {

@@ -19,7 +19,7 @@ first, then the plan._
 **Phase 1 (Foundation)** is complete: sign-in (Lichess OAuth with PKCE, email links, email and
 password, development sign-in by name), lobbies with invite links and empire colors, the d3-geo map with hatching,
 microstates, sea lanes and search, the snake draft with private draft lists and auto-draft, the
-empire panel, dataset `2026.1` (188 territories; `2026.2` since 2026-10-02), PWA shell, CI and Prettier.
+empire panel, dataset `2026.1` (188 territories; `2026.2` since 2026-10-02, `2026.3` since 2026-10-03), PWA shell, CI and Prettier.
 
 **Phase 2 (War loop)** is complete and verified in the browser on desktop and phone:
 
@@ -863,6 +863,14 @@ simulator's case is in the balance report's
 - **Web.** The rules guide says 1 to 20 (1 to 10 for a campaign on `2026.1`, from its
   `datasetVersion`), and its stake table shows targets 1–6, 8, 10, 12, 15 and 20.
 
+**Transatlantic sea lanes** (2026-10-03, at the user's request). Dataset `2026.3` is `2026.2` plus
+two manual lanes in `config/sea-lanes.yaml`: Brazil–Liberia (Natal–Monrovia, 3,026 km) and
+Argentina–South Africa (Buenos Aires–Cape Town, 6,703 km), with `near` points so they aren't drawn
+from Fernando de Noronha or the Prince Edward Islands. Values, land borders and the map are
+unchanged; `DATASET_VALUE_SCALES` gives it 1.29 like `2026.2`, so it pairs with mission rules
+version 4. New campaigns get it; campaigns already on `2026.2` keep their map. (`2026.2/REPORT.md`
+still shows the 1–10 values in its territory table; `2026.3`'s report has the right ones.)
+
 Tests: rules `over-the-board.test.ts`, server `test/over-the-board.test.ts`.
 
 **Compare empires** (GitHub issue #12, 2026-10-02: "a statistics page that compares all empires
@@ -1316,7 +1324,7 @@ Smaller follow-ups, none blocking:
 | Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                               |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/` and `2026.2/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                      |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                           |
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                         |
 | `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members) |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `notifications.tsx`                                                                                                           |

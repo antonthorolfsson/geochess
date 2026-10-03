@@ -176,7 +176,7 @@ clearly labeled estimates. Opening names come from the
 
 Every map decision (disputed territories, microstate regions, sea lanes, game values) lives in
 hand-editable YAML under `packages/data/config/`, and each build writes a review report to
-[packages/data/datasets/2026.2/REPORT.md](packages/data/datasets/2026.2/REPORT.md). Read it with
+[packages/data/datasets/2026.3/REPORT.md](packages/data/datasets/2026.3/REPORT.md). Read it with
 your group before the first campaign.
 
 ## License

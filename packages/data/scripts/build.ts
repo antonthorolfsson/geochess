@@ -22,7 +22,7 @@ import { computeMicro, computeTerrain } from './lib/terrain';
 import { pairKey } from './lib/types';
 import { computeValues } from './lib/values';
 
-const VERSION = '2026.2';
+const VERSION = '2026.3';
 
 // Tuned to keep map.topo.json around 330 KB: detailed enough to zoom into Europe or the Caribbean
 // on a phone while staying quick to download and render.

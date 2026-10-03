@@ -103,7 +103,7 @@ export const MAX_VALUE = 20;
  * in versions written for one scale (`MissionRules.valueScale`); the bots' habits are written for
  * 1-10 and multiplied by it. Datasets not listed (test maps) are on the 1-10 scale.
  */
-export const DATASET_VALUE_SCALES: Readonly<Record<string, number>> = { '2026.1': 1, '2026.2': 1.29 };
+export const DATASET_VALUE_SCALES: Readonly<Record<string, number>> = { '2026.1': 1, '2026.2': 1.29, '2026.3': 1.29 };
 
 export const valueScale = (datasetVersion: string): number => DATASET_VALUE_SCALES[datasetVersion] ?? 1;
 

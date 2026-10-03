@@ -946,7 +946,14 @@ without chess counts for no mission).
   gets "Meet the raise", "Raise again" and "Back down". The rules guide has "Raising back and
   forth" and the new deadline rows. Checked in the browser on a dev campaign (Ann and Bo, "Raise
   Check"): Ann raised again, Bo raised again, and Ann's answer offered only meeting or backing down.
-- **Balance**: not yet measured at scale; compare with
+- **Balance** (a first look: live, 150 seeds at 2, 4 and 6 players, against
+  `whatif:single-raise` seed for seed). Defenders raise about as often (18–20% of declarations,
+  from 20–21%), and the bots raise again after nearly every first raise (19–20% of declarations).
+  Hardly anyone backs down after raising (under 1%), and fewer attackers withdraw (1–2%, from
+  3–4%). Wars get bigger: value taken per attacker win 17.3 / 16.0 / 14.9, from 16.2 / 14.5 /
+  13.8. Campaigns end a little sooner: median win round 13 / 10 / 8, from 13 / 12 / 9, and at 4
+  players 27% are won in rounds 15–25, from 40%. The bots' answers are one step deep, so the
+  playtest should say whether people raise back as readily. To rerun:
   `pnpm sim --scenario baseline,whatif:single-raise --players 2-8 --seeds 300`.
 
 Tests since: rules 306, web 66, sim 27, server 219 (`war-raises.test.ts` in rules; "raising back and forth" in

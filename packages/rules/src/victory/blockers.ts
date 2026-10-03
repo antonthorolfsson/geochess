@@ -6,19 +6,24 @@
  */
 import type { TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
-import { reachableWithin } from '../graph';
+import { getTerritory, reachableWithin } from '../graph';
 import type { WarStatus } from '../protocol';
 import {
   activeWar,
-  addedCountry,
+  addedCountries,
   canRaise,
+  declaredStake,
+  matchedRaiseRange,
+  raiseAnswerer,
   raiseOptions,
+  raisesMade,
   redirectOptions,
   stakeableCountries,
   tributeOptions,
   type Transfer,
   type WarBoard,
   type WarCounter,
+  type WarSide,
 } from '../war';
 import type { MissionSpec } from './catalog';
 import { missionComplete } from './evaluate';
@@ -45,13 +50,29 @@ const key = (transfers: readonly Transfer[]) =>
     .join(',');
 
 /**
+ * How many more countries the defender may yet put into the war: one with each answer to a raise
+ * of the attacker's, which the attacker can make only while raises are left.
+ */
+function laterCountries(left: number, next: WarSide): number {
+  let count = 0;
+  for (let side = next; ; side = side === 'attacker' ? 'defender' : 'attacker') {
+    if (side === 'defender') count++;
+    if (left === 0) return count;
+    left--;
+  }
+}
+
+/**
  * Every way an unresolved war could still end, as the countries that would change hands (the empty
  * list when nothing does: a draw, a withdrawal, tokens as tribute). Open answers count every
  * option the rules allow, since the player choosing could pick any of them:
  * - declared: the defender may accept, raise (putting in any country a matched raise allows),
  *   redirect to any legal country or offer any legal tribute;
  * - countered: the attacker may accept or refuse the offer on the table;
- * - a raised stake may be anything the attacker could stake from the launching country.
+ * - a raised stake may be anything the attacker could stake from the launching country;
+ * - where the stakes can be raised back and forth, either side may back down after raising (the
+ *   target, or the stake as declared), and the defender may put in more countries: each one alone,
+ *   and every one at once when more than one may come.
  * Peace terms don't count: they need both players to agree, the claimant among them.
  */
 export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
@@ -62,19 +83,35 @@ export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
   const raisedStake = () => reachableWithin(board.idx, war.launchId, stakeableCountries(board, war.attackerId, war.id));
   const out: Transfer[][] = [[]];
   const fight = (targetId: TerritoryId) => out.push(take(targetId), lose(war.stake));
+  // Countries the defender could put in later: theirs, free to stake, worth at least the least raise.
+  const least = matchedRaiseRange(getTerritory(board.idx, war.targetId).value).min;
+  const candidates = () =>
+    [...stakeableCountries(board, war.defenderId)].filter(
+      (id) => id !== war.targetId && (board.idx.byId.get(id)?.value ?? 0) >= least,
+    );
+  const putIn = (added: readonly TerritoryId[], count: number, first: readonly TerritoryId[] = []) => {
+    if (count === 0) return;
+    const more = candidates().filter((id) => !added.includes(id));
+    for (const id of more) out.push(take(war.targetId, ...added, id));
+    if (count > 1 || first.length > 0) out.push(take(war.targetId, ...added, ...new Set([...first, ...more])));
+  };
 
   switch (war.status) {
     case 'ready':
-    case 'playing': {
-      // A met matched raise put another of the defender's countries at stake.
-      const added = addedCountry(war.counter);
-      out.push(added ? take(war.targetId, added) : take(war.targetId), lose(war.stake));
+    case 'playing':
+      // Met matched raises put more of the defender's countries at stake.
+      out.push(take(war.targetId, ...addedCountries(war.counter)), lose(war.stake));
       break;
-    }
     case 'countered': {
       const counter = war.counter;
       if (counter?.kind === 'raise') {
-        out.push(counter.added ? take(war.targetId, counter.added) : take(war.targetId), lose(raisedStake()));
+        out.push(take(war.targetId, ...addedCountries(counter)), lose(raisedStake()));
+        if (board.rules.war.raise === 'matched' && board.rules.war.raises > 1) {
+          // Backing down after raising.
+          out.push(take(war.targetId), lose(declaredStake(war)));
+          const left = Math.max(0, board.rules.war.raises - raisesMade(counter));
+          putIn(addedCountries(counter), laterCountries(left, raiseAnswerer(counter)));
+        }
       } else if (counter?.kind === 'redirect') fight(counter.targetId);
       else {
         if (counter?.territoryId) out.push(take(counter.territoryId));
@@ -87,7 +124,12 @@ export function possibleTransfers(board: WarBoard, war: OpenWar): Transfer[][] {
       fight(war.targetId);
       if (canRaise(board, active)) {
         out.push(lose(raisedStake()));
-        for (const id of raiseOptions(board, active)) out.push(take(war.targetId, id));
+        const options = raiseOptions(board, active);
+        for (const id of options) out.push(take(war.targetId, id));
+        // Raising back and forth: more of the defender's countries may follow the first.
+        if (options.length > 0 && board.rules.war.raises > 1) {
+          putIn([], laterCountries(board.rules.war.raises - 1, 'attacker'), options);
+        }
       }
       for (const id of redirectOptions(board, active)) out.push(take(id));
       for (const id of tributeOptions(board, active)) out.push(take(id));

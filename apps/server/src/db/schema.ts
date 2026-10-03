@@ -181,7 +181,17 @@ export const holdings = pgTable(
 );
 
 export const WAR_STATUSES = ['declared', 'countered', 'ready', 'playing', 'resolved'] as const;
-export const WAR_OUTCOMES = ['attacker', 'defender', 'held', 'tribute', 'settled', 'withdrawn', 'cancelled'] as const;
+export const WAR_OUTCOMES = [
+  'attacker',
+  'defender',
+  'held',
+  'tribute',
+  'settled',
+  'withdrawn',
+  'yielded',
+  'forfeited',
+  'cancelled',
+] as const;
 
 export const wars = pgTable(
   'wars',

@@ -29,7 +29,7 @@ import { toAccordView } from '../diplomacy/views';
 import { notFound } from '../lib/errors';
 import { seatRating } from '../ratings/service';
 import { victoryViews } from '../victory/views';
-import { relevantWars, trucesFrom, type GameRow } from '../wars/board';
+import { owingAnswer, relevantWars, trucesFrom, type GameRow } from '../wars/board';
 import { peaceOffersFor, toWarView } from '../wars/views';
 
 const RECENT_EVENTS = 150;
@@ -260,10 +260,7 @@ async function attentionCounts(ctx: AppContext, userId: string, campaignIds: str
     .where(
       and(
         inArray(wars.campaignId, campaignIds),
-        or(
-          and(eq(wars.status, 'declared'), eq(wars.defenderId, userId)),
-          and(eq(wars.status, 'countered'), eq(wars.attackerId, userId)),
-        ),
+        owingAnswer((player) => eq(player, userId)),
       ),
     )
     .groupBy(wars.campaignId);

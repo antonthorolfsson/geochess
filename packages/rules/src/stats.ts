@@ -187,6 +187,8 @@ const emptyWarTally = (): WarTally => ({
   tribute: 0,
   settled: 0,
   withdrawn: 0,
+  opponentBackedDown: 0,
+  backedDown: 0,
   cancelled: 0,
   underway: 0,
 });
@@ -199,6 +201,8 @@ const OUTCOME_COUNTS: Record<WarOutcome, readonly [attacker: keyof WarTally, def
   tribute: ['tribute', 'tribute'],
   settled: ['settled', 'settled'],
   withdrawn: ['withdrawn', 'withdrawn'],
+  yielded: ['opponentBackedDown', 'backedDown'],
+  forfeited: ['backedDown', 'opponentBackedDown'],
   cancelled: ['cancelled', 'cancelled'],
 };
 

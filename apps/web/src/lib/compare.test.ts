@@ -27,6 +27,8 @@ const tally = (t: Partial<WarTally> = {}): WarTally => ({
   tribute: 0,
   settled: 0,
   withdrawn: 0,
+  opponentBackedDown: 0,
+  backedDown: 0,
   cancelled: 0,
   underway: 0,
   ...t,

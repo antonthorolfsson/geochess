@@ -7,6 +7,7 @@ import {
   ratingText,
   liveClockText,
   perMoveText,
+  raiseText,
   raisedRowLabel,
   settingsList,
   stakeTable,
@@ -55,7 +56,7 @@ describe('rules in words', () => {
       'War tokens': '1 a round, up to 3',
       'Truce after a war': '1 round',
       'Lock on won countries': '2 rounds',
-      'Raising the stakes': 'Matched: a country worth 50–100% of the target',
+      'Raising the stakes': 'Matched: a country worth 50–100% of the target, raised back and forth up to 3 times',
       'Raised stake': '125% of the target',
       Redirects: 'Near the target, for a token',
       Fortifying: 'A token, until the round after next',
@@ -96,6 +97,13 @@ describe('rules in words', () => {
     expect(raisedRowLabel(parseRules({}))).toBe('After a raise');
     expect(raisedRowLabel(parseRules({ war: { raise: 'token', fortify: true } }))).toBe('After a raise, or fortified');
     expect(raisedRowLabel(parseRules({ war: { raise: 'matched' } }))).toBeNull();
+  });
+
+  it('says how far the stakes go back and forth', () => {
+    expect(raiseText(parseRules({ war: { raise: 'matched' } }))).toBe('Matched: a country worth 50–100% of the target');
+    expect(raiseText(parseRules({ war: { raise: 'matched', raises: 5 } }))).toBe(
+      'Matched: a country worth 50–100% of the target, raised back and forth up to 5 times',
+    );
   });
 
   it('describes rating handicaps', () => {

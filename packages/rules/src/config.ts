@@ -46,6 +46,9 @@ export type DrawRule = (typeof DRAW_RULES)[number];
 export const RAISE_STYLES = ['matched', 'token', 'free', 'off'] as const;
 export type RaiseStyle = (typeof RAISE_STYLES)[number];
 
+/** The most raises a host can allow in one war. */
+export const MAX_RAISES = 5;
+
 /**
  * Where a defender may redirect an attack:
  * - `nearby`: to a country bordering the original target, and the war keeps that target's clock.
@@ -93,6 +96,12 @@ export const warRulesSchema = z.object({
   /** Rounds two players can't declare war on each other after a war between them resolves. */
   truceRounds: z.number().int().min(0).max(5).default(1),
   raise: z.enum(RAISE_STYLES).default('free'),
+  /**
+   * How many times a war's stakes may be raised with a matched raise, both sides together: 1 is the
+   * defender's raise alone (the original rule); more lets the attacker raise again, the defender
+   * again, and so on. Whoever has raised and then backs down loses the war as declared.
+   */
+  raises: z.number().int().min(1).max(MAX_RAISES).default(1),
   redirect: z.enum(REDIRECT_RULES).default('anywhere'),
   /** Redirecting costs the defender a war token, which goes to the attacker if they fight on. */
   redirectToken: z.boolean().default(false),
@@ -120,6 +129,7 @@ export const warRulesSchema = z.object({
 /** The war settings new campaigns start with, over the original game's: the revised answers, and turns. */
 export const REVISED_WAR_RULES = {
   raise: 'matched',
+  raises: 3,
   redirect: 'nearby',
   redirectToken: true,
   fortify: true,

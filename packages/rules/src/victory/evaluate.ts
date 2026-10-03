@@ -5,6 +5,7 @@
  */
 import type { Continent, TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
+import { conceded } from '../war';
 import type { MissionSpec, Shore, SpecOf } from './catalog';
 import { CONTINENT_NAMES } from './text';
 import {
@@ -410,9 +411,15 @@ function halfOfHumanity(s: Scope, spec: SpecOf<'half_of_humanity'>): Check {
 }
 
 /** Countries held now that were taken from `rival`: won in a war, or paid as tribute. */
+/**
+ * The wars battle missions count: every war that ended, except those won without a game because
+ * the other side backed down after raising.
+ */
+const battles = (s: Scope) => s.world.history.wars.filter((w) => !conceded(w.outcome));
+
 function takenFrom(s: Scope, rival: UserId): TerritoryId[] {
   const taken = new Set<TerritoryId>();
-  for (const w of s.world.history.wars) {
+  for (const w of battles(s)) {
     for (const t of w.transfers) if (t.from === rival && t.to === s.userId) taken.add(t.territoryId);
   }
   return [...taken].filter((id) => s.held.has(id)).sort();
@@ -754,7 +761,7 @@ function backstab(s: Scope, spec: SpecOf<'backstab'>): Check {
   // took countries from them (won, or paid as tribute). The best break counts.
   let best: { wars: MissionWar[]; taken: Set<TerritoryId> } = { wars: [], taken: new Set() };
   for (const b of broken) {
-    const wars = s.world.history.wars.filter(
+    const wars = battles(s).filter(
       (w) =>
         w.attackerId === s.userId &&
         w.defenderId === b.partner &&

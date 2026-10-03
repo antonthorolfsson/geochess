@@ -3,7 +3,7 @@
  * wars whenever the expected value gain beats the threshold. The baseline for how often missions
  * get done by accident.
  */
-import { attackableTargets, clockTarget, suggestPick, valueOf } from '@empire/rules';
+import { addedCountries, attackableTargets, clockTarget, suggestPick, valueOf } from '@empire/rules';
 import { warBoard } from '../engine/board';
 import { warOdds } from '../engine/chess';
 import type { SimState, SimWar } from '../engine/types';
@@ -60,7 +60,7 @@ export function greedyBots(knobs: BotKnobs): Bots {
       });
       const odds = warOdds(s, war.attackerId, war.defenderId, clockId, board);
       // A matched raise's country comes with the target; a paid counter's token comes to the attacker.
-      const won = value(s, counter.kind === 'raise' && counter.added ? [targetId, counter.added] : [targetId]);
+      const won = value(s, [targetId, ...addedCountries(counter)]);
       const u = odds.attacker * won - odds.defender * value(s, stake) + (counter.tokens ?? 0) * knobs.tokenValue;
       if (u <= 0) return { kind: 'withdraw' };
       return counter.kind === 'raise' ? { kind: 'accept', stake } : { kind: 'accept' };

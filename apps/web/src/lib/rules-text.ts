@@ -135,7 +135,10 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
 export function raiseText(rules: CampaignRules): string {
   switch (rules.war.raise) {
     case 'matched':
-      return `Matched: a country worth ${MATCHED_RAISE_MIN_PCT}–100% of the target`;
+      return (
+        `Matched: a country worth ${MATCHED_RAISE_MIN_PCT}–100% of the target` +
+        (rules.war.raises > 1 ? `, raised back and forth up to ${rules.war.raises} times` : '')
+      );
     case 'token':
       return `For a token, to ${rules.war.raisePct}% of the target`;
     case 'free':

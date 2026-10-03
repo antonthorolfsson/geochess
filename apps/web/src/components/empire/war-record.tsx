@@ -15,6 +15,8 @@ const OUTCOMES: { key: keyof WarTally; label: string; always?: boolean }[] = [
   { key: 'tribute', label: 'Settled by tribute' },
   { key: 'settled', label: 'Ended by peace terms' },
   { key: 'withdrawn', label: 'Called off' },
+  { key: 'opponentBackedDown', label: 'Won when they backed down' },
+  { key: 'backedDown', label: 'Backed down' },
   { key: 'cancelled', label: 'Cut short by the end' },
   { key: 'underway', label: 'Underway' },
 ];

@@ -66,7 +66,7 @@ export function score(r: Results): number | null {
 
 /** Wars won, drawn and lost, attacking and defending together. */
 export function warResults(record: WarRecord): Results & {
-  /** Settled by tribute or peace terms, withdrawn, or cut short by the campaign's end. */
+  /** Settled by tribute or peace terms, withdrawn, one side backing down, or cut short by the campaign's end. */
   other: number;
   underway: number;
 } {
@@ -75,7 +75,19 @@ export function warResults(record: WarRecord): Results & {
     won: a.won + d.won,
     drawn: a.drawn + d.drawn,
     lost: a.lost + d.lost,
-    other: a.tribute + d.tribute + a.settled + d.settled + a.withdrawn + d.withdrawn + a.cancelled + d.cancelled,
+    other:
+      a.tribute +
+      d.tribute +
+      a.settled +
+      d.settled +
+      a.withdrawn +
+      d.withdrawn +
+      a.opponentBackedDown +
+      d.opponentBackedDown +
+      a.backedDown +
+      d.backedDown +
+      a.cancelled +
+      d.cancelled,
     underway: a.underway + d.underway,
   };
 }

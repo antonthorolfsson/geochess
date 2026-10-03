@@ -5,16 +5,25 @@ import {
   ACCORD_MIN_ROUNDS,
   PEACE_MAX_TOKENS,
   PEACE_REJECTION_MESSAGES,
+  attackerRaiseMore,
+  attackerRaiseRange,
+  attackerRaised,
   canRaise,
+  canRaiseAgain,
   counterCost,
+  declaredStake,
+  defenderAnswerOptions,
   matchedRaiseRange,
   peaceCountries,
   peaceIssue,
+  owedByDefender,
+  raiseAnswerer,
   raiseDemand,
   raiseOptions,
   redirectOptions,
   tributeOptions,
   valueOf,
+  waitingOn,
   type PeaceOfferView,
   type PeaceTerms,
   type TerritoryId,
@@ -34,8 +43,9 @@ import {
   currentGame,
   outcomeText,
   playerName,
+  raiseLines,
   resultText,
-  stakedByRaise,
+  stakedByRaises,
   termsText,
   timeLeft,
   tokensText,
@@ -80,11 +90,11 @@ export function WarDetail({
   const game = currentGame(war);
   const empireHref = useEmpireHref(model.campaign.id);
   const rules = model.campaign.rules.war;
-  const added = stakedByRaise(war);
+  const added = stakedByRaises(war);
+  const raises = raiseLines(model, war);
   const pending = war.status === 'declared' || war.status === 'countered';
   const party = war.attackerId === me || war.defenderId === me;
-  const answering =
-    (war.status === 'declared' && war.defenderId === me) || (war.status === 'countered' && war.attackerId === me);
+  const answering = waitingOn(war) === me;
 
   const country = (id: TerritoryId) => (
     <button
@@ -138,10 +148,14 @@ export function WarDetail({
           </dt>
           <dd className="flex flex-wrap gap-1.5">
             {country(war.targetId)}
-            {added && (
+            {added.length > 0 && (
               <>
-                <span className="self-center text-sm text-muted">and, put in by the raise,</span>
-                {country(added)}
+                <span className="self-center text-sm text-muted">
+                  and, put in by {added.length === 1 ? 'the raise' : 'raises'},
+                </span>
+                {added.map((id) => (
+                  <span key={id}>{country(id)}</span>
+                ))}
               </>
             )}
           </dd>
@@ -154,6 +168,18 @@ export function WarDetail({
             ))}
           </dd>
         </div>
+        {raises.length > 0 && (
+          <div>
+            <dt className="label mb-1">Raises</dt>
+            <dd>
+              <ol className="list-decimal space-y-0.5 pl-5 text-sm text-muted">
+                {raises.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ol>
+            </dd>
+          </div>
+        )}
         {pending && war.reserves.length > 0 && (
           <div>
             <dt className="label mb-1">In reserve to meet a raise · worth {valueOf(idx, war.reserves)}</dt>
@@ -177,9 +203,14 @@ export function WarDetail({
       {war.status === 'countered' && (
         <>
           <Notice tone="amber">{counterText(model, war)}</Notice>
-          {war.attackerId === me && (
+          {answering && war.attackerId === me && (
             <Spotlight nonce={spotlight} label="Your answer">
               <AttackerReply model={model} war={war} onPreview={onPreview} />
+            </Spotlight>
+          )}
+          {answering && war.defenderId === me && (
+            <Spotlight nonce={spotlight} label="Your answer">
+              <DefenderReply model={model} war={war} onFocusCountry={onFocusCountry} />
             </Spotlight>
           )}
         </>
@@ -239,16 +270,21 @@ export function WarDetail({
 function Deadline({ war, model }: { war: WarView; model: CampaignModel }) {
   const now = useNow(1000);
   const left = Date.parse(war.respondBy!) - now;
-  const waitingOn = war.status === 'declared' ? war.defenderId : war.attackerId;
+  const answerer = waitingOn(war) ?? war.attackerId;
+  const counter = war.counter;
   const silence =
     war.status === 'declared'
       ? 'the war goes ahead as declared'
-      : war.counter?.kind === 'tribute'
+      : counter?.kind === 'tribute'
         ? 'the tribute is accepted'
-        : 'the attack is called off';
+        : counter && raiseAnswerer(counter) === 'defender'
+          ? `${playerName(model, war.defenderId)} backs down and ${countryName(model, war.targetId)} goes to ${playerName(model, war.attackerId)}`
+          : attackerRaised(counter)
+            ? `${playerName(model, war.attackerId)} backs down and the stake as declared goes to ${playerName(model, war.defenderId)}`
+            : 'the attack is called off';
   return (
     <p className="text-sm text-muted">
-      {waitingOn === model.me.userId ? 'You have' : `${playerName(model, waitingOn)} has`}{' '}
+      {answerer === model.me.userId ? 'You have' : `${playerName(model, answerer)} has`}{' '}
       <strong className="text-paper tabular-nums">{timeLeft(left)}</strong> to answer. Without an answer, {silence}.
     </p>
   );
@@ -323,7 +359,11 @@ function DefenderAnswer({
     switch (rules.raise) {
       case 'matched':
         return raisable
-          ? `put one of your countries worth ${range.min} to ${range.max} into the war. ${attacker} must add at least as much to the stake or withdraw, and if they win they take it too.${reserves}`
+          ? `put one of your countries worth ${range.min} to ${range.max} into the war. ${attacker} must add at least as much to the stake or withdraw, and if they win they take it too.` +
+              (rules.raises > 1
+                ? ` They may raise again, up to ${rules.raises} raises in all; once you have raised, backing down yields ${target.name}.`
+                : '') +
+              reserves
           : `not available: none of your free countries is worth ${range.min} to ${range.max} and within what ${attacker} could still add.`;
       case 'token':
         if (!raisable) return 'not available: the stake already meets what a raise would demand.';
@@ -604,6 +644,107 @@ function TributeForm({
   );
 }
 
+/** The defender answers the attacker's raise: meet it, raise again, or back down. */
+function DefenderReply({
+  model,
+  war,
+  onFocusCountry,
+}: {
+  model: CampaignModel;
+  war: WarView;
+  onFocusCountry(id: TerritoryId): void;
+}) {
+  const reply = useWarAction(model, (input: WarReply) => api.replyToWar(model.campaign.id, war.id, input));
+  const [mode, setMode] = useState<'meet' | 'raise' | null>(null);
+  const counter = war.counter!;
+  const active = model.board.wars.find((w) => w.id === war.id);
+  const options = active ? defenderAnswerOptions(model.board, active, counter) : { meet: [], raise: [] };
+  const again = canRaiseAgain(model.campaign.rules, counter);
+  const owed = owedByDefender(counter);
+  const target = countryName(model, war.targetId);
+  const attacker = playerName(model, war.attackerId);
+  const label = (id: TerritoryId) => `${countryName(model, id)} (${model.idx.byId.get(id)?.value})`;
+  return (
+    <div className="space-y-3 rounded-[3px] border border-amber/70 bg-amber/5 p-3">
+      <div className="font-stencil text-xl tracking-wide text-amber">Your answer</div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className="btn btn-primary"
+          aria-expanded={mode === 'meet'}
+          disabled={reply.isPending || options.meet.length === 0}
+          onClick={() => setMode(mode === 'meet' ? null : 'meet')}
+        >
+          Meet the raise
+        </button>
+        {again && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-expanded={mode === 'raise'}
+            disabled={reply.isPending || options.raise.length === 0}
+            onClick={() => setMode(mode === 'raise' ? null : 'raise')}
+          >
+            Raise again
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={reply.isPending}
+          onClick={() => {
+            if (confirm(`Back down? ${target} goes to ${attacker} without a game.`))
+              reply.mutate({ reply: 'withdraw' });
+          }}
+        >
+          Back down
+        </button>
+      </div>
+      <ul className="space-y-1 text-sm text-muted">
+        <li>
+          <strong className="text-paper">Meet the raise:</strong>{' '}
+          {options.meet.length > 0
+            ? `put in a country worth at least ${owed}, and play for everything at stake. If ${attacker} wins, they take it too.`
+            : `not available: none of your free countries is worth ${owed} or more.`}
+        </li>
+        {again && (
+          <li>
+            <strong className="text-paper">Raise again:</strong>{' '}
+            {options.raise.length > 0
+              ? `put in a country worth ${owed + matchedRaiseRange(model.idx.byId.get(war.targetId)?.value ?? 0).min} or more: ${attacker} must add what it's worth over ${owed} to the stake, or back down and hand you their stake as declared.`
+              : `not available: none of your free countries is worth enough more than ${owed}, within what ${attacker} could still add.`}
+          </li>
+        )}
+        <li>
+          <strong className="text-paper">Back down:</strong> you raised, so {target} goes to {attacker} without a game.
+          The countries you put in stay yours.
+        </li>
+      </ul>
+      {mode === 'meet' && (
+        <ChoiceForm
+          label="Put into the war"
+          options={options.meet.map((id) => ({ id, label: label(id) }))}
+          submit="Meet the raise"
+          pending={reply.isPending}
+          onPreview={onFocusCountry}
+          onSubmit={(territoryId) => reply.mutate({ reply: 'accept', territoryId })}
+        />
+      )}
+      {mode === 'raise' && (
+        <ChoiceForm
+          label="Put into the war"
+          options={options.raise.map((id) => ({ id, label: label(id) }))}
+          submit="Raise again"
+          pending={reply.isPending}
+          onPreview={onFocusCountry}
+          onSubmit={(territoryId) => reply.mutate({ reply: 'raise', territoryId })}
+        />
+      )}
+      {reply.error && <Notice tone="error">{errorMessage(reply.error)}</Notice>}
+    </div>
+  );
+}
+
 function AttackerReply({
   model,
   war,
@@ -619,6 +760,10 @@ function AttackerReply({
     () => ({ minValue: counter.kind === 'raise' ? counter.minValue : 0, exceptWarId: war.id, launchId: war.launchId }),
     [counter, war.id, war.launchId],
   );
+  const active = model.board.wars.find((w) => w.id === war.id);
+  const range = active ? attackerRaiseRange(model.board, active, counter) : null;
+  const backDown = attackerRaised(counter);
+  const defender = playerName(model, war.defenderId);
   const [draft, setDraft] = useState<StakeDraft | null>(() =>
     counter.kind === 'raise' ? initialStake(model, war.targetId, opts) : null,
   );
@@ -634,7 +779,23 @@ function AttackerReply({
       </p>
     ) : null;
 
-  const withdraw = (
+  const lost = declaredStake(war)
+    .map((id) => countryName(model, id))
+    .join(', ');
+  const withdraw = backDown ? (
+    <button
+      type="button"
+      className="btn btn-ghost"
+      disabled={reply.isPending}
+      onClick={() => {
+        if (confirm(`Back down? ${defender} takes your stake as declared (${lost}) without a game.`)) {
+          reply.mutate({ reply: 'withdraw' });
+        }
+      }}
+    >
+      Back down
+    </button>
+  ) : (
     <button
       type="button"
       className="btn btn-ghost"
@@ -646,6 +807,8 @@ function AttackerReply({
       Withdraw
     </button>
   );
+  const value = draft ? valueOf(model.idx, draft.stake) : 0;
+  const raiseFrom = counter.kind === 'raise' && range ? counter.minValue + range.min : null;
 
   return (
     <div className="space-y-3 rounded-[3px] border border-amber/70 bg-amber/5 p-3">
@@ -662,10 +825,41 @@ function AttackerReply({
                 disabled={reply.isPending || stakeProblem(model, war.targetId, draft, opts) !== null}
                 onClick={() => reply.mutate({ reply: 'accept', stake: draft.stake })}
               >
-                Raise the stake
+                Meet the raise
               </button>
+              {range && raiseFrom !== null && (
+                <button
+                  type="button"
+                  className="btn btn-amber"
+                  disabled={
+                    reply.isPending ||
+                    value < raiseFrom ||
+                    stakeProblem(model, war.targetId, draft, { ...opts, minValue: raiseFrom }) !== null
+                  }
+                  onClick={() => reply.mutate({ reply: 'raise', stake: draft.stake })}
+                >
+                  Raise again
+                </button>
+              )}
               {withdraw}
             </div>
+            {range && raiseFrom !== null && (
+              <p className="text-sm text-muted">
+                <strong className="text-paper">Raise again:</strong> stake {raiseFrom} or more. {defender} must then put
+                in a country worth what you stake over {counter.kind === 'raise' ? counter.minValue : 0} (up to{' '}
+                {range.max}), or back down and yield {countryName(model, war.targetId)}.
+                {value >= raiseFrom
+                  ? ` As it stands they must put in ${attackerRaiseMore(range, counter.kind === 'raise' ? counter.minValue : 0, value)}.`
+                  : ''}{' '}
+                Once you raise, backing down hands {defender} your stake as declared.
+              </p>
+            )}
+            {backDown && (
+              <p className="text-sm text-muted">
+                <strong className="text-paper">Back down:</strong> you raised, so {defender} takes your stake as
+                declared ({lost}) without a game.
+              </p>
+            )}
           </>
         ) : (
           <>

@@ -29,18 +29,35 @@ export interface ActiveWar {
   targetId: TerritoryId;
   /** The launching country first, then the countries added to it. */
   stake: readonly TerritoryId[];
-  /** A country the defender has offered (a redirect, tribute or matched raise), while the attacker decides. */
+  /** A country the defender has offered (a redirect or tribute), while the attacker decides. */
   offered: TerritoryId | null;
-  /** The defender's country a matched raise put into the war, once the attacker met it: won with the target. */
-  added?: TerritoryId | null;
+  /** The defender's countries matched raises put into the war: tied up while it lasts, won with the target. */
+  added?: readonly TerritoryId[];
   /** Countries the attacker set aside to meet a raise, tied up until the defender's answer is settled. */
   reserves?: readonly TerritoryId[];
 }
 
+/** One side of a war. */
+export type WarSide = 'attacker' | 'defender';
+
+/**
+ * A raise or an answer to one after the defender's first raise, where the stakes can be raised
+ * back and forth (`rules.war.raises` above 1). `more` is what it asks of the other side: 0 when it
+ * only met the raise before it.
+ * - `attacker`: they met the raise and staked `more` over it, raising again; `stake` is the whole
+ *   stake after it.
+ * - `defender`: they put `territoryId` into the war, meeting the attacker's raise, and raising
+ *   again by `more`.
+ */
+export type RaiseStep =
+  { by: 'attacker'; stake: TerritoryId[]; more: number } | { by: 'defender'; territoryId: TerritoryId; more: number };
+
 /**
  * The defender's counter-offer, which the attacker must answer:
  * - `raise`: stake at least `minValue`, or withdraw. A matched raise names the defender's `added`
- *   country, which winning takes along with the target.
+ *   country, which winning takes along with the target. Where the stakes can be raised back and
+ *   forth, `steps` holds the raises and answers since, and `declared` the stake as declared once
+ *   the attacker has raised: the side that raised last waits for the other's answer.
  * - `redirect`: fight for `targetId` instead, or withdraw.
  * - `tribute`: take `territoryId` or `tokens` instead of fighting, or refuse and fight.
  *
@@ -48,21 +65,63 @@ export interface ActiveWar {
  * they fight on. On tribute it's the tokens offered, held back from the defender until the answer.
  */
 export type WarCounter =
-  | { kind: 'raise'; minValue: number; added?: TerritoryId; tokens?: number }
+  | {
+      kind: 'raise';
+      minValue: number;
+      added?: TerritoryId;
+      tokens?: number;
+      steps?: RaiseStep[];
+      declared?: TerritoryId[];
+    }
   | { kind: 'redirect'; targetId: TerritoryId; tokens?: number }
   | { kind: 'tribute'; territoryId: TerritoryId | null; tokens: number };
 
-/** The country a counter-offer ties up while the attacker decides. */
+/** The country a redirect or tribute ties up while the attacker decides. */
 export function offeredCountry(counter: WarCounter | null): TerritoryId | null {
   if (counter?.kind === 'redirect') return counter.targetId;
   if (counter?.kind === 'tribute') return counter.territoryId;
-  if (counter?.kind === 'raise') return counter.added ?? null;
   return null;
 }
 
-/** The defender's country a matched raise put into the war (at stake once the attacker meets it). */
-export const addedCountry = (counter: WarCounter | null): TerritoryId | null =>
-  counter?.kind === 'raise' ? (counter.added ?? null) : null;
+/** The defender's countries matched raises put into the war (at stake once the raise is met), first first. */
+export function addedCountries(counter: WarCounter | null): TerritoryId[] {
+  if (counter?.kind !== 'raise') return [];
+  const later = (counter.steps ?? []).flatMap((s) => (s.by === 'defender' ? [s.territoryId] : []));
+  return counter.added ? [counter.added, ...later] : later;
+}
+
+/** How many times a war's stakes have been raised, the defender's first raise included. */
+export function raisesMade(counter: WarCounter | null): number {
+  if (counter?.kind !== 'raise') return 0;
+  return 1 + (counter.steps ?? []).filter((s) => s.more > 0).length;
+}
+
+/** Who must answer the counter-offer on the table: the attacker, unless they raised last. */
+export function raiseAnswerer(counter: WarCounter): WarSide {
+  return counter.kind === 'raise' && counter.steps?.at(-1)?.by === 'attacker' ? 'defender' : 'attacker';
+}
+
+/** Whether the attacker has raised the stakes in this war, so backing down now costs them the war. */
+export const attackerRaised = (counter: WarCounter | null): boolean =>
+  counter?.kind === 'raise' && (counter.steps ?? []).some((s) => s.by === 'attacker');
+
+/** The stake as declared: what an attacker who raised and then backed down hands over. */
+export function declaredStake(war: { stake: readonly TerritoryId[]; counter?: WarCounter | null }): TerritoryId[] {
+  const counter = war.counter;
+  return counter?.kind === 'raise' && counter.declared ? counter.declared : [...war.stake];
+}
+
+/** Who must answer a war now: the defender a declaration, either side a counter-offer, nobody after. */
+export function waitingOn(war: {
+  attackerId: UserId;
+  defenderId: UserId;
+  status: string;
+  counter: WarCounter | null;
+}): UserId | null {
+  if (war.status === 'declared') return war.defenderId;
+  if (war.status !== 'countered' || !war.counter) return null;
+  return raiseAnswerer(war.counter) === 'defender' ? war.defenderId : war.attackerId;
+}
 
 /** A stored war (a server row or a client view) as the rules see it. */
 export function activeWar(war: {
@@ -83,8 +142,11 @@ export function activeWar(war: {
     stake: war.stake,
     // An offered country is tied up only while the attacker decides.
     offered: war.status === 'countered' ? offeredCountry(war.counter) : null,
-    // A met matched raise leaves the added country at stake until the war ends.
-    added: war.status === 'ready' || war.status === 'playing' ? addedCountry(war.counter) : null,
+    // Countries a matched raise put in stay tied up until the war ends, and at stake once it's met.
+    added:
+      war.status === 'countered' || war.status === 'ready' || war.status === 'playing'
+        ? addedCountries(war.counter)
+        : [],
     // Reserves wait for the defender's answer and the attacker's reply; after that they're free.
     reserves: war.status === 'declared' || war.status === 'countered' ? (war.reserves ?? []) : [],
   };
@@ -157,7 +219,7 @@ export function warLocks(wars: readonly ActiveWar[]): Map<TerritoryId, string> {
     locks.set(war.targetId, war.id);
     for (const id of war.stake) locks.set(id, war.id);
     if (war.offered) locks.set(war.offered, war.id);
-    if (war.added) locks.set(war.added, war.id);
+    for (const id of war.added ?? []) locks.set(id, war.id);
     for (const id of war.reserves ?? []) locks.set(id, war.id);
   }
   return locks;
@@ -742,6 +804,84 @@ export function raiseDemand(
   return raiseFloor(board.rules, getTerritory(board.idx, war.targetId).value);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Raising back and forth
+
+/**
+ * Whether whoever answers the raise on the table may raise again: with a matched raise, while the
+ * war has had fewer raises than `rules.war.raises` allows.
+ */
+export function canRaiseAgain(rules: CampaignRules, counter: WarCounter | null): boolean {
+  return rules.war.raise === 'matched' && counter?.kind === 'raise' && raisesMade(counter) < rules.war.raises;
+}
+
+/** Value of the most valuable country the defender could still put into the war. */
+function defenderReach(board: WarBoard, war: ActiveWar): number {
+  let most = 0;
+  for (const id of stakeableCountries(board, war.defenderId)) {
+    if (id !== war.targetId) most = Math.max(most, board.idx.byId.get(id)?.value ?? 0);
+  }
+  return most;
+}
+
+/**
+ * How far over the raise on the table the attacker may stake to raise again: at least half the
+ * target and at most all of it, never more than the defender's most valuable country free to put
+ * in (so the defender can always meet it), and within reach of the launching country. A stake
+ * further over still raises by the most. Null when the attacker can't raise again.
+ */
+export function attackerRaiseRange(
+  board: WarBoard,
+  war: ActiveWar,
+  counter: WarCounter | null,
+): { min: number; max: number } | null {
+  if (!counter || counter.kind !== 'raise' || !canRaiseAgain(board.rules, counter)) return null;
+  if (raiseAnswerer(counter) !== 'attacker') return null;
+  const range = matchedRaiseRange(getTerritory(board.idx, war.targetId).value);
+  const max = Math.min(range.max, defenderReach(board, war));
+  if (max < range.min || stakeReach(board, war) < counter.minValue + range.min) return null;
+  return { min: range.min, max };
+}
+
+/** What a stake raising again asks of the defender: how far it is over the raise, up to the most a raise may ask. */
+export function attackerRaiseMore(range: { max: number }, minValue: number, stakeValue: number): number {
+  return Math.min(stakeValue - minValue, range.max);
+}
+
+/** What the attacker's raise on the table asks of the defender: the least the next country must be worth. */
+export function owedByDefender(counter: WarCounter | null): number {
+  const last = counter?.kind === 'raise' ? counter.steps?.at(-1) : undefined;
+  return last?.by === 'attacker' ? last.more : 0;
+}
+
+/**
+ * The defender's countries that can answer the attacker's raise: `meet` holds those free to stake
+ * worth at least what it asks; `raise` those worth enough more to raise again, by at least half
+ * the target, at most all of it, and no more than the attacker could still add from the launching
+ * country.
+ */
+export function defenderAnswerOptions(
+  board: WarBoard,
+  war: ActiveWar,
+  counter: WarCounter | null,
+): { meet: TerritoryId[]; raise: TerritoryId[] } {
+  if (!counter || counter.kind !== 'raise' || raiseAnswerer(counter) !== 'defender') return { meet: [], raise: [] };
+  const owed = owedByDefender(counter);
+  const range = matchedRaiseRange(getTerritory(board.idx, war.targetId).value);
+  const again = canRaiseAgain(board.rules, counter);
+  const cap = Math.min(range.max, stakeReach(board, war) - valueOf(board.idx, war.stake));
+  const meet: TerritoryId[] = [];
+  const raise: TerritoryId[] = [];
+  for (const id of stakeableCountries(board, war.defenderId)) {
+    if (id === war.targetId) continue;
+    const value = board.idx.byId.get(id)?.value ?? 0;
+    if (value < owed) continue;
+    meet.push(id);
+    if (again && value - owed >= range.min && value - owed <= cap) raise.push(id);
+  }
+  return { meet: meet.sort(), raise: raise.sort() };
+}
+
 /**
  * Countries the defender may offer instead of the target: theirs, worth the same, bordering the
  * attacker's empire, and not caught up in a war; with nearby redirects, bordering the target too.
@@ -902,10 +1042,20 @@ export function warTimeControl(
  *   nor a loss.
  * - `withdrawn`: the attacker backed down (called the declaration off, or refused a counter, or
  *   ran out of time to answer one).
+ * - `yielded`: the defender backed down from the attacker's raise, having raised themselves, so
+ *   the target went to the attacker without a game.
+ * - `forfeited`: the attacker backed down from a raise, having raised themselves, so the stake as
+ *   declared went to the defender without a game.
  * - `cancelled`: the campaign ended before the war was settled; nothing changed hands, and it
  *   counts as neither a win nor a loss.
+ *
+ * Wars won without a game (`yielded`, `forfeited`) count for no battle mission.
  */
-export type WarOutcome = 'attacker' | 'defender' | 'held' | 'tribute' | 'settled' | 'withdrawn' | 'cancelled';
+export type WarOutcome =
+  'attacker' | 'defender' | 'held' | 'tribute' | 'settled' | 'withdrawn' | 'yielded' | 'forfeited' | 'cancelled';
+
+/** Whether a war ended with one side backing down after raising: lost without a game. */
+export const conceded = (outcome: WarOutcome | null): boolean => outcome === 'yielded' || outcome === 'forfeited';
 
 /** What a finished game means for its war, including whether a drawn first game goes to Armageddon. */
 export function afterGame(
@@ -928,28 +1078,34 @@ export interface Transfer {
 }
 
 /**
- * The countries that change hands when a fought war ends: the target (and a country a met matched
- * raise put in, from `added` or the war's counter) to a winning attacker, the stake to a winning
- * defender.
+ * The countries that change hands when a fought or conceded war ends: the target (and countries
+ * met matched raises put in, from `added` or the war's counter) to a winning attacker, the stake
+ * to a winning defender; the target alone when the defender yields, the stake as declared when the
+ * attacker forfeits.
  */
 export function warTransfers(
   war: Pick<ActiveWar, 'attackerId' | 'defenderId' | 'targetId' | 'stake'> & {
-    added?: TerritoryId | null;
+    added?: readonly TerritoryId[];
     counter?: WarCounter | null;
   },
   outcome: WarOutcome,
 ): Transfer[] {
-  if (outcome === 'attacker') {
-    const added = war.added ?? addedCountry(war.counter ?? null);
-    return [war.targetId, ...(added ? [added] : [])].map((id) => ({
-      territoryId: id,
-      from: war.defenderId,
-      to: war.attackerId,
-    }));
+  const take = (ids: readonly TerritoryId[]) =>
+    ids.map((id) => ({ territoryId: id, from: war.defenderId, to: war.attackerId }));
+  const lose = (ids: readonly TerritoryId[]) =>
+    ids.map((id) => ({ territoryId: id, from: war.attackerId, to: war.defenderId }));
+  switch (outcome) {
+    case 'attacker':
+      return take([war.targetId, ...(war.added ?? addedCountries(war.counter ?? null))]);
+    case 'defender':
+      return lose(war.stake);
+    case 'yielded':
+      return take([war.targetId]);
+    case 'forfeited':
+      return lose(declaredStake(war));
+    default:
+      return [];
   }
-  if (outcome === 'defender')
-    return war.stake.map((id) => ({ territoryId: id, from: war.attackerId, to: war.defenderId }));
-  return [];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1021,7 +1177,7 @@ export function peaceCountries(
   war: ActiveWar,
 ): { fromAttacker: TerritoryId[]; fromDefender: TerritoryId[]; tribute: TerritoryId[] } {
   const holds = (id: TerritoryId, ownerId: UserId) => board.holdings.get(id)?.ownerId === ownerId;
-  const fromDefender = [war.targetId, ...(war.added ? [war.added] : [])].filter((id) => holds(id, war.defenderId));
+  const fromDefender = [war.targetId, ...(war.added ?? [])].filter((id) => holds(id, war.defenderId));
   return {
     fromAttacker: war.stake.filter((id) => holds(id, war.attackerId)),
     fromDefender,
@@ -1107,8 +1263,8 @@ export interface ResolvedWar {
 }
 
 /**
- * The truces in force in `round`: one per pair whose war was fought out, or ended by tribute or
- * peace terms, recently.
+ * The truces in force in `round`: one per pair whose war was fought out, conceded, or ended by
+ * tribute or peace terms, recently.
  */
 export function activeTruces(rules: CampaignRules, round: number, resolved: readonly ResolvedWar[]): Truce[] {
   const byPair = new Map<string, Truce>();

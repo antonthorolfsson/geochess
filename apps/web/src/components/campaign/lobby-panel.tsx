@@ -11,6 +11,7 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   MATCHED_RAISE_MIN_PCT,
+  MAX_RAISES,
   RATING_MAX,
   RATING_MIN,
   TURN_WINDOW_TEXT,
@@ -557,7 +558,7 @@ export function raiseStyleOptions(rules: WarRules): { value: RaiseStyle; title: 
     {
       value: 'matched',
       title: 'Matched',
-      body: `The defender puts one of their countries, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target, into the war. The attacker adds at least as much to the stake or withdraws; winning takes both.`,
+      body: `The defender puts one of their countries, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target, into the war. The attacker adds at least as much to the stake or withdraws; winning takes both. With more than one raise, either side can raise again in turn.`,
     },
     {
       value: 'token',
@@ -732,6 +733,30 @@ function WarRulesFields({
           </label>
         ))}
       </div>
+      {rules.raise === 'matched' && (
+        <label className="block space-y-1">
+          <span className="flex min-h-11 items-center justify-between gap-3">
+            <span className="text-[0.95rem] font-semibold">Raises in one war</span>
+            <select
+              className="input w-24"
+              value={rules.raises}
+              disabled={disabled}
+              onChange={(e) => onSave({ raises: Number(e.target.value) })}
+            >
+              {Array.from({ length: MAX_RAISES }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </span>
+          <span className="block text-sm text-muted">
+            {rules.raises === 1
+              ? 'The defender raises once; the attacker meets it or withdraws (the original rule).'
+              : `The attacker can raise again, then the defender, up to ${rules.raises} raises in all. Whoever has raised and then backs down loses the war as declared, without a game: the defender the target, the attacker the stake.`}
+          </span>
+        </label>
+      )}
       <Toggle
         checked={rules.redirect === 'nearby'}
         disabled={disabled}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, parseRules } from '../config';
-import type { WarBoard } from '../war';
+import { activeWar, type WarBoard } from '../war';
 import { claimBlockers, possibleTransfers, type OpenWar } from './blockers';
 import type { MissionSpec } from './catalog';
 import {
@@ -50,14 +50,7 @@ function board(owners: Record<string, string>, wars: OpenWar[], rules = DEFAULT_
     rules,
     round: 3,
     holdings: new Map(Object.entries(owners).map(([id, ownerId]) => [id, { ownerId, acquiredRound: 0 }])),
-    wars: wars.map((w) => ({
-      id: w.id,
-      attackerId: w.attackerId,
-      defenderId: w.defenderId,
-      targetId: w.targetId,
-      stake: w.stake,
-      offered: null,
-    })),
+    wars: wars.map((w) => activeWar(w)),
     truces: [],
     accords: [],
     renunciations: [],
@@ -100,8 +93,72 @@ describe('possible outcomes of a war', () => {
     const w: OpenWar = { ...fought('w1', BO, ANN, 'X', ['B1']), status: 'declared' };
     const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
     // A matched raise puts in one of Ann's countries worth no more than X (5) or than Bo could still
-    // add (B2 and B3, 6), taken with X if Bo wins. No tribute: peace terms need Ann's agreement.
-    expect(outcomes).toEqual(['', 'X', 'B1', 'B1,B2,B3', 'X,P1', 'X,P2', 'X,P3', 'X,P4', 'X,P5']);
+    // add (B2 and B3, 6), taken with X if Bo wins. With raises back and forth, Ann may put in more
+    // after Bo raises again: every one at once stands for those. No tribute: peace terms need Ann's
+    // agreement.
+    expect(outcomes).toEqual(['', 'X', 'B1', 'B1,B2,B3', 'X,P1', 'X,P2', 'X,P3', 'X,P4', 'X,P5', 'X,P1,P2,P3,P4,P5']);
+    // With a single raise, as campaigns stored before play, only the first.
+    const single = { ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, raises: 1 } };
+    expect(possibleTransfers(board(owners, [w], single), w).map((t) => t.map((x) => x.territoryId).join(','))).toEqual([
+      '',
+      'X',
+      'B1',
+      'B1,B2,B3',
+      'X,P1',
+      'X,P2',
+      'X,P3',
+      'X,P4',
+      'X,P5',
+    ]);
+  });
+
+  it('a raise waiting on the attacker, with raises left: backing down, and another country from Ann', () => {
+    const w: OpenWar = {
+      ...fought('w1', BO, ANN, 'X', ['B1']),
+      status: 'countered',
+      counter: { kind: 'raise', minValue: 4, added: 'P3' },
+    };
+    const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
+    // Bo meets it and fights for X and P3, or raises again and Ann puts in one more country worth 3
+    // or more, or yields X; Bo may forfeit B1 after raising, or stake everything.
+    expect(outcomes).toEqual(['', 'X,P3', 'B1,B2,B3', 'X', 'B1', 'X,P3,P1', 'X,P3,P2', 'X,P3,P4', 'X,P3,P5']);
+  });
+
+  it('a raise waiting on the defender: the country they put in, or the target alone', () => {
+    const w: OpenWar = {
+      ...fought('w1', BO, ANN, 'X', ['B1', 'B2']),
+      status: 'countered',
+      counter: {
+        kind: 'raise',
+        minValue: 4,
+        added: 'P3',
+        declared: ['B1'],
+        steps: [{ by: 'attacker', stake: ['B1', 'B2'], more: 3 }],
+      },
+    };
+    const outcomes = possibleTransfers(board(owners, [w]), w).map((t) => t.map((x) => x.territoryId).join(','));
+    expect(outcomes).toEqual(['', 'X,P3', 'B1,B2,B3', 'X', 'B1', 'X,P3,P1', 'X,P3,P2', 'X,P3,P4', 'X,P3,P5']);
+    // Once the last raise is made the attacker can only meet it or back down.
+    const last: OpenWar = {
+      ...w,
+      counter: {
+        kind: 'raise',
+        minValue: 8,
+        added: 'P3',
+        declared: ['B1'],
+        steps: [
+          { by: 'attacker', stake: ['B1', 'B2'], more: 3 },
+          { by: 'defender', territoryId: 'P5', more: 2 },
+        ],
+      },
+    };
+    expect(possibleTransfers(board(owners, [last]), last).map((t) => t.map((x) => x.territoryId).join(','))).toEqual([
+      '',
+      'X,P3,P5',
+      'B1,B2,B3',
+      'X',
+      'B1',
+    ]);
   });
 
   it('a met matched raise: the added country is at stake with the target', () => {

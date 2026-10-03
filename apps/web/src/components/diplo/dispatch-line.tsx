@@ -145,12 +145,33 @@ export function DispatchLine({
       return null;
     }
     case 'war.reply': {
-      const { warId, reply, auto, fromReserves } = event.payload;
+      const { warId, reply, auto, fromReserves, by, territoryId, more } = event.payload;
       const war = warOf(warId);
       const attacker = name(war?.attackerId ?? event.actorId);
+      if (by === 'defender') {
+        const defender = name(war?.defenderId ?? event.actorId);
+        const put = territoryId ? (model.idx.byId.get(territoryId)?.name ?? territoryId) : '';
+        if (reply === 'withdraw') {
+          return warLine(
+            warId,
+            `${auto ? `No answer from ${defender}: they back down` : `${defender} backed down`} and yield ${targetName(warId)}.`,
+          );
+        }
+        if (reply === 'raise') return warLine(warId, `${defender} put ${put} into the war, raising ${more} more.`);
+        return warLine(warId, `${defender} met the raise, putting ${put} into the war.`);
+      }
       if (fromReserves) return warLine(warId, `${attacker}'s reserves met the raise.`);
+      if (reply === 'raise') {
+        return warLine(warId, `${attacker} raised again: whoever defends must put in ${more} more, or back down.`);
+      }
       if (reply === 'withdraw') {
-        return warLine(warId, auto ? `No answer from ${attacker}: the attack is called off.` : `${attacker} withdrew.`);
+        const raised = war?.outcome === 'forfeited';
+        return warLine(
+          warId,
+          auto
+            ? `No answer from ${attacker}: ${raised ? 'they back down' : 'the attack is called off'}.`
+            : `${attacker} ${raised ? 'backed down' : 'withdrew'}.`,
+        );
       }
       if (reply === 'refuse') return warLine(warId, `${attacker} refused the tribute. The game goes ahead.`);
       const kind = war?.counter?.kind;
@@ -180,6 +201,8 @@ export function DispatchLine({
           terms && war ? `: ${termsText(model, war, terms)}` : ''
         }.`,
         withdrawn: `The war for ${target} was called off.`,
+        yielded: `${name(war?.defenderId ?? null)} backed down: ${name(war?.attackerId ?? null)} took ${target} without a game.`,
+        forfeited: `${name(war?.attackerId ?? null)} backed down: ${name(war?.defenderId ?? null)} took ${taken} without a game.`,
         cancelled: `The war for ${target} was cancelled: the campaign ended first.`,
       }[outcome];
       return <strong>{warLine(warId, text)}</strong>;

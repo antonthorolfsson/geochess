@@ -501,6 +501,20 @@ VARIANTS['raise-token'] = {
     war: { raise: 'token' },
   },
 };
+VARIANTS['single-raise'] = {
+  variant: {
+    name: 'single-raise',
+    description: 'A matched raise the attacker can only meet or withdraw from: no raising back and forth.',
+    war: { raises: 1 },
+  },
+};
+VARIANTS['raise-five'] = {
+  variant: {
+    name: 'raise-five',
+    description: 'Matched raises back and forth, up to five in a war.',
+    war: { raises: 5 },
+  },
+};
 VARIANTS['raise-off'] = {
   variant: {
     name: 'raise-off',

@@ -10,7 +10,11 @@ import {
   TARGET_REJECTION_MESSAGES,
   afterGame,
   attackerColor,
+  attackerRaiseMore,
+  attackerRaiseRange,
+  attackerRaised,
   canRaise,
+  canRaiseAgain,
   canRecall,
   checkFortify,
   checkReserves,
@@ -19,10 +23,13 @@ import {
   clockModifiers,
   clockTarget,
   counterCost,
+  defenderAnswerOptions,
   fortifyEnds,
   getTerritory,
   initialClocks,
   lastRoundOf,
+  owedByDefender,
+  raiseAnswerer,
   raiseDemand,
   raiseOptions,
   redirectOptions,
@@ -33,6 +40,7 @@ import {
   valueOf,
   ratingHandicap,
   warTimeControl,
+  waitingOn,
   warTransfers,
   winnerOf,
   type DeclareWarInput,
@@ -40,10 +48,12 @@ import {
   type GameResult,
   type Handicap,
   type PeaceTerms,
+  type RaiseStep,
   type Transfer,
   type WarCounter,
   type WarOutcome,
   type WarReply,
+  type WarBoard,
   type WarResponse,
 } from '@empire/rules';
 import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
@@ -277,14 +287,7 @@ async function applyResponse(
     counter,
     respondBy: responseDeadline(ctx, scope),
   });
-  // Reserves set aside at the declaration meet a raise at once, when they can.
-  if (counter.kind === 'raise' && countered.reserves.length > 0) {
-    const stake = stakeFromReserves(board.idx, countered.stake, countered.reserves, counter.minValue);
-    if (stake) {
-      await applyReply(ctx, scope, countered, { reply: 'accept', stake }, false, true);
-      return;
-    }
-  }
+  if (await meetFromReserves(ctx, scope, countered, board)) return;
   const defender = await userName(scope.tx, war.defenderId);
   const title = {
     raise: `${defender} raised the stakes`,
@@ -304,6 +307,19 @@ async function applyResponse(
   });
 }
 
+/**
+ * Reserves set aside at the declaration meet a raise of the defender's at once, when they can: the
+ * first, or one made back and forth. Returns whether they did.
+ */
+async function meetFromReserves(ctx: AppContext, scope: MutationScope, war: WarRow, board: WarBoard): Promise<boolean> {
+  const counter = war.counter;
+  if (counter?.kind !== 'raise' || raiseAnswerer(counter) !== 'attacker' || war.reserves.length === 0) return false;
+  const stake = stakeFromReserves(board.idx, war.stake, war.reserves, counter.minValue);
+  if (!stake) return false;
+  await applyReply(ctx, scope, war, { reply: 'accept', stake }, false, true);
+  return true;
+}
+
 /** Takes what a counter-offer costs from the defender's tokens, refusing it if they're short. Returns the cost. */
 async function payForCounter(scope: MutationScope, defenderId: string, cost: number): Promise<number> {
   if (cost === 0) return 0;
@@ -318,7 +334,10 @@ async function payForCounter(scope: MutationScope, defenderId: string, cost: num
   return cost;
 }
 
-/** The attacker answers a counter-offer. */
+/**
+ * Whoever must answer a counter-offer answers it: the attacker, or the defender when the attacker
+ * raised again.
+ */
 export async function replyToWar(
   ctx: AppContext,
   campaignId: string,
@@ -329,8 +348,16 @@ export async function replyToWar(
   await mutate(ctx, campaignId, async (scope) => {
     requireMember(scope, userId);
     const war = await findWar(scope, warId);
-    if (war.attackerId !== userId) throw forbidden('Only the attacker can answer this.');
-    if (war.status !== 'countered' || !war.counter) throw conflict('There is nothing to answer.', 'nothing-to-answer');
+    if (war.attackerId !== userId && war.defenderId !== userId) throw forbidden('Only the attacker can answer this.');
+    if (war.status !== 'countered' || !war.counter) {
+      if (war.attackerId !== userId) throw forbidden('Only the attacker can answer this.');
+      throw conflict('There is nothing to answer.', 'nothing-to-answer');
+    }
+    if (waitingOn(war) !== userId) {
+      throw raiseAnswerer(war.counter) === 'defender'
+        ? forbidden('Only the defender can answer this raise.')
+        : forbidden('Only the attacker can answer this.');
+    }
     await applyReply(ctx, scope, war, input, false);
   });
 }
@@ -344,8 +371,12 @@ async function applyReply(
   fromReserves = false,
 ): Promise<void> {
   const counter = war.counter!;
+  if (counter.kind === 'raise' && raiseAnswerer(counter) === 'defender') {
+    await applyDefenderReply(ctx, scope, war, counter, input, auto);
+    return;
+  }
   const allowed: Record<WarCounter['kind'], WarReply['reply'][]> = {
-    raise: ['accept', 'withdraw'],
+    raise: ['accept', 'raise', 'withdraw'],
     redirect: ['accept', 'withdraw'],
     tribute: ['accept', 'refuse'],
   };
@@ -353,16 +384,30 @@ async function applyReply(
     throw badRequest('That is not an answer to this offer.', 'bad-reply');
 
   let stake: string[] | undefined;
-  if (counter.kind === 'raise' && input.reply === 'accept') {
+  let more: number | undefined;
+  let board: WarBoard | undefined;
+  if (counter.kind === 'raise' && (input.reply === 'accept' || input.reply === 'raise')) {
     stake = input.stake;
     if (!stake) throw badRequest('Choose the raised stake.', 'stake-required');
-    const board = await loadBoard(ctx, scope.tx, scope.campaign);
+    board = await loadBoard(ctx, scope.tx, scope.campaign);
+    const range =
+      input.reply === 'raise'
+        ? attackerRaiseRange(
+            board,
+            board.wars.find((w) => w.id === war.id)!,
+            counter,
+          )
+        : null;
+    if (input.reply === 'raise' && !range) {
+      throw conflict('This raise can only be met or backed down from.', 'cannot-raise');
+    }
     const rejection = checkStake(board, war.attackerId, war.targetId, war.launchId, stake, {
-      minValue: counter.minValue,
+      minValue: counter.minValue + (range?.min ?? 0),
       exceptWarId: war.id,
     });
     if (rejection) throw badRequest(STAKE_REJECTION_MESSAGES[rejection], rejection);
     stake = [war.launchId, ...stake.filter((id) => id !== war.launchId)];
+    if (range) more = attackerRaiseMore(range, counter.minValue, valueOf(board.idx, stake));
   }
   await scope.log.add(
     {
@@ -373,6 +418,7 @@ async function applyReply(
         ...(stake ? { stake } : {}),
         auto,
         ...(fromReserves ? { fromReserves } : {}),
+        ...(more !== undefined ? { more } : {}),
       },
     },
     auto ? null : war.attackerId,
@@ -380,7 +426,31 @@ async function applyReply(
   );
 
   if (input.reply === 'withdraw') {
-    await resolveWar(ctx, scope, war, 'withdrawn');
+    // Having raised, the attacker has accepted the war: backing down now loses it as declared.
+    await resolveWar(ctx, scope, war, attackerRaised(counter) ? 'forfeited' : 'withdrawn');
+    return;
+  }
+  if (counter.kind === 'raise' && input.reply === 'raise') {
+    const step: RaiseStep = { by: 'attacker', stake: stake!, more: more! };
+    const raised = await updateWar(scope, war, {
+      stake,
+      counter: { ...counter, declared: counter.declared ?? war.stake, steps: [...(counter.steps ?? []), step] },
+      respondBy: responseDeadline(ctx, scope),
+    });
+    const target = getTerritory(board!.idx, war.targetId);
+    const attacker = await userName(scope.tx, war.attackerId);
+    const again = canRaiseAgain(scope.campaign.rules, raised.counter);
+    notify(ctx, scope, {
+      userId: war.defenderId,
+      title: `${attacker} raised again`,
+      body:
+        `${attacker} staked ${more} more on ${target.name}: put in a country worth at least ${more} to fight on` +
+        `${again ? ', or more to raise again' : ''}. If you back down, or don't answer within ${windowText(scope)}, ` +
+        `${target.name} is theirs.`,
+      url: warUrl(raised),
+      tag: `war:${war.id}`,
+      email: true,
+    });
     return;
   }
   if (counter.kind === 'tribute') {
@@ -403,6 +473,94 @@ async function applyReply(
       ? await updateWar(scope, war, { stake })
       : await updateWar(scope, war, { targetId: counter.targetId, redirectedFrom: war.targetId });
   await beginFighting(ctx, scope, next);
+}
+
+/**
+ * The defender answers the attacker's raise: meets it with a country worth at least what it asks,
+ * raises again with one worth more still, or backs down and yields the target.
+ */
+async function applyDefenderReply(
+  ctx: AppContext,
+  scope: MutationScope,
+  war: WarRow,
+  counter: Extract<WarCounter, { kind: 'raise' }>,
+  input: WarReply,
+  auto: boolean,
+): Promise<void> {
+  if (input.reply === 'refuse') throw badRequest('That is not an answer to this raise.', 'bad-reply');
+  const owed = owedByDefender(counter);
+  let territoryId: string | undefined;
+  let more = 0;
+  let board: WarBoard | undefined;
+  if (input.reply === 'accept' || input.reply === 'raise') {
+    territoryId = input.territoryId;
+    if (!territoryId) throw badRequest('Choose the country to put into the war.', 'raise-country');
+    board = await loadBoard(ctx, scope.tx, scope.campaign);
+    const options = defenderAnswerOptions(
+      board,
+      board.wars.find((w) => w.id === war.id)!,
+      counter,
+    );
+    if (input.reply === 'raise' && !canRaiseAgain(scope.campaign.rules, counter)) {
+      throw conflict('This raise can only be met or backed down from.', 'cannot-raise');
+    }
+    if (!(input.reply === 'raise' ? options.raise : options.meet).includes(territoryId)) {
+      throw badRequest(
+        input.reply === 'raise'
+          ? `To raise again, put in a country free to stake worth ${owed} and at least half the target more, ` +
+              'at most all of it more and no more than the attacker could still add.'
+          : `Put in one of your countries free to stake and worth at least ${owed}.`,
+        'bad-raise',
+      );
+    }
+    if (input.reply === 'raise') more = getTerritory(board.idx, territoryId).value - owed;
+  }
+  await scope.log.add(
+    {
+      type: 'war.reply',
+      payload: {
+        warId: war.id,
+        reply: input.reply,
+        by: 'defender',
+        ...(territoryId ? { territoryId } : {}),
+        ...(input.reply === 'raise' ? { more } : {}),
+        auto,
+      },
+    },
+    auto ? null : war.defenderId,
+    scope.campaign.round,
+  );
+  if (input.reply === 'withdraw') {
+    // Having raised, the defender has accepted the war: backing down now yields the target.
+    await resolveWar(ctx, scope, war, 'yielded');
+    return;
+  }
+  const steps: RaiseStep[] = [...(counter.steps ?? []), { by: 'defender', territoryId: territoryId!, more }];
+  if (input.reply === 'accept') {
+    const met = await updateWar(scope, war, { counter: { ...counter, steps } });
+    await beginFighting(ctx, scope, met);
+    return;
+  }
+  const minValue = valueOf(board!.idx, war.stake) + more;
+  const raised = await updateWar(scope, war, {
+    counter: { ...counter, minValue, steps },
+    respondBy: responseDeadline(ctx, scope),
+  });
+  if (await meetFromReserves(ctx, scope, raised, board!)) return;
+  const defender = await userName(scope.tx, war.defenderId);
+  const put = getTerritory(board!.idx, territoryId!);
+  const target = getTerritory(board!.idx, war.targetId);
+  notify(ctx, scope, {
+    userId: war.attackerId,
+    title: `${defender} raised again`,
+    body:
+      `${defender} puts ${put.name} (${put.value}) into the war: your stake must reach ${minValue}` +
+      `${canRaiseAgain(scope.campaign.rules, raised.counter) ? ', or more to raise again' : ''}. If you back down, ` +
+      `or don't answer within ${windowText(scope)}, your stake as declared is theirs. The war is for ${target.name}.`,
+    url: warUrl(raised),
+    tag: `war:${war.id}`,
+    email: true,
+  });
 }
 
 /**
@@ -749,6 +907,8 @@ export async function resolveWar(
     tribute: ['Tribute accepted', 'Tribute accepted'],
     settled: [`Peace over ${target}`, `Peace over ${target}`],
     withdrawn: ['War called off', 'War called off'],
+    yielded: [`${target} yielded to you`, `${target} given up`],
+    forfeited: ['Stake forfeited', `${target} held; the stake is yours`],
     cancelled: ['War cancelled', 'War cancelled'],
   };
   const [forAttacker, forDefender] = headline[outcome];
@@ -806,6 +966,8 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
 /**
  * Answers declarations and counter-offers whose time ran out: a silent defender accepts the war as
  * declared; a silent attacker gets no war (a raise or redirect is withdrawn, a tribute accepted).
+ * Silence on a raise after raising is backing down: the defender yields the target, the attacker
+ * forfeits the stake as declared.
  */
 export async function expireResponses(ctx: AppContext): Promise<void> {
   const due = await ctx.db

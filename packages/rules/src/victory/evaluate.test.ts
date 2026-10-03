@@ -158,6 +158,21 @@ describe('campaign veteran', () => {
       ['Different opponents beaten', 2, 2],
       ['Won as the attacker', 1, 1],
     ]);
+    // Wars won because the other side backed down after raising don't count either.
+    const conceded = [
+      ...wars,
+      war({ attackerId: ANN, defenderId: CY, outcome: 'yielded' }),
+      war({ attackerId: BO, defenderId: ANN, outcome: 'forfeited' }),
+    ];
+    expect(
+      parts(
+        evaluateMission(makeWorld(idx, owners, { history: { wars: conceded }, players: [ANN, BO, CY] }), ANN, spec),
+      ),
+    ).toEqual([
+      ['Wars won', 2, 3],
+      ['Different opponents beaten', 2, 2],
+      ['Won as the attacker', 1, 1],
+    ]);
     const third = [...wars, war({ attackerId: BO, defenderId: ANN, outcome: 'defender' })];
     expect(
       missionComplete(makeWorld(idx, owners, { history: { wars: third }, players: [ANN, BO, CY] }), ANN, spec),
@@ -897,6 +912,19 @@ describe('nemesis', () => {
     const lostX = { ...owners, X: CY };
     expect(missionComplete(makeWorld(idx, lostX, { history: { wars: [...wars, stake] } }), ANN, spec)).toBe(false);
   });
+
+  it('does not count countries the rival handed over by backing down', () => {
+    const wars = [took('X', BO), took('Y', BO, 'tribute'), took('W', BO, 'yielded')];
+    const forfeit = war({
+      attackerId: BO,
+      defenderId: ANN,
+      outcome: 'forfeited',
+      transfers: [{ territoryId: 'Z', from: BO, to: ANN }],
+    });
+    const owners = all(ANN, 'H', 'W', 'X', 'Y', 'Z');
+    const e = evaluateMission(makeWorld(idx, owners, { history: { wars: [...wars, forfeit] } }), ANN, spec);
+    expect(e).toMatchObject({ complete: false, evidence: { territories: ['X', 'Y'] } });
+  });
 });
 
 describe('backstab', () => {
@@ -929,6 +957,8 @@ describe('backstab', () => {
   it('needs a country taken from the betrayed partner in a war declared within two rounds of the break', () => {
     expect(check([strike(2, 22)])).toMatchObject({ complete: true, evidence: { territories: ['X'] } });
     expect(check([strike(3, 32, 'tribute')]).complete).toBe(true);
+    // Not when the partner backed down: a war won without a game counts for no battle mission.
+    expect(check([strike(2, 22, 'yielded')]).complete).toBe(false);
     expect(check([strike(4, 42)]).complete).toBe(false);
     // Declared before the break: not a backstab.
     expect(check([strike(1, 8)]).complete).toBe(false);
@@ -954,6 +984,8 @@ describe('iron wall and checkmate artist', () => {
     const lost = war({ attackerId: BO, defenderId: ANN, outcome: 'attacker' });
     expect(evaluateMission(world([held, lost]), ANN, iron)).toMatchObject({ complete: false, near: true });
     expect(evaluateMission(world([held, held, lost]), ANN, iron)).toMatchObject({ complete: true });
+    const forfeit = war({ attackerId: BO, defenderId: ANN, outcome: 'forfeited' });
+    expect(evaluateMission(world([held, forfeit]), ANN, iron)).toMatchObject({ complete: false });
   });
 
   it('count wars won by checkmate, on either side, and nothing else', () => {

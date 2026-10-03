@@ -117,6 +117,7 @@ export const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms
  */
 export const ORIGINAL_ANSWERS = {
   raise: 'free',
+  raises: 1,
   redirect: 'anywhere',
   redirectToken: false,
   fortify: false,

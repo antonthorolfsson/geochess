@@ -8,16 +8,23 @@ import {
   DECLARE_COST,
   FORTIFY_COST,
   afterGame,
+  attackerRaiseMore,
+  attackerRaiseRange,
+  attackerRaised,
   canRaise,
+  canRaiseAgain,
   canRecall,
   checkFortify,
   checkReserves,
   checkStake,
   checkTarget,
   counterCost,
+  defenderAnswerOptions,
   fortifyEnds,
+  owedByDefender,
   peaceIssue,
   peaceTransfers,
+  raiseAnswerer,
   raiseDemand,
   raiseOptions,
   redirectOptions,
@@ -56,7 +63,15 @@ export type Response =
   | { kind: 'tribute'; territoryId: TerritoryId }
   | { kind: 'tribute'; tokens: number };
 
-export type Reply = { kind: 'accept'; stake?: TerritoryId[] } | { kind: 'withdraw' } | { kind: 'refuse' };
+/**
+ * The answer to a counter-offer, from whoever must give it: the attacker's stake to meet or raise
+ * again a raise, or the defender's country to meet or raise again the attacker's raise.
+ */
+export type Reply =
+  | { kind: 'accept'; stake?: TerritoryId[]; territoryId?: TerritoryId }
+  | { kind: 'raise'; stake?: TerritoryId[]; territoryId?: TerritoryId }
+  | { kind: 'withdraw' }
+  | { kind: 'refuse' };
 
 /** Declares war, or says why it can't be declared. */
 export function declare(s: SimState, attackerId: UserId, d: Declaration): SimWar | string {
@@ -179,16 +194,19 @@ export function respond(s: SimState, war: SimWar, r: Response): string | null {
   s.stats.responses[war.response!]++;
   s.actions.push({ t: 'respond', war: war.id, response: r });
   if (r.kind !== 'accept') note(s, () => `${war.defenderId} answers ${war.id} with ${describeCounter(s, war)}`);
-  const counter = war.counter;
-  if (counter?.kind === 'raise' && war.reserves.length > 0) {
-    const stake = stakeFromReserves(s.idx, war.stake, war.reserves, counter.minValue);
-    if (stake) {
-      s.stats.fromReserves++;
-      note(s, () => `${war.attackerId} meets the raise from reserves`);
-      applyReply(s, war, { kind: 'accept', stake }, false);
-    }
-  }
+  meetFromReserves(s, war);
   return null;
+}
+
+/** Reserves set aside at the declaration meet a raise of the defender's at once, when they can. */
+function meetFromReserves(s: SimState, war: SimWar): void {
+  const counter = war.counter;
+  if (counter?.kind !== 'raise' || raiseAnswerer(counter) !== 'attacker' || war.reserves.length === 0) return;
+  const stake = stakeFromReserves(s.idx, war.stake, war.reserves, counter.minValue);
+  if (!stake) return;
+  s.stats.fromReserves++;
+  note(s, () => `${war.attackerId} meets the raise from reserves`);
+  applyReply(s, war, { kind: 'accept', stake }, false);
 }
 
 function describeCounter(s: SimState, war: SimWar): string {
@@ -198,7 +216,7 @@ function describeCounter(s: SimState, war: SimWar): string {
   return c.territoryId ? `tribute: ${nameOf(s, c.territoryId)}` : `tribute: ${c.tokens} tokens`;
 }
 
-/** The attacker answers a counter-offer. Returns why it's refused, or null. */
+/** Whoever must answer a counter-offer answers it. Returns why it's refused, or null. */
 export function reply(s: SimState, war: SimWar, r: Reply): string | null {
   return applyReply(s, war, r, true);
 }
@@ -207,17 +225,42 @@ export function reply(s: SimState, war: SimWar, r: Reply): string | null {
 function applyReply(s: SimState, war: SimWar, r: Reply, record: boolean): string | null {
   const counter = war.counter;
   if (war.status !== 'countered' || !counter) return 'nothing-to-answer';
-  const allowed = { raise: ['accept', 'withdraw'], redirect: ['accept', 'withdraw'], tribute: ['accept', 'refuse'] };
+  if (counter.kind === 'raise' && raiseAnswerer(counter) === 'defender') return defenderReply(s, war, counter, r);
+  const allowed = {
+    raise: ['accept', 'raise', 'withdraw'],
+    redirect: ['accept', 'withdraw'],
+    tribute: ['accept', 'refuse'],
+  };
   if (!allowed[counter.kind].includes(r.kind)) return 'bad-reply';
-  if (counter.kind === 'raise' && r.kind === 'accept') {
+  let more: number | null = null;
+  if (counter.kind === 'raise' && (r.kind === 'accept' || r.kind === 'raise')) {
     const stake = r.stake;
     if (!stake) return 'stake-required';
-    const rejection = checkStake(warBoard(s), war.attackerId, war.targetId, war.launchId, stake, {
-      minValue: counter.minValue,
+    const board = warBoard(s);
+    const range =
+      r.kind === 'raise'
+        ? attackerRaiseRange(
+            board,
+            board.wars.find((w) => w.id === war.id)!,
+            counter,
+          )
+        : null;
+    if (r.kind === 'raise' && !range) return 'cannot-raise';
+    const rejection = checkStake(board, war.attackerId, war.targetId, war.launchId, stake, {
+      minValue: counter.minValue + (range?.min ?? 0),
       exceptWarId: war.id,
     });
     if (rejection) return rejection;
-    war.stake = [war.launchId, ...stake.filter((id) => id !== war.launchId)];
+    const ordered = [war.launchId, ...stake.filter((id) => id !== war.launchId)];
+    if (range) {
+      more = attackerRaiseMore(range, counter.minValue, valueOf(s.idx, ordered));
+      war.counter = {
+        ...counter,
+        declared: counter.declared ?? war.stake,
+        steps: [...(counter.steps ?? []), { by: 'attacker', stake: ordered, more }],
+      };
+    }
+    war.stake = ordered;
   }
   war.reply = r.kind;
   s.stats.replies[r.kind]++;
@@ -225,11 +268,21 @@ function applyReply(s: SimState, war: SimWar, r: Reply, record: boolean): string
     s.actions.push({
       t: 'reply',
       war: war.id,
-      reply: counter.kind === 'raise' && r.kind === 'accept' ? { kind: 'accept', stake: war.stake } : r,
+      by: war.attackerId,
+      reply:
+        counter.kind === 'raise' && (r.kind === 'accept' || r.kind === 'raise')
+          ? { kind: r.kind, stake: war.stake }
+          : r,
     });
   }
   if (r.kind === 'withdraw') {
-    resolve(s, war, 'withdrawn');
+    // Having raised, the attacker has accepted the war: backing down loses it as declared.
+    resolve(s, war, attackerRaised(counter) ? 'forfeited' : 'withdrawn');
+    return null;
+  }
+  if (r.kind === 'raise') {
+    s.stats.raisedAgain++;
+    note(s, () => `${war.attackerId} raises again in ${war.id}, by ${more}`);
     return null;
   }
   if (counter.kind === 'tribute') {
@@ -253,6 +306,54 @@ function applyReply(s: SimState, war: SimWar, r: Reply, record: boolean): string
     war.targetId = counter.targetId;
   }
   war.status = 'ready';
+  return null;
+}
+
+/**
+ * The defender answers the attacker's raise: meets it with a country worth at least what it asks,
+ * raises again with one worth more still, or backs down and yields the target.
+ */
+function defenderReply(
+  s: SimState,
+  war: SimWar,
+  counter: Extract<NonNullable<SimWar['counter']>, { kind: 'raise' }>,
+  r: Reply,
+): string | null {
+  if (r.kind === 'refuse') return 'bad-reply';
+  const owed = owedByDefender(counter);
+  let more = 0;
+  let territoryId: TerritoryId | undefined;
+  if (r.kind === 'accept' || r.kind === 'raise') {
+    territoryId = r.territoryId;
+    if (!territoryId) return 'raise-country';
+    const board = warBoard(s);
+    const options = defenderAnswerOptions(
+      board,
+      board.wars.find((w) => w.id === war.id)!,
+      counter,
+    );
+    if (r.kind === 'raise' && !canRaiseAgain(s.rules, counter)) return 'cannot-raise';
+    if (!(r.kind === 'raise' ? options.raise : options.meet).includes(territoryId)) return 'bad-raise';
+    if (r.kind === 'raise') more = s.idx.byId.get(territoryId)!.value - owed;
+  }
+  war.reply = r.kind;
+  s.stats.replies[r.kind]++;
+  s.actions.push({ t: 'reply', war: war.id, by: war.defenderId, reply: r });
+  if (r.kind === 'withdraw') {
+    // Having raised, the defender has accepted the war: backing down yields the target.
+    resolve(s, war, 'yielded');
+    return null;
+  }
+  const steps = [...(counter.steps ?? []), { by: 'defender' as const, territoryId: territoryId!, more }];
+  if (r.kind === 'accept') {
+    war.counter = { ...counter, steps };
+    war.status = 'ready';
+    return null;
+  }
+  s.stats.raisedAgain++;
+  war.counter = { ...counter, minValue: valueOf(s.idx, war.stake) + more, steps };
+  note(s, () => `${war.defenderId} raises again in ${war.id}, putting in ${nameOf(s, territoryId!)}`);
+  meetFromReserves(s, war);
   return null;
 }
 

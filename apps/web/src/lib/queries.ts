@@ -31,7 +31,13 @@ export function useCampaigns(enabled: boolean) {
 }
 
 export function useCampaign(id: string) {
-  return useQuery({ queryKey: keys.campaign(id), queryFn: () => api.campaign(id), retry: retryServerErrors });
+  return useQuery({
+    queryKey: keys.campaign(id),
+    queryFn: () => api.campaign(id),
+    retry: retryServerErrors,
+    // The room stays on what it last read when a refetch fails, so keep trying until one gets through.
+    refetchInterval: (query) => (query.state.error && query.state.data ? 5_000 : false),
+  });
 }
 
 /** Every empire's statistics, refetched whenever the campaign's history moves on. */

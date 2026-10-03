@@ -91,10 +91,16 @@ export function CampaignScreen({ id, children }: { id: string; children?: ReactN
     [campaign.data, user, mapData.data],
   );
 
-  const error = campaign.error ?? mapData.error ?? me.error;
+  // A refetch that fails (a slow or dropped connection) keeps the room on what it last read; the
+  // next push, focus or reconnect reads it again. Only a campaign that's gone, or one never read, stops it.
+  const campaignGone = campaign.error instanceof ApiError && campaign.error.status === 404;
+  const error =
+    (campaignGone || !campaign.data ? campaign.error : null) ??
+    (mapData.data ? null : mapData.error) ??
+    (me.data ? null : me.error);
   const notMember = Boolean(campaign.data && user && mapData.data && !model);
   if (error || notMember) {
-    const gone = notMember || (error instanceof ApiError && error.status === 404);
+    const gone = notMember || campaignGone;
     return (
       <CenteredMessage>
         <Notice tone={gone ? 'info' : 'error'}>

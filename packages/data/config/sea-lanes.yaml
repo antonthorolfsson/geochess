@@ -46,6 +46,16 @@ add:
   - { a: CUB, b: MEX, reason: "Yucatán Channel (201 km, just over the threshold)" }
   - { a: ARG, b: FLK, reason: "Falklands–Argentina (350 km), the disputed claim" }
 
+  # --- South Atlantic --------------------------------------------------------------------------
+  - a: BRA
+    b: LBR
+    reason: "Atlantic Narrows, Natal–Monrovia (about 3,000 km): links South America to West Africa"
+    near: { BRA: [-35.2, -5.8], LBR: [-10.8, 6.3] }
+  - a: ARG
+    b: ZAF
+    reason: "South Atlantic, Buenos Aires–Cape Town (about 6,700 km): links South America to southern Africa"
+    near: { ARG: [-57.5, -36.3], ZAF: [18.4, -33.9] }
+
   # --- Asia and Oceania ------------------------------------------------------------------------
   - a: CHN
     b: TWN

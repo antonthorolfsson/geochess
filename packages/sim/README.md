@@ -27,11 +27,13 @@ cores − 2); `--out` names the directory.
 
 Campaigns play what a new campaign plays: the current mission rules version, a last round of 25,
 the revised war answers (a matched raise, nearby redirects that cost a token, fortifying, calling a
-declaration off, and peace terms in place of tribute) and declaring in turns. `--mission-rules 2` plays an earlier version
+declaration off, and peace terms in place of tribute), declaring in turns, and stakes of at least 110% of
+the target (150% against a fortified country). `--mission-rules 2` plays an earlier version
 (the balance report's first runs were version 2), and `--last-round 30` or `--last-round none`
 another season length (`trace` takes both too). The report's runs also played the original answers:
-add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to compare with them, and
-`whatif:no-turns` for declaring whenever players like.
+add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to compare with them,
+`whatif:no-turns` for declaring whenever players like, and `whatif:original-stakes` for the stakes of
+80% and 125% that campaigns played before October 2026.
 
 ## What a campaign does
 

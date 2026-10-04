@@ -111,11 +111,18 @@ export async function listen(app: FastifyInstance, c: Client): Promise<{ message
 export const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * The original game's answers to a declaration (a free raise, redirects anywhere, tribute), with
- * declarations whenever players like, which campaigns stored before the revised answers still
- * play: for tests of those rules.
+ * The original game's stakes: at least 80% of the target, and 125% after a raise to a percentage
+ * or against a fortified country. Tests whose boards are sized for them play them.
+ */
+export const ORIGINAL_STAKES = { stakeFloorPct: 80, raisePct: 125 } as const;
+
+/**
+ * The original game's answers to a declaration (a free raise, redirects anywhere, tribute) and
+ * stakes (80%, a raise to 125%), with declarations whenever players like, which campaigns stored
+ * before the revised answers still play: for tests of those rules.
  */
 export const ORIGINAL_ANSWERS = {
+  ...ORIGINAL_STAKES,
   raise: 'free',
   raises: 1,
   redirect: 'anywhere',

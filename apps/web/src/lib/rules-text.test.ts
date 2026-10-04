@@ -33,13 +33,13 @@ describe('rules in words', () => {
   it('tabulates stakes the way the war rules check them', () => {
     const table = stakeTable(DEFAULT_RULES);
     expect(table.map((row) => row.value)).toEqual([1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20]);
-    expect(table.map((row) => row.stake)).toEqual([1, 2, 3, 4, 4, 5, 7, 8, 10, 12, 16]);
-    expect(table.map((row) => row.raised)).toEqual([2, 3, 4, 5, 7, 8, 10, 13, 15, 19, 25]);
+    expect(table.map((row) => row.stake)).toEqual([2, 3, 4, 5, 6, 7, 9, 11, 14, 17, 22]);
+    expect(table.map((row) => row.raised)).toEqual([2, 3, 5, 6, 8, 9, 12, 15, 18, 23, 30]);
     // A campaign on a map whose values run 1 to 10 shows each of them.
     const older = stakeTable(DEFAULT_RULES, 10);
     expect(older.map((row) => row.value)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(older.map((row) => row.stake)).toEqual([1, 2, 3, 4, 4, 5, 6, 7, 8, 8]);
-    expect(older.map((row) => row.raised)).toEqual([2, 3, 4, 5, 7, 8, 9, 10, 12, 13]);
+    expect(older.map((row) => row.stake)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(older.map((row) => row.raised)).toEqual([2, 3, 5, 6, 8, 9, 11, 12, 14, 15]);
   });
 
   it('lists the settings a campaign plays with', () => {
@@ -57,7 +57,8 @@ describe('rules in words', () => {
       'Truce after a war': '1 round',
       'Lock on won countries': '2 rounds',
       'Raising the stakes': 'Matched: a country worth 50–100% of the target, raised back and forth up to 3 times',
-      'Raised stake': '125% of the target',
+      'Least stake': '110% of the target',
+      'Raised stake': '150% of the target',
       Redirects: 'Near the target, for a token',
       Fortifying: 'A token, until the round after next',
       'Peace terms': 'Until the game ends',

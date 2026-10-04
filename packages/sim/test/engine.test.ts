@@ -242,6 +242,9 @@ describe('tribute', () => {
 });
 
 describe('the revised answers', () => {
+  /** The stakes before October 2026, which these tests' targets and stakes are sized for. */
+  const stakes = { stakeFloorPct: 80, raisePct: 125 };
+
   it('a matched raise puts a country in, which a win takes with the target', () => {
     const s = scripted({ players: 3, publics: () => [] });
     // The first of p2's countries p1 can attack where p2 has something to put in.
@@ -271,7 +274,7 @@ describe('the revised answers', () => {
   });
 
   it('reserves meet a token raise at once, and the attacker gets the token', () => {
-    const s = scripted({ players: 3, publics: () => [], config: { war: { raise: 'token' } } });
+    const s = scripted({ players: 3, publics: () => [], config: { war: { ...stakes, raise: 'token' } } });
     const p1 = s.byId.get('p1')!;
     const p2 = s.byId.get('p2')!;
     p1.tokens = 1;
@@ -293,7 +296,7 @@ describe('the revised answers', () => {
   });
 
   it('a declaration can be called off before an answer; a country fortified needs a raised stake', () => {
-    const s = scripted({ players: 3, publics: () => [] });
+    const s = scripted({ players: 3, publics: () => [], config: { war: stakes } });
     const w = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));
     expect(recall(s, w)).toBeNull();
     expect(w.outcome).toBe('withdrawn');
@@ -329,7 +332,7 @@ describe('the revised answers', () => {
   });
 
   it('the campaign’s end gives back a token paid for a counter still unanswered', () => {
-    const s = scripted({ players: 3, publics: () => [], config: { war: { raise: 'token' } } });
+    const s = scripted({ players: 3, publics: () => [], config: { war: { ...stakes, raise: 'token' } } });
     const p2 = s.byId.get('p2')!;
     p2.tokens = 1;
     const w = declareOn(s, 'p1', targetOf(s, 'p1', 'p2'));

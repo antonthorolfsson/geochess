@@ -14,7 +14,7 @@ import { LEVEL_PLAY } from '../src/bots/chess';
 import { isBotId } from '../src/bots/ids';
 import { campaigns, games, holdings, members, users, wars } from '../src/db/schema';
 import { newId } from '../src/lib/ids';
-import { signIn, startTestServer, testEngine, tick, type Client, type TestServer } from './helpers';
+import { ORIGINAL_STAKES, signIn, startTestServer, testEngine, tick, type Client, type TestServer } from './helpers';
 
 /**
  * Bot players on the war test map. Ann holds A1 A2 A3 A4 A6; her bot opponent holds B1 B2 B5 B7
@@ -38,7 +38,8 @@ async function lobby(rules: CampaignRulesInput = {}) {
   const ann = await signIn(server.app, 'Ann');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Bot Lobby',
-    rules: { victory: { mode: 'open' }, ...rules },
+    // The war map is sized for the original stakes.
+    rules: { victory: { mode: 'open' }, ...rules, war: { ...ORIGINAL_STAKES, ...rules.war } },
   });
   const id = body.id;
   const view = async (c: Client = ann) => (await c.get<CampaignView>(`/api/campaigns/${id}`)).body;
@@ -394,7 +395,11 @@ async function withBo(rules: CampaignRulesInput = {}) {
   const bo = await signIn(server.app, 'Bo');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Stand-in',
-    rules: { victory: { mode: 'open' }, ...rules, war: { raise: 'off', redirect: 'nearby', ...rules.war } },
+    rules: {
+      victory: { mode: 'open' },
+      ...rules,
+      war: { ...ORIGINAL_STAKES, raise: 'off', redirect: 'nearby', ...rules.war },
+    },
   });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

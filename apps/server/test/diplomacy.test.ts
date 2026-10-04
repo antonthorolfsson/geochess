@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaigns, holdings, members } from '../src/db/schema';
 import { PAGE_SIZE } from '../src/diplomacy/chat';
-import { listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
+import { ORIGINAL_STAKES, listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
 
 /**
  * Accords, reputation and chat on the war test map. Ann holds the A countries, Bo the B countries
@@ -51,8 +51,9 @@ async function setup({ status = 'active' }: { status?: 'lobby' | 'active' } = {}
   const cy = await signIn(server.app, 'Cy');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Diplomacy',
-    // Declarations here test accords, so anyone declares whenever they like (turns.test.ts has turns).
-    rules: { victory: { mode: 'open' }, war: { turns: false } },
+    // Declarations here test accords, so anyone declares whenever they like (turns.test.ts has turns),
+    // with the stakes the map is sized for.
+    rules: { victory: { mode: 'open' }, war: { ...ORIGINAL_STAKES, turns: false } },
   });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RULES, REVISED_WAR_RULES, lastRoundOf, parseRules } from './config';
+import { DEFAULT_RULES, REVISED_WAR_RULES, lastRoundOf, parseRules, withStakeFloor } from './config';
 import { EMPIRE_COLORS, firstFreeColor } from './colors';
 
 /**
- * The answers of the original game, and declaring whenever you like: what rules stored before the
- * revised ones read as.
+ * The answers and stakes of the original game, and declaring whenever you like: what rules stored
+ * before the revised ones read as.
  */
 const ORIGINAL_ANSWERS = {
+  stakeFloorPct: 80,
+  raisePct: 125,
   raise: 'free',
   raises: 1,
   redirect: 'anywhere',
@@ -30,8 +32,8 @@ describe('campaign rules', () => {
         clockModifiers: true,
         tokensPerRound: 1,
         tokenCap: 3,
-        stakeFloorPct: 80,
-        raisePct: 125,
+        stakeFloorPct: 110,
+        raisePct: 150,
         lockRounds: 2,
         truceRounds: 1,
         raise: 'matched',
@@ -77,6 +79,19 @@ describe('campaign rules', () => {
   it('fills war settings into rules stored before they existed', () => {
     const stored = { maxPlayers: 4, draft: { mode: 'free' } };
     expect(parseRules(stored).war).toEqual({ ...DEFAULT_RULES.war, ...ORIGINAL_ANSWERS });
+  });
+
+  it('moves the raised stake with the stake floor', () => {
+    // A new campaign's 110% and 150% keep fortifying 40 points over the floor.
+    expect([80, 100, 125].map((pct) => withStakeFloor(DEFAULT_RULES.war, pct))).toEqual([
+      { stakeFloorPct: 80, raisePct: 120 },
+      { stakeFloorPct: 100, raisePct: 140 },
+      { stakeFloorPct: 125, raisePct: 165 },
+    ]);
+    // A gap the host chose is kept, within what the rules allow.
+    expect(withStakeFloor({ stakeFloorPct: 80, raisePct: 200 }, 110).raisePct).toBe(230);
+    expect(withStakeFloor({ stakeFloorPct: 125, raisePct: 110 }, 80).raisePct).toBe(100);
+    expect(withStakeFloor({ stakeFloorPct: 50, raisePct: 280 }, 200).raisePct).toBe(300);
   });
 
   it('reads war rules stored before the revised answers as the original game', () => {

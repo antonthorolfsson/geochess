@@ -9,6 +9,7 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import type { Topology } from 'topojson-specification';
 import { W, buildGeometry, frameAround, union, type Bounds, type Geometry, type Shape } from '@/lib/map-geometry';
 import { HATCH_TILE, HatchTile, patternRotation, svgId } from '../hatch';
+import { FullscreenIcon } from '../ui';
 
 const MAX_ZOOM = 40;
 const OCEAN = '#16232b';
@@ -50,6 +51,8 @@ export interface WorldMapProps {
    * filled, and a route (for connection missions) drawn through their label points.
    */
   mission?: MissionOverlayProps | null;
+  /** A button with the zoom controls that makes the map fill the screen, and back. */
+  fullscreen?: { on: boolean; toggle(): void };
 }
 
 export interface MissionOverlayProps {
@@ -110,6 +113,7 @@ export function WorldMap(props: WorldMapProps) {
     preview = null,
     mission = null,
     fit = null,
+    fullscreen,
   } = props;
   const geo = useMemo(() => buildGeometry(topo, dataset), [topo, dataset]);
   const patternPrefix = svgId(useId());
@@ -545,6 +549,11 @@ export function WorldMap(props: WorldMapProps) {
         <MapButton label="Zoom out" onClick={() => zoomBy(1 / 1.8)}>
           −
         </MapButton>
+        {fullscreen && (
+          <MapButton label={fullscreen.on ? 'Exit full screen' : 'Full screen'} onClick={fullscreen.toggle}>
+            <FullscreenIcon on={fullscreen.on} />
+          </MapButton>
+        )}
         <MapButton label="Show the whole world" onClick={reset}>
           <svg viewBox="0 0 20 20" className="size-4" aria-hidden="true">
             <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />

@@ -12,6 +12,7 @@ import { EmpireSwatch } from '../hatch';
 import { Notice } from '../ui';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
+import { RemainingCountries } from './remaining-countries';
 import { useCompareHref, useEmpireHref } from './room-context';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
@@ -160,6 +161,7 @@ export function DraftPanel({
     <div className="space-y-6 p-4">
       <DraftStatus model={model} />
       {model.campaign.status === 'draft' && <DraftListSection model={model} onSelect={onSelect} />}
+      {model.campaign.status === 'draft' && <RemainingCountries model={model} onSelect={onSelect} />}
       {model.upcoming.length > 0 && <UpNext model={model} />}
       <Standings model={model} />
       <Dispatches model={model} onSelect={onSelect} onOpenWar={onOpenWar} />

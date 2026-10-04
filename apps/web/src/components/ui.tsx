@@ -237,3 +237,17 @@ export function Spotlight({
     </div>
   );
 }
+
+/** Four corners pointing out, or in to leave full screen. */
+export function FullscreenIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" className="size-5" aria-hidden="true">
+      <path
+        d={on ? 'M7 3v4H3M13 3v4h4M7 17v-4H3M13 17v-4h4' : 'M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}

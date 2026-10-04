@@ -10,6 +10,7 @@ import { buildModel, nextAnswer, type CampaignModel } from '@/lib/campaign';
 import { useCampaign, useMapData, useMe, useWar } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
 import { useDocumentTitle } from '@/lib/use-document-title';
+import { useFullscreen } from '@/lib/use-fullscreen';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
 import { findMission, missionOverlay, progressOf, rivalClaims, titleOf } from '@/lib/victory';
@@ -201,6 +202,19 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   // A finished Objectives campaign opens on its results.
   const [side, setSide] = useState<Side>(campaign.status === 'finished' && objectives ? 'missions' : 'main');
   const [diploView, setDiploView] = useState<DiploView>('dispatches');
+  // Full screen: the map, or the board. A game opening over the full-screen map fills the screen
+  // too, and the map's full screen comes back when it closes.
+  const full = useFullscreen<'map' | 'game'>();
+  const gameFull = Boolean(panels.gameId) && full.mode !== null;
+  const mapFull = !panels.gameId && full.mode === 'map';
+  const { exit: exitFull } = full;
+  useEffect(() => {
+    if (full.mode === 'game' && !panels.gameId) exitFull();
+  }, [full.mode, panels.gameId, exitFull]);
+  // A page over the map room (the rules, an empire) needs the room around it.
+  useEffect(() => {
+    if (overPage) exitFull();
+  }, [overPage, exitFull]);
 
   // A conversation or accord in the address (a notification, the back button) opens Diplo on it.
   const { chatWith, accordId } = panels;
@@ -582,7 +596,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     />
   );
   const gamePanel = panels.gameId && (
-    <GamePanel model={model} gameId={panels.gameId} onClose={closeGame} onOpenWar={showWar} />
+    <GamePanel
+      model={model}
+      gameId={panels.gameId}
+      onClose={closeGame}
+      onOpenWar={showWar}
+      fullscreen={gameFull}
+      onFullscreen={() => (gameFull ? full.exit() : full.enter('game'))}
+    />
   );
   const warRoom = (
     <div className="space-y-6 p-4">
@@ -685,7 +706,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         )}
 
         {/* A page over the map room leaves it mounted, as it was, but out of reach until it closes. */}
-        <main className="relative min-w-0 flex-1" inert={overPage}>
+        <main className={mapFull ? 'fixed inset-0 z-30 bg-gunmetal' : 'relative min-w-0 flex-1'} inert={overPage}>
           <WorldMap
             topo={topo}
             dataset={model.idx.dataset}
@@ -704,6 +725,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             preview={preview}
             mission={missionMap?.overlay ?? null}
             fit={fit}
+            fullscreen={{
+              on: mapFull,
+              toggle: () => {
+                if (mapFull) return full.exit();
+                setTab('map');
+                full.enter('map');
+              },
+            }}
           />
 
           <div className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2">
@@ -767,19 +796,35 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             </div>
           )}
 
+          {/* Desktop, full screen: the selected country or war floats over the map. */}
+          {isDesktop && mapFull && (warPanel || territoryPanel) && (
+            <div className="sheet-in absolute bottom-3 left-3 flex max-h-[calc(100%-5.5rem)] w-[360px] flex-col overflow-y-auto rounded-md border border-line-strong bg-panel shadow-xl">
+              {warPanel ?? territoryPanel}
+            </div>
+          )}
+
           {/* Phones: the board fills the screen, opponent's clock above and yours below. */}
           {!isDesktop && gamePanel && (
-            <div className="absolute inset-0 z-20 overflow-y-auto bg-gunmetal">{gamePanel}</div>
+            <div className={`${gameFull ? FULL_GAME : 'absolute inset-0 z-20'} overflow-y-auto bg-gunmetal`}>
+              {gamePanel}
+            </div>
           )}
         </main>
 
         {isDesktop && (
           <aside
-            className={`shrink-0 overflow-y-auto border-l border-line ${gamePanel ? 'w-[460px]' : 'w-[360px]'}`}
+            className={`shrink-0 overflow-y-auto border-l border-line ${gamePanel && !gameFull ? 'w-[460px]' : 'w-[360px]'}`}
             aria-label="Details"
             inert={overPage}
           >
-            {gamePanel || warPanel || territoryPanel || <EmpirePanel model={model} onSelect={flyTo} />}
+            {mapFull ? (
+              <EmpirePanel model={model} onSelect={flyTo} />
+            ) : gamePanel ? (
+              // Full screen takes the board out of the column without remounting it.
+              <div className={gameFull ? `${FULL_GAME} overflow-y-auto bg-gunmetal` : 'contents'}>{gamePanel}</div>
+            ) : (
+              warPanel || territoryPanel || <EmpirePanel model={model} onSelect={flyTo} />
+            )}
           </aside>
         )}
 
@@ -849,6 +894,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     </div>
   );
 }
+
+const FULL_GAME = 'fixed inset-0 z-30';
 
 function MapToggle({ pressed, onClick, children }: { pressed: boolean; onClick(): void; children: ReactNode }) {
   return (

@@ -16,7 +16,6 @@ import {
   LIVE_CLOCKS,
   MATCHED_RAISE_MIN_PCT,
   MAX_VALUE,
-  PEACE_MAX_TOKENS,
   MIN_PLAYERS,
   MISSIONS,
   MODIFIER_CAP_PCT,
@@ -849,7 +848,10 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
               from the defender, the target{war.raise === 'matched' ? ' (and a country a raise put in)' : ''}, or
               instead one country worth less than the target;
             </li>
-            <li>up to {PEACE_MAX_TOKENS} war tokens, one way or the other;</li>
+            <li>
+              war tokens, one way or the other: as many as the player paying holds (tokens received can take a player
+              past {war.tokenCap});
+            </li>
             <li>
               and an accord for {ACCORD_MIN_ROUNDS} to {ACCORD_MAX_ROUNDS} rounds, signed with the peace.
             </li>

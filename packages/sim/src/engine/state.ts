@@ -11,13 +11,23 @@ import {
 import { normal, shuffledIndexes, streams } from '../random';
 import type { SimConfig, SimPlayer, SimState, WarStats } from './types';
 
-const OUTCOMES: WarOutcome[] = ['attacker', 'defender', 'held', 'tribute', 'settled', 'withdrawn', 'cancelled'];
+const OUTCOMES: WarOutcome[] = [
+  'attacker',
+  'defender',
+  'held',
+  'tribute',
+  'settled',
+  'withdrawn',
+  'yielded',
+  'forfeited',
+  'cancelled',
+];
 
 export function emptyStats(): WarStats {
   return {
     declared: 0,
     responses: { accept: 0, raise: 0, redirect: 0, 'tribute-country': 0, 'tribute-tokens': 0, peace: 0 },
-    replies: { accept: 0, withdraw: 0, refuse: 0 },
+    replies: { accept: 0, raise: 0, withdraw: 0, refuse: 0 },
     outcomes: Object.fromEntries(OUTCOMES.map((o) => [o, 0])) as Record<WarOutcome, number>,
     games: 0,
     checkmates: 0,
@@ -27,6 +37,7 @@ export function emptyStats(): WarStats {
     valueTribute: 0,
     valueSettled: 0,
     fromReserves: 0,
+    raisedAgain: 0,
     recalled: 0,
     fortified: 0,
     peaceOffered: 0,

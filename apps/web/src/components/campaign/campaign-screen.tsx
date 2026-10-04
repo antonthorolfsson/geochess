@@ -330,6 +330,17 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         warById(e.payload.warId)?.attackerId === me
       ) {
         setToast('Your attack needs an answer');
+      } else if (
+        e.type === 'war.reply' &&
+        e.payload.reply === 'raise' &&
+        !message.events.some(
+          (x) => x.type === 'war.reply' && x.payload.warId === e.payload.warId && x.payload.fromReserves,
+        ) &&
+        (e.payload.by === 'defender'
+          ? warById(e.payload.warId)?.attackerId === me
+          : warById(e.payload.warId)?.defenderId === me)
+      ) {
+        setToast(`${playerName(current, e.actorId ?? '')} raised again`);
       } else if (e.type === 'war.recalled' && warById(e.payload.warId)?.defenderId === me) {
         setToast(`${playerName(current, e.actorId ?? '')} called off the attack`);
       } else if (e.type === 'war.started' && (e.payload.whiteId === me || e.payload.blackId === me)) {

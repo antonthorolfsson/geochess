@@ -131,7 +131,7 @@ export interface SimWar {
   armageddon: boolean;
   /** The defender's answer and the attacker's reply, for the record (`peace`: settled before an answer). */
   response: 'accept' | 'raise' | 'redirect' | 'tribute-country' | 'tribute-tokens' | 'peace' | null;
-  reply: 'accept' | 'withdraw' | 'refuse' | null;
+  reply: 'accept' | 'raise' | 'withdraw' | 'refuse' | null;
 }
 
 /** Terms offered to end a war, answered at once (the answer window is shorter than a round). */
@@ -196,6 +196,8 @@ export interface WarStats {
   valueSettled: number;
   /** Raises met at once from the reserves set aside at the declaration. */
   fromReserves: number;
+  /** Raises after the defender's first, by either side. */
+  raisedAgain: number;
   /** Declarations the attacker called off before an answer. */
   recalled: number;
   /** Countries fortified. */
@@ -222,7 +224,8 @@ export type SimAction =
       reserves?: TerritoryId[];
     }
   | { t: 'respond'; war: string; response: Response }
-  | { t: 'reply'; war: string; reply: Reply }
+  /** `by`: who answered (the attacker, or the defender answering the attacker's raise). */
+  | { t: 'reply'; war: string; by: UserId; reply: Reply }
   | { t: 'recall'; war: string }
   | { t: 'fortify'; by: UserId; territoryId: TerritoryId }
   /** A player passes their turn: done declaring for the round. */

@@ -3,7 +3,16 @@
  * Each round: diplomacy, then waves of declarations (in turns, where the rules have them), answers,
  * replies and the games that are due.
  */
-import { heldBy, lastRoundOf, seasonMeasures, seasonWinners, shuffled, type UserId } from '@empire/rules';
+import {
+  MAX_RAISES,
+  heldBy,
+  lastRoundOf,
+  seasonMeasures,
+  seasonWinners,
+  shuffled,
+  waitingOn,
+  type UserId,
+} from '@empire/rules';
 import type { Bots } from '../bots';
 import { loadDataset } from '../dataset';
 import { checkInvariants } from './invariants';
@@ -129,12 +138,16 @@ function playRound(s: SimState, bots: Bots): void {
       s.wars.filter((w) => w.status === 'countered'),
       s.rng.order,
     )) {
-      const refused = reply(s, war, bots.reply(s, war));
-      if (refused) {
-        fail(s, `${war.attackerId} replied to ${war.id} illegally: ${refused}`);
-        reply(s, war, silentReply(war));
+      // Raised back and forth until one side meets the other's raise or backs down.
+      for (let step = 0; war.status === 'countered' && step <= 2 * MAX_RAISES; step++) {
+        const by = waitingOn(war);
+        const refused = reply(s, war, bots.reply(s, war));
+        if (refused) {
+          fail(s, `${by} replied to ${war.id} illegally: ${refused}`);
+          reply(s, war, silentReply(war));
+        }
+        if (s.status !== 'active') return;
       }
-      if (s.status !== 'active') return;
     }
     for (const war of shuffled(
       s.wars.filter((w) => w.status === 'ready' && w.dueRound <= s.round),

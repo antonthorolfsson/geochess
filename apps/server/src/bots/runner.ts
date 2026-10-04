@@ -15,7 +15,7 @@ import { accords, campaigns, games, members, missionPlayers, peaceOffers, wars }
 import { answerAccord, proposeAccord, renounceAccord } from '../diplomacy/accords';
 import { HttpError } from '../lib/errors';
 import { chooseSecret } from '../victory/selection';
-import type { GameRow } from '../wars/board';
+import { owingAnswer, type GameRow } from '../wars/board';
 import { gameAction, overTheBoardAction, playMove } from '../wars/games';
 import { answerPeace, proposePeace } from '../wars/peace';
 import { declareWar, fortifyCountry, replyToWar, respondToWar } from '../wars/service';
@@ -100,12 +100,7 @@ export class BotRunner {
       await db
         .selectDistinct({ campaignId: wars.campaignId })
         .from(wars)
-        .where(
-          or(
-            and(eq(wars.status, 'declared'), playedByBot(wars.campaignId, wars.defenderId)),
-            and(eq(wars.status, 'countered'), playedByBot(wars.campaignId, wars.attackerId)),
-          ),
-        ),
+        .where(owingAnswer((player) => playedByBot(wars.campaignId, player))),
     );
     add(
       await db
@@ -487,5 +482,12 @@ function warResponse(r: Response): WarResponse {
 }
 
 function warReply(r: Reply): WarReply {
-  return r.kind === 'accept' ? { reply: 'accept', ...(r.stake ? { stake: r.stake } : {}) } : { reply: r.kind };
+  if (r.kind === 'accept' || r.kind === 'raise') {
+    return {
+      reply: r.kind,
+      ...(r.stake ? { stake: r.stake } : {}),
+      ...(r.territoryId ? { territoryId: r.territoryId } : {}),
+    };
+  }
+  return { reply: r.kind };
 }

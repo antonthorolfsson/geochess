@@ -352,13 +352,13 @@ export function missionRequirement(
           : ` against at least ${words(opponents)} different opponents`;
       if (spec.attackOnly) {
         return (
-          `Win ${words(spec.wins)} wars as the attacker${against}. Wins as the defender, draws, tribute and ` +
-          'withdrawals don’t count.'
+          `Win ${words(spec.wins)} wars as the attacker${against}. Wins as the defender, draws, tribute, ` +
+          'withdrawals and backing down don’t count.'
         );
       }
       return (
         `Win ${words(spec.wins)} wars${against}, at least ${words(spec.attackWins)} of them as the attacker. ` +
-        'Draws, tribute and withdrawals don’t count.'
+        'Draws, tribute, withdrawals and backing down don’t count.'
       );
     }
     case 'great_powers': {
@@ -405,11 +405,11 @@ export function missionRequirement(
     case 'kingslayer':
       return spec.lead === undefined
         ? 'Declare war on the leader of the race (the most victory points, then the most valuable empire) ' +
-            'while you trail, and win it. Tribute and withdrawals don’t count.'
+            'while you trail, and win it. Tribute, withdrawals and backing down don’t count.'
         : `Declare war on the leader of the race (the most victory points) while they’re at least ` +
-            `${words(spec.lead)} points ahead of you, and win it. Tribute and withdrawals don’t count.`;
+            `${words(spec.lead)} points ahead of you, and win it. Tribute, withdrawals and backing down don’t count.`;
     case 'lightning_campaign':
-      return `Win ${words(spec.wins)} wars you declared in the same round. Tribute and withdrawals don’t count.`;
+      return `Win ${words(spec.wins)} wars you declared in the same round. Tribute, withdrawals and backing down don’t count.`;
     case 'northern_passage':
     case 'caribbean_chain':
     case 'pacific_passage':
@@ -445,7 +445,7 @@ export function missionRequirement(
     case 'nemesis':
       return (
         `Take ${words(spec.count)} countries from ${opts.playerName?.(spec.rival) ?? 'your marked rival'}, in wars ` +
-        'or as tribute, and hold them.'
+        'fought out or as tribute, and hold them.'
       );
     case 'backstab': {
       const count = spec.count ?? 1;

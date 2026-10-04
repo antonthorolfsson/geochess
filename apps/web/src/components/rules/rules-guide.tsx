@@ -431,6 +431,8 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
           {war.raise === 'off' ? 'a redirect is' : 'a raise or redirect is'} refused
           {war.peaceTerms ? '' : ' and a tribute taken'}.
           {reservesAllowed(rules) && ' A raise the attacker’s reserves cover is met at once, without waiting.'}
+          {backAndForth(rules) &&
+            ` The attacker can also raise again, and the defender then meets it, raises again or backs down, up to ${war.raises} raises in all. Whoever has raised and then backs down, or lets the time run out, loses the war as declared.`}
         </>
       ),
     },
@@ -446,7 +448,9 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
         <>
           If the attacker wins, they take the target
           {war.raise === 'matched' ? ', and any country a raise put in' : ''}. If the defender wins, they take the whole
-          stake. {war.draws === 'armageddon' ? 'A draw goes to an Armageddon game.' : 'A draw changes nothing.'}
+          stake.
+          {backAndForth(rules) && ' A side that backed down after raising hands over the war as declared instead.'}{' '}
+          {war.draws === 'armageddon' ? 'A draw goes to an Armageddon game.' : 'A draw changes nothing.'}
           {war.peaceTerms && ' Peace terms, once accepted, stop the game and hand over what they name instead.'}
           {war.truceRounds > 0 && <> The two players then have a truce {forRounds(war.truceRounds)}.</>}
         </>
@@ -672,6 +676,9 @@ function StakeTable({ rules, top }: { rules: CampaignRules; top: number }) {
   );
 }
 
+/** Whether the campaign's stakes can be raised back and forth. */
+const backAndForth = (rules: CampaignRules) => rules.war.raise === 'matched' && rules.war.raises > 1;
+
 function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
   const raise = ((): { label: string; text: string } | null => {
@@ -682,7 +689,10 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
           text:
             `Put one of your own countries into the war, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target's value ` +
             'and free of other wars. The attacker must add at least as much to the stake, or withdraw; if they win, ' +
-            "they take it along with the target. It's a bet on the game: worth making when you expect to win.",
+            "they take it along with the target. It's a bet on the game: worth making when you expect to win." +
+            (backAndForth(rules)
+              ? ` The attacker may raise back, up to ${war.raises} raises in all, and once you have raised, backing down hands them the target.`
+              : ''),
         };
       case 'token':
         return {
@@ -757,9 +767,19 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
         <Bullets>
           {war.raise !== 'off' && (
             <li>
-              to a raise: <UI>Raise the stake</UI> to at least the amount demanded
-              {war.raise === 'matched' ? ' (the stake as it was, plus the value of the country put in)' : ''}, or{' '}
-              <UI>Withdraw</UI>;
+              to a raise: <UI>Meet the raise</UI> with a stake of at least the amount demanded
+              {war.raise === 'matched' ? ' (the stake as it was, plus the value of the country put in)' : ''},
+              {backAndForth(rules) ? (
+                <>
+                  {' '}
+                  <UI>Raise again</UI>, or <UI>Withdraw</UI>;
+                </>
+              ) : (
+                <>
+                  {' '}
+                  or <UI>Withdraw</UI>;
+                </>
+              )}
             </li>
           )}
           <li>
@@ -778,10 +798,40 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
           {paidCounter ? ', along with any token the defender paid for the counter' : ''}.
         </p>
       </Part>
+      {backAndForth(rules) && (
+        <Part title="Raising back and forth" id="raising">
+          <p>
+            A war&apos;s stakes can be raised up to {war.raises} times, the defender&apos;s first raise included, each
+            side in turn. Every raise is answered within {RESPONSE_WINDOW_TEXT[war.pace]}:
+          </p>
+          <Bullets>
+            <li>
+              the attacker raises again by staking at least {MATCHED_RAISE_MIN_PCT}% of the target&apos;s value more
+              than the raise demands. Whatever they stake over it, up to the target&apos;s whole value and never more
+              than the defender&apos;s most valuable free country, the defender must match;
+            </li>
+            <li>
+              the defender answers with <UI>Meet the raise</UI>, putting in a country worth at least that much, with{' '}
+              <UI>Raise again</UI>, putting in a country worth at least {MATCHED_RAISE_MIN_PCT}% of the target more
+              (which the attacker must then add to the stake), or with <UI>Back down</UI>;
+            </li>
+            <li>once the last raise is made, the other side can only meet it or back down.</li>
+          </Bullets>
+          <p>
+            Raising accepts the war. Whoever has raised and then backs down, or lets the time run out, loses the war as
+            declared, without a game: a defender hands over the target, and keeps the countries they put in; an attacker
+            hands over the stake as declared, and keeps what they added since. A truce follows as after a battle, but no
+            mission counts a war won this way.
+          </p>
+        </Part>
+      )}
       <Part title="Countries caught up in a war">
         <p>
           From the declaration until the war ends, the target, the stake
-          {war.raise === 'matched' ? ', a country a raise puts in' : ''} and any country offered as a redirect
+          {war.raise === 'matched'
+            ? `, ${backAndForth(rules) ? 'countries raises put in' : 'a country a raise puts in'}`
+            : ''}{' '}
+          and any country offered as a redirect
           {war.peaceTerms ? '' : ' or tribute'} are tied up: nobody can attack them, stake them or offer them in another
           war.{reservesAllowed(rules) ? ' Reserves are tied up until the answer is settled.' : ''}
           {war.peaceTerms ? '' : ' Tokens offered as tribute are set aside until the attacker replies.'}
@@ -965,6 +1015,14 @@ function AfterWar({ rules, standard }: { rules: CampaignRules; standard: boolean
       ? ['Peace', 'Whatever the terms name changes hands, and any accord they include comes into force.']
       : ['Tribute accepted', 'The country or tokens offered go to the attacker.'],
     ['Withdrawn', "Nothing changes hands, and the attacker's war token is spent."],
+    ...(backAndForth(rules)
+      ? [
+          [
+            'Backed down',
+            'Whoever had raised and backed down loses the war as declared, without a game: the target, or the stake as declared. It counts for no mission as a war won.',
+          ] as [string, string],
+        ]
+      : []),
   ];
   const settled = war.peaceTerms ? 'peace terms' : 'tribute';
   return (
@@ -980,7 +1038,7 @@ function AfterWar({ rules, standard }: { rules: CampaignRules; standard: boolean
       <Part title="Truce">
         <p>
           {war.truceRounds > 0
-            ? `Once a war is fought, or ended by ${settled}, its two players can't declare war on each other ${forRounds(war.truceRounds)}. A withdrawn war brings no truce.`
+            ? `Once a war is fought, ended by ${settled}${backAndForth(rules) ? ' or by one side backing down' : ''}, its two players can't declare war on each other ${forRounds(war.truceRounds)}. A withdrawn war brings no truce.`
             : 'There are no truces: the two players may declare war on each other again at once.'}
         </p>
       </Part>
@@ -1326,6 +1384,20 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
       answer,
       'The war is called off, and the token is spent.',
     ],
+    ...(backAndForth(rules)
+      ? [
+          ['The defender answers the attacker’s raise', answer, 'They back down: the target goes to the attacker.'] as [
+            string,
+            string,
+            string,
+          ],
+          [
+            'The attacker answers a raise after raising',
+            answer,
+            'They back down: the stake as declared goes to the defender.',
+          ] as [string, string, string],
+        ]
+      : []),
     war.peaceTerms
       ? ['A player answers peace terms', `${answer}, or before their next move in the game`, 'The offer lapses.']
       : ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],

@@ -527,16 +527,19 @@ describe('raise styles', () => {
       stake: ['A4', 'A3'],
       counter: { kind: 'raise' as const, minValue: 6, added: 'B2' },
     };
-    // While the attacker decides it's on offer; once they meet it, it's at stake.
-    expect(activeWar({ ...row, status: 'countered' })).toMatchObject({ offered: 'B2', added: null });
-    expect(activeWar({ ...row, status: 'playing' })).toMatchObject({ offered: null, added: 'B2' });
+    // Tied up while the attacker decides, and at stake once they meet it.
+    expect(activeWar({ ...row, status: 'countered' })).toMatchObject({ offered: null, added: ['B2'] });
+    expect(activeWar({ ...row, status: 'playing' })).toMatchObject({ offered: null, added: ['B2'] });
+    expect(activeWar({ ...row, status: 'resolved' })).toMatchObject({ offered: null, added: [] });
+    expect([...warLocks([activeWar({ ...row, status: 'countered' })]).keys()].sort()).toEqual(['A3', 'A4', 'B2', 'B5']);
     expect([...warLocks([activeWar({ ...row, status: 'playing' })]).keys()].sort()).toEqual(['A3', 'A4', 'B2', 'B5']);
     expect(warTransfers({ ...row }, 'attacker')).toEqual([
       { territoryId: 'B5', from: BO, to: ANN },
       { territoryId: 'B2', from: BO, to: ANN },
     ]);
     expect(warTransfers({ ...row }, 'defender').map((t) => t.territoryId)).toEqual(['A4', 'A3']);
-    expect(offeredCountry(row.counter)).toBe('B2');
+    expect(offeredCountry(row.counter)).toBeNull();
+    expect(offeredCountry({ kind: 'redirect', targetId: 'B7' })).toBe('B7');
   });
 });
 
@@ -659,7 +662,7 @@ describe('peace terms', () => {
   });
 
   it('can hand over a country a matched raise added', () => {
-    const raised = { ...w, added: 'B2' };
+    const raised = { ...w, added: ['B2'] };
     expect(
       peaceIssue(board({ rules: peace, wars: [raised] }), raised, terms({ toAttacker: ['B5', 'B2'] }), tokens),
     ).toBeNull();

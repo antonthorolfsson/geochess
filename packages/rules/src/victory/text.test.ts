@@ -28,7 +28,7 @@ describe('mission wording', () => {
   it('spells out the new missions, naming a Nemesis’s rival', () => {
     const nemesis: MissionSpec = { kind: 'nemesis', rival: 'bo', count: 3, reveal: 2 };
     expect(missionRequirement(nemesis, idx, { playerName: (id) => (id === 'bo' ? 'Bo' : '?') })).toBe(
-      'Take three countries from Bo, in wars or as tribute, and hold them.',
+      'Take three countries from Bo, in wars fought out or as tribute, and hold them.',
     );
     const straits: MissionSpec = {
       kind: 'strait_keeper',
@@ -130,11 +130,11 @@ describe('mission wording', () => {
       }),
     ).toBe(
       'Win four wars as the attacker against at least three different opponents. Wins as the defender, draws, ' +
-        'tribute and withdrawals don’t count.',
+        'tribute, withdrawals and backing down don’t count.',
     );
     expect(missionRequirement({ kind: 'kingslayer', lead: 4 }, idx)).toBe(
       'Declare war on the leader of the race (the most victory points) while they’re at least four points ahead ' +
-        'of you, and win it. Tribute and withdrawals don’t count.',
+        'of you, and win it. Tribute, withdrawals and backing down don’t count.',
     );
     expect(missionRequirement({ kind: 'backstab', rounds: 1, count: 2 }, idx)).toBe(
       'Break an accord, then by the end of the next round declare war on that partner and take two countries ' +

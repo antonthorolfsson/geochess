@@ -273,13 +273,16 @@ export function warEconomy(recs: readonly Rec[]): string {
     const sum = (f: (r: Rec) => number) => rs.reduce((n, r) => n + f(r), 0);
     const declared = sum((r) => r.wars.declared);
     const games = sum((r) => r.wars.games);
-    const o = (key: keyof Rec['wars']['outcomes']) => sum((r) => r.wars.outcomes[key]);
+    // Records from before raising back and forth have no re-raises or backing down.
+    const o = (key: keyof Rec['wars']['outcomes']) => sum((r) => r.wars.outcomes[key] ?? 0);
     const resp = (key: keyof Rec['wars']['responses']) => sum((r) => r.wars.responses[key]);
     return [
       scenario!,
       pace!,
       players!.trim(),
       pct(resp('raise') / declared),
+      pct(sum((r) => r.wars.raisedAgain ?? 0) / declared),
+      pct((o('yielded') + o('forfeited')) / declared),
       pct(resp('redirect') / declared),
       pct((resp('tribute-country') + resp('tribute-tokens')) / declared),
       pct(o('withdrawn') / declared),
@@ -297,6 +300,8 @@ export function warEconomy(recs: readonly Rec[]): string {
       'Pace',
       'Players',
       'Raised',
+      'Raised again',
+      'Backed down',
       'Redirected',
       'Tribute offered',
       'Withdrawn',

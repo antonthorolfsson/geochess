@@ -8,6 +8,7 @@ import { EMPIRE_COLORS, firstFreeColor } from './colors';
  */
 const ORIGINAL_ANSWERS = {
   raise: 'free',
+  raises: 1,
   redirect: 'anywhere',
   redirectToken: false,
   fortify: false,
@@ -34,6 +35,7 @@ describe('campaign rules', () => {
         lockRounds: 2,
         truceRounds: 1,
         raise: 'matched',
+        raises: 3,
         redirect: 'nearby',
         redirectToken: true,
         fortify: true,

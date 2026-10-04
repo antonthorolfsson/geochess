@@ -7,7 +7,9 @@
  *   stake is worth (value, progress, claims of ours it breaks, rivals' missions it hands them),
  *   allowing for a raise (and setting reserves aside to meet a token raise at once);
  * - answering: the best of accepting, raising, redirecting and tribute (or, with peace terms, a
- *   cheaper country or tokens offered for peace), given how the attacker would reply;
+ *   cheaper country or tokens offered for peace), given how the attacker would reply; where the
+ *   stakes go back and forth, the best of meeting a raise, raising again (given how the other side
+ *   would answer) and backing down;
  * - fortifying a country an open or complete mission leans on, with a token to spare;
  * - accords with neighbours not worth attacking, broken when a partner's country is worth much more
  *   than any other target (or when the secret mission is Backstab).
@@ -15,17 +17,24 @@
 import {
   PEACE_MAX_TOKENS,
   WHITE_PEACE,
+  addedCountries,
   attackableTargets,
+  attackerRaiseMore,
+  attackerRaiseRange,
+  attackerRaised,
   bordersAny,
   canRaise,
   checkTarget,
   clockModifiers,
   clockTarget,
   counterCost,
+  defenderAnswerOptions,
   fortifiedUntil,
   hopDistances,
   leadersAt,
+  owedByDefender,
   peaceTransfers,
+  raiseAnswerer,
   raiseDemand,
   raiseFloor,
   raiseOptions,
@@ -33,9 +42,11 @@ import {
   shuffled,
   stakeFloor,
   stakeFromReserves,
+  stakeableCountries,
   tributeCountries,
   tributeOptions,
   valueOf,
+  warTransfers,
   type MissionWorld,
   type PeaceTerms,
   type PublicMissionSpec,
@@ -43,6 +54,8 @@ import {
   type Transfer,
   type UserId,
   type WarBoard,
+  type WarCounter,
+  type WarOutcome,
 } from '@empire/rules';
 import { warBoard } from '../engine/board';
 import { oddsWithModifier, type WarOdds } from '../engine/chess';
@@ -238,8 +251,8 @@ interface WarPlan {
   defenderId: UserId;
   launchId: TerritoryId;
   stake: TerritoryId[];
-  /** The defender's country a matched raise put in, won with the target. */
-  added?: TerritoryId | null;
+  /** The defender's countries matched raises put in, won with the target. */
+  added?: readonly TerritoryId[];
   /** The country whose clock the war is fought on, when not the target (a nearby redirect). */
   clockId?: TerritoryId;
 }
@@ -294,7 +307,7 @@ function attackValue(ctx: Ctx, plan: WarPlan, models: readonly MissionModel[] = 
   const o = odds(ctx, me, defenderId, plan.clockId ?? targetId);
   const base = s.byId.get(me)!.baseline;
   const viaSea = (s.idx.byId.get(launchId)?.sea.includes(targetId) ?? false) && !base.has(targetId);
-  const won = plan.added ? [targetId, plan.added] : [targetId];
+  const won = [targetId, ...(plan.added ?? [])];
   const take: Transfer[] = won.map((id) => ({ territoryId: id, from: defenderId, to: me }));
   const lose: Transfer[] = stake.map((id) => ({ territoryId: id, from: me, to: defenderId }));
   const winEvent: BattleEvent = {
@@ -562,35 +575,52 @@ function attackerValue(
   });
 }
 
-/** What peace terms are worth to one of the two players, against the war as it stands. */
-function peaceValueFor(s: SimState, knobs: BotKnobs, war: SimWar, terms: PeaceTerms, userId: UserId): number {
+/**
+ * What countries changing hands without a game are worth to one of the two players (peace terms,
+ * or one side backing down): no battle mission counts them.
+ */
+function handoverValue(
+  s: SimState,
+  knobs: BotKnobs,
+  war: SimWar,
+  transfers: readonly Transfer[],
+  userId: UserId,
+  outcome: WarOutcome,
+): number {
   const ctx = context(s, knobs, userId);
-  const transfers = peaceTransfers(war, terms);
   const after = worldAfter(s, ctx.world, transfers, {
     attackerId: war.attackerId,
     defenderId: war.defenderId,
     launchId: war.launchId,
     targetId: war.targetId,
-    outcome: 'settled',
+    outcome,
     transfers,
     endReason: null,
   });
   const gained = transfers.filter((t) => t.to === userId).map((t) => t.territoryId);
   const lost = transfers.filter((t) => t.from === userId).map((t) => t.territoryId);
-  const attacking = userId === war.attackerId;
-  const tokens = attacking
-    ? terms.tokensToAttacker - terms.tokensToDefender
-    : terms.tokensToDefender - terms.tokensToAttacker;
   return (
     valueOf(s.idx, gained) -
     valueOf(s.idx, lost) +
     progressGain(ctx, ctx.mine, gained, null) -
     progressLoss(ctx, ctx.mine, lost) +
     exactSwing(ctx, userId, ctx.mine, after) +
-    rivalSwing(ctx, attacking ? war.defenderId : war.attackerId, after) +
-    tokens * knobs.tokenValue
+    rivalSwing(ctx, userId === war.attackerId ? war.defenderId : war.attackerId, after)
   );
 }
+
+/** What peace terms are worth to one of the two players, against the war as it stands. */
+function peaceValueFor(s: SimState, knobs: BotKnobs, war: SimWar, terms: PeaceTerms, userId: UserId): number {
+  const tokens =
+    userId === war.attackerId
+      ? terms.tokensToAttacker - terms.tokensToDefender
+      : terms.tokensToDefender - terms.tokensToAttacker;
+  return handoverValue(s, knobs, war, peaceTransfers(war, terms), userId, 'settled') + tokens * knobs.tokenValue;
+}
+
+/** What one side backing down after raising is worth to `userId`: the target yielded, or the stake as declared forfeited. */
+const backDownValue = (s: SimState, knobs: BotKnobs, war: SimWar, outcome: 'yielded' | 'forfeited', userId: UserId) =>
+  handoverValue(s, knobs, war, warTransfers(war, outcome), userId, outcome);
 
 /**
  * The stake an attacker would meet a raise with, and whether it happens at once: from their
@@ -678,7 +708,7 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
       for (const { id } of options) {
         const met = meetStake(s, board, war, raiseDemand(board, active, id));
         const goesAhead =
-          met !== null && (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake, { added: id }) > 0);
+          met !== null && (met.automatic || attackerValue(s, knobs, war, war.targetId, met.stake, { added: [id] }) > 0);
         consider(
           { kind: 'raise', territoryId: id },
           goesAhead ? defendValue(ctx, war, [war.targetId, id], met.stake) : WITHDRAWAL_TOKENS * knobs.tokenValue,
@@ -752,12 +782,7 @@ function respondFor(s: SimState, war: SimWar, knobs: BotKnobs): Answer {
 function answerPeaceFor(s: SimState, war: SimWar, offer: SimPeaceOffer, knobs: BotKnobs): boolean {
   const me = offer.recipientId;
   const ctx = context(s, knobs, me);
-  const added =
-    war.status === 'ready' || war.status === 'playing'
-      ? war.counter?.kind === 'raise'
-        ? war.counter.added
-        : null
-      : null;
+  const added = war.status === 'ready' || war.status === 'playing' ? addedCountries(war.counter) : [];
   const clockId = clockTarget(s.rules, war);
   const fightOn =
     me === war.attackerId
@@ -766,10 +791,10 @@ function answerPeaceFor(s: SimState, war: SimWar, offer: SimPeaceOffer, knobs: B
           defenderId: war.defenderId,
           launchId: war.launchId,
           stake: war.stake,
-          added: added ?? null,
+          added,
           clockId,
         })
-      : defendValue(ctx, war, added ? [war.targetId, added] : [war.targetId], war.stake, clockId);
+      : defendValue(ctx, war, [war.targetId, ...added], war.stake, clockId);
   return peaceValueFor(s, knobs, war, offer.terms, me) >= fightOn;
 }
 
@@ -792,27 +817,127 @@ function fortifyFor(s: SimState, player: SimPlayer, knobs: BotKnobs): TerritoryI
   return best?.id ?? null;
 }
 
+/** The defender's countries cheapest to lose, at most three. */
+function cheapestToLose(ctx: Ctx, ids: readonly TerritoryId[]): TerritoryId[] {
+  return ids
+    .map((id) => ({ id, cost: ctx.s.idx.byId.get(id)!.value + progressLoss(ctx, ctx.mine, [id]) }))
+    .sort((a, b) => a.cost - b.cost || (a.id < b.id ? -1 : 1))
+    .slice(0, 3)
+    .map((o) => o.id);
+}
+
+/**
+ * What raising again with `stake` is worth to the attacker: the defender meets it with their
+ * cheapest country worth enough, when fighting on beats yielding the target, or yields it.
+ */
+function attackerRaiseValue(
+  s: SimState,
+  knobs: BotKnobs,
+  war: SimWar,
+  stake: readonly TerritoryId[],
+  more: number,
+  added: readonly TerritoryId[],
+): number {
+  const actx = context(s, knobs, war.attackerId);
+  const dctx = context(s, knobs, war.defenderId, actx.board);
+  const yielded = backDownValue(s, knobs, war, 'yielded', war.attackerId);
+  const free = [...stakeableCountries(actx.board, war.defenderId)].filter(
+    (id) => id !== war.targetId && !added.includes(id) && s.idx.byId.get(id)!.value >= more,
+  );
+  const [put] = cheapestToLose(dctx, free);
+  if (!put) return yielded;
+  const atRisk = [war.targetId, ...added, put];
+  const meets = defendValue(dctx, war, atRisk, stake) > backDownValue(s, knobs, war, 'yielded', war.defenderId);
+  if (!meets) return yielded;
+  return attackValue(actx, {
+    targetId: war.targetId,
+    defenderId: war.defenderId,
+    launchId: war.launchId,
+    stake: [...stake],
+    added: [...added, put],
+  });
+}
+
+/**
+ * The defender answers the attacker's raise: the best of meeting it, raising again (given how the
+ * attacker would answer: meet it with their cheapest stake, or forfeit the stake as declared) and
+ * yielding the target.
+ */
+function defenderReplyFor(
+  s: SimState,
+  war: SimWar,
+  counter: Extract<WarCounter, { kind: 'raise' }>,
+  knobs: BotKnobs,
+): Reply {
+  const board = warBoard(s);
+  const ctx = context(s, knobs, war.defenderId, board);
+  const active = board.wars.find((w) => w.id === war.id)!;
+  const added = addedCountries(counter);
+  const options = defenderAnswerOptions(board, active, counter);
+  let best: { r: Reply; u: number } = { r: { kind: 'withdraw' }, u: backDownValue(s, knobs, war, 'yielded', ctx.me) };
+  for (const id of cheapestToLose(ctx, options.meet)) {
+    const u = defendValue(ctx, war, [war.targetId, ...added, id], war.stake);
+    if (u > best.u) best = { r: { kind: 'accept', territoryId: id }, u };
+  }
+  const forfeited = backDownValue(s, knobs, war, 'forfeited', ctx.me);
+  const attackerForfeits = backDownValue(s, knobs, war, 'forfeited', war.attackerId);
+  for (const id of cheapestToLose(ctx, options.raise)) {
+    const more = s.idx.byId.get(id)!.value - owedByDefender(counter);
+    const met = meetStake(s, board, war, valueOf(s.idx, war.stake) + more);
+    const goesAhead =
+      met !== null &&
+      (met.automatic ||
+        attackerValue(s, knobs, war, war.targetId, met.stake, { added: [...added, id] }) > attackerForfeits);
+    const u = goesAhead ? defendValue(ctx, war, [war.targetId, ...added, id], met.stake) : forfeited;
+    if (u > best.u + 0.05) best = { r: { kind: 'raise', territoryId: id }, u };
+  }
+  return best.r;
+}
+
 function replyFor(s: SimState, war: SimWar, knobs: BotKnobs): Reply {
   const counter = war.counter!;
+  if (counter.kind === 'raise' && raiseAnswerer(counter) === 'defender')
+    return defenderReplyFor(s, war, counter, knobs);
   const ctx = context(s, knobs, war.attackerId);
   switch (counter.kind) {
     case 'raise': {
       const keep = keepSet(ctx.mine);
-      const opts = { launchId: war.launchId, minValue: counter.minValue, exceptWarId: war.id };
-      const raised =
-        stakeFor(boardKeeping(ctx.board, keep), war.attackerId, war.targetId, opts) ??
-        stakeFor(ctx.board, war.attackerId, war.targetId, opts);
-      if (!raised) return { kind: 'withdraw' };
-      const u = attackValue(ctx, {
-        targetId: war.targetId,
-        defenderId: war.defenderId,
-        launchId: war.launchId,
-        stake: raised.stake,
-        added: counter.added ?? null,
-      });
-      // A token raise's token comes to the attacker for meeting it.
-      const bonus = (counter.tokens ?? 0) * knobs.tokenValue;
-      return u + bonus > 0 ? { kind: 'accept', stake: raised.stake } : { kind: 'withdraw' };
+      const stakeAt = (minValue: number) => {
+        const opts = { launchId: war.launchId, minValue, exceptWarId: war.id };
+        return (
+          stakeFor(boardKeeping(ctx.board, keep), war.attackerId, war.targetId, opts) ??
+          stakeFor(ctx.board, war.attackerId, war.targetId, opts)
+        );
+      };
+      const added = addedCountries(counter);
+      // Backing down costs nothing more than the declaration, unless the attacker has raised.
+      const backDown = attackerRaised(counter) ? backDownValue(s, knobs, war, 'forfeited', war.attackerId) : 0;
+      let best: { r: Reply; u: number } = { r: { kind: 'withdraw' }, u: backDown };
+      const raised = stakeAt(counter.minValue);
+      if (raised) {
+        const u = attackValue(ctx, {
+          targetId: war.targetId,
+          defenderId: war.defenderId,
+          launchId: war.launchId,
+          stake: raised.stake,
+          added,
+        });
+        // A token raise's token comes to the attacker for meeting it.
+        const bonus = (counter.tokens ?? 0) * knobs.tokenValue;
+        if (u + bonus > best.u) best = { r: { kind: 'accept', stake: raised.stake }, u: u + bonus };
+      }
+      const range = attackerRaiseRange(
+        ctx.board,
+        ctx.board.wars.find((w) => w.id === war.id)!,
+        counter,
+      );
+      const again = range ? stakeAt(counter.minValue + range.min) : null;
+      if (range && again) {
+        const more = attackerRaiseMore(range, counter.minValue, valueOf(s.idx, again.stake));
+        const u = attackerRaiseValue(s, knobs, war, again.stake, more, added);
+        if (u > best.u + 0.05) best = { r: { kind: 'raise', stake: again.stake }, u };
+      }
+      return best.r;
     }
     case 'redirect': {
       const u = attackValue(ctx, {

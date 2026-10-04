@@ -27,7 +27,7 @@ export interface MissionWar {
   declaredSeq: number;
   /** Its place in the campaign's history (the event id of its resolution). */
   seq: number;
-  /** How the game that decided it ended; null when no game did (tribute, a withdrawal). */
+  /** How the game that decided it ended; null when no game did (tribute, a withdrawal, a concession). */
   endReason: GameEndReason | null;
 }
 

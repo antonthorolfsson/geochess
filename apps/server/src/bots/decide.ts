@@ -4,7 +4,7 @@
  * then each bot's round (breaking and proposing accords, fortifying), then declarations. Where
  * players declare in turns, a bot fortifies and declares only on its turn, and passes when it's done.
  */
-import { fortifyEnds, shuffled, type TerritoryId, type WarCounter } from '@empire/rules';
+import { fortifyEnds, shuffled, waitingOn, type TerritoryId, type WarCounter } from '@empire/rules';
 import type { Answer, Declaration, LiveBots, Reply, SimState } from '@empire/sim/live';
 import type { MemberRow } from '../campaigns/mutate';
 import type { AppContext } from '../context';
@@ -16,7 +16,7 @@ export type BotAction =
   | { kind: 'secret'; botId: string; optionId: string }
   | { kind: 'peace'; botId: string; warId: string; offerId: string; accept: boolean }
   | { kind: 'respond'; botId: string; warId: string; answer: Answer }
-  /** `counter`: what the attacker is answering, for the silent answer should this one fail. */
+  /** `counter`: what the bot is answering, for the silent answer should this one fail. */
   | { kind: 'reply'; botId: string; warId: string; counter: WarCounter['kind']; reply: Reply }
   | { kind: 'renounce'; botId: string; accordId: string }
   /** The bot's round: an accord to propose and a country to fortify, if any. Done once a round. */
@@ -159,7 +159,7 @@ function owedBy(
       };
       if (fresh(action)) return action;
     }
-    if (w.status === 'countered' && w.attackerId === id && w.counter) {
+    if (w.status === 'countered' && w.counter && waitingOn(w) === id) {
       const s = view(id);
       const action: BotAction = {
         kind: 'reply',

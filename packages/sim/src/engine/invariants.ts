@@ -21,8 +21,8 @@ export function checkInvariants(s: SimState): void {
     for (const id of active.reserves ?? []) {
       if (s.holdings.get(id)?.ownerId !== war.attackerId) fail(`${war.id} holds ${id} in reserve`);
     }
-    if (active.added && s.holdings.get(active.added)?.ownerId !== war.defenderId) {
-      fail(`${war.id} puts in ${active.added}, which isn't the defender's`);
+    for (const id of active.added ?? []) {
+      if (s.holdings.get(id)?.ownerId !== war.defenderId) fail(`${war.id} puts in ${id}, which isn't the defender's`);
     }
     for (const id of warLocks([active]).keys()) {
       const other = locked.get(id);

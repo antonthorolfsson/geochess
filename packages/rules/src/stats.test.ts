@@ -169,6 +169,8 @@ describe('war record', () => {
       tribute: 1,
       settled: 0,
       withdrawn: 1,
+      opponentBackedDown: 0,
+      backedDown: 0,
       cancelled: 0,
       underway: 0,
     });
@@ -179,6 +181,8 @@ describe('war record', () => {
       tribute: 0,
       settled: 0,
       withdrawn: 0,
+      opponentBackedDown: 0,
+      backedDown: 0,
       cancelled: 0,
       underway: 1,
     });
@@ -190,6 +194,8 @@ describe('war record', () => {
       tribute: 0,
       settled: 0,
       withdrawn: 0,
+      opponentBackedDown: 0,
+      backedDown: 0,
       cancelled: 0,
       underway: 1,
     });
@@ -200,9 +206,24 @@ describe('war record', () => {
       tribute: 1,
       settled: 0,
       withdrawn: 1,
+      opponentBackedDown: 0,
+      backedDown: 0,
       cancelled: 0,
       underway: 0,
     });
+  });
+
+  it('counts a war one side backed down from apart from those won and lost', () => {
+    const backedDown: WarFacts[] = [
+      { attackerId: ANN, defenderId: BO, status: 'resolved', outcome: 'yielded' },
+      { attackerId: BO, defenderId: ANN, status: 'resolved', outcome: 'forfeited' },
+    ];
+    const ann = warRecord(ANN, backedDown, []);
+    expect(ann.attacking).toMatchObject({ won: 0, opponentBackedDown: 1, backedDown: 0 });
+    expect(ann.defending).toMatchObject({ won: 0, opponentBackedDown: 1, backedDown: 0 });
+    const bo = warRecord(BO, backedDown, []);
+    expect(bo.attacking).toMatchObject({ lost: 0, backedDown: 1 });
+    expect(bo.defending).toMatchObject({ lost: 0, backedDown: 1 });
   });
 
   it('lists countries won and lost, and tribute tokens', () => {

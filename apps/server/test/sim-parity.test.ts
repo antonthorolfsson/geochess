@@ -168,12 +168,17 @@ async function replay(s: SimState, label: string) {
         break;
       }
       case 'reply': {
-        const war = s.wars.find((w) => w.id === action.war)!;
         const r = action.reply;
         const body =
-          r.kind === 'accept' ? { reply: 'accept', ...(r.stake ? { stake: r.stake } : {}) } : { reply: r.kind };
+          r.kind === 'accept' || r.kind === 'raise'
+            ? {
+                reply: r.kind,
+                ...(r.stake ? { stake: r.stake } : {}),
+                ...(r.territoryId ? { territoryId: r.territoryId } : {}),
+              }
+            : { reply: r.kind };
         ok(
-          await as(war.attackerId).post(`/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/reply`, body),
+          await as(action.by).post(`/api/campaigns/${campaignId}/wars/${warIds.get(action.war)}/reply`, body),
           'reply',
         );
         break;

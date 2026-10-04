@@ -91,8 +91,10 @@ export type CampaignEvent =
       };
     }
   /**
-   * The attacker's answer to a counter-offer. `auto` when their time ran out; `fromReserves` when
-   * the reserves set aside at the declaration met a raise at once.
+   * The answer to a counter-offer: the attacker's, or the defender's (`by`) to the attacker's raise.
+   * `auto` when their time ran out; `fromReserves` when the reserves set aside at the declaration
+   * met a raise at once. A raise names the stake (the attacker's) or the country put in (the
+   * defender's), and `more`, what it asks of the other side.
    */
   | {
       type: 'war.reply';
@@ -102,6 +104,9 @@ export type CampaignEvent =
         stake?: TerritoryId[];
         auto: boolean;
         fromReserves?: boolean;
+        by?: 'defender';
+        territoryId?: TerritoryId;
+        more?: number;
       };
     }
   | {
@@ -530,7 +535,8 @@ export interface ChatSummary {
 
 /**
  * - `declared`: waiting for the defender (the attacker may still call it off, where the rules allow).
- * - `countered`: the defender raised, redirected or offered tribute; waiting for the attacker.
+ * - `countered`: the defender raised, redirected or offered tribute; waiting for the attacker (or,
+ *   after the attacker raised again, for the defender: see `waitingOn`).
  * - `ready`: accepted, and a live game is waiting for both players to finish other games.
  * - `playing`: the game is on.
  * - `resolved`: over; see `outcome`.
@@ -548,7 +554,7 @@ export interface WarView {
   /** The original target, if the defender redirected the war and the attacker accepted. */
   redirectedFrom: TerritoryId | null;
   status: WarStatus;
-  /** The defender's counter-offer while the attacker decides, and after, as history. */
+  /** The defender's counter-offer (and any raises back and forth since) while it's answered, and after, as history. */
   counter: WarCounter | null;
   outcome: WarOutcome | null;
   declaredRound: number;
@@ -601,10 +607,20 @@ export type WarResponse =
   | { response: 'tribute'; territoryId?: TerritoryId; tokens?: number };
 
 /**
- * The attacker's answer to a counter-offer: `accept` a raise (with the raised stake), a redirect
- * or a tribute; `withdraw` from a raise or redirect (losing the token); `refuse` a tribute and fight.
+ * The answer to a counter-offer, from whoever must give it (`waitingOn`):
+ * - the attacker can `accept` a raise (with the raised stake), a redirect or a tribute; `withdraw`
+ *   from a raise or redirect (losing the token, or the stake as declared once they have raised);
+ *   `refuse` a tribute and fight; or, where the stakes can be raised back and forth, `raise` again
+ *   with a stake further over the raise.
+ * - the defender, after the attacker raised again, can `accept` by putting in a country worth at
+ *   least what the raise asks, `raise` again with a country worth more still, or `withdraw`,
+ *   yielding the target.
  */
-export type WarReply = { reply: 'accept'; stake?: TerritoryId[] } | { reply: 'withdraw' } | { reply: 'refuse' };
+export type WarReply =
+  | { reply: 'accept'; stake?: TerritoryId[]; territoryId?: TerritoryId }
+  | { reply: 'raise'; stake?: TerritoryId[]; territoryId?: TerritoryId }
+  | { reply: 'withdraw' }
+  | { reply: 'refuse' };
 
 export interface DeclareWarInput {
   targetId: TerritoryId;
@@ -724,6 +740,10 @@ export interface WarTally {
   settled: number;
   /** Called off by the attacker (or their silence). */
   withdrawn: number;
+  /** Won without a game: the other side backed down after raising. */
+  opponentBackedDown: number;
+  /** Lost without a game: this side backed down after raising. */
+  backedDown: number;
   /** Cut short when the campaign ended: neither won nor lost. */
   cancelled: number;
   underway: number;

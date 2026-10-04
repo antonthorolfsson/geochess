@@ -58,7 +58,8 @@ const responseInput = z.discriminatedUnion('response', [
 ]);
 
 const replyInput = z.discriminatedUnion('reply', [
-  z.object({ reply: z.literal('accept'), stake: stake.optional() }),
+  z.object({ reply: z.literal('accept'), stake: stake.optional(), territoryId: territory.optional() }),
+  z.object({ reply: z.literal('raise'), stake: stake.optional(), territoryId: territory.optional() }),
   z.object({ reply: z.literal('withdraw') }),
   z.object({ reply: z.literal('refuse') }),
 ]);

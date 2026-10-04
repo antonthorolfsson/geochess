@@ -12,6 +12,7 @@ import {
   picksUntilTurn,
   renunciationsFrom,
   upcomingPickers,
+  waitingOn,
   type AccordView,
   type AutodraftFallback,
   type CampaignView,
@@ -48,8 +49,8 @@ export interface TurnsModel {
 }
 
 /**
- * Something waiting for my answer: a war (a declaration on me, a counter-offer to my attack, or
- * peace terms offered to me) or an accord proposal.
+ * Something waiting for my answer: a war (a declaration on me, a counter-offer to my attack, a raise
+ * back to me, or peace terms offered to me) or an accord proposal.
  */
 export interface Answer {
   kind: 'war' | 'accord';
@@ -98,7 +99,7 @@ export interface CampaignModel {
   pastWars: WarView[];
   /** Enemy countries I could declare war on now, tokens aside. Empty unless the campaign is underway. */
   targets: Set<TerritoryId>;
-  /** Wars waiting for my answer: a declaration on me, or a counter-offer to my attack. */
+  /** Wars waiting for my answer: a declaration on me, a counter-offer to my attack, or a raise back to me. */
   awaitingMe: WarView[];
   /** Peace terms offered to me in a war, waiting for my answer. */
   peaceToMe: { war: WarView; offer: PeaceOfferView }[];
@@ -173,11 +174,7 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
   const pending = campaign.accords.filter((a) => a.status === 'proposed');
   const proposalWith = new Map(pending.map((a) => [partnerIn(a, me.userId), a]));
   const proposalsToMe = pending.filter((a) => a.recipientId === me.userId);
-  const awaitingMe = activeWars.filter(
-    (w) =>
-      (w.status === 'declared' && w.defenderId === me.userId) ||
-      (w.status === 'countered' && w.attackerId === me.userId),
-  );
+  const awaitingMe = activeWars.filter((w) => waitingOn(w) === me.userId);
   const peaceToMe = activeWars.flatMap((war) =>
     war.peace.filter((o) => o.status === 'proposed' && o.recipientId === me.userId).map((offer) => ({ war, offer })),
   );

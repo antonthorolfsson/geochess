@@ -512,3 +512,152 @@ describe('peace terms', () => {
     expect((await s.offer(s.cy!, body.id, terms())).status).toBe(403);
   });
 });
+
+describe('raising back and forth on their own map', () => {
+  // Ann holds a1 to a4 (10 each, in a chain), a1 bordering Bo's t (8). Bo also holds b1 (4), b2 (6),
+  // b3 (8), b4 (2) and b5 (12), all bordering t. New campaigns allow three raises.
+  let ladder: TestServer;
+  beforeAll(async () => {
+    ladder = await startTestServer({
+      version: 'war-test',
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      attribution: [],
+      territories: [
+        makeTerritory('a1', 10, ['a2', 't']),
+        makeTerritory('a2', 10, ['a1', 'a3']),
+        makeTerritory('a3', 10, ['a2', 'a4']),
+        makeTerritory('a4', 10, ['a3']),
+        makeTerritory('t', 8, ['a1', 'b1', 'b2', 'b3', 'b4', 'b5']),
+        makeTerritory('b1', 4, ['t']),
+        makeTerritory('b2', 6, ['t']),
+        makeTerritory('b3', 8, ['t']),
+        makeTerritory('b4', 2, ['t']),
+        makeTerritory('b5', 12, ['t']),
+      ],
+      seaLanes: [],
+    });
+  });
+  afterAll(async () => {
+    await ladder.close();
+  });
+
+  const owners = { a1: ANN, a2: ANN, a3: ANN, a4: ANN, t: BO, b1: BO, b2: BO, b3: BO, b4: BO, b5: BO };
+  const start = async (rules: CampaignRulesInput = {}) => {
+    const s = await setup(rules, {}, { owners }, ladder);
+    const answer = (by: Client, warId: string, a: object) => by.post(`${s.url}/wars/${warId}/reply`, a);
+    const attention = async (c: Client) =>
+      (await c.get<CampaignSummary[]>('/api/campaigns')).body.find((x) => x.id === s.id)?.attention;
+    /** Ann attacks t from a1, Bo puts in b1 (Ann must reach 14), and Ann raises again by 6 with a1 and a2. */
+    const raised = async () => {
+      const { body } = await s.declare('t', 'a1', ['a1']);
+      expect((await s.respond(body.id, { response: 'raise', territoryId: 'b1' })).status).toBe(200);
+      expect((await answer(s.ann, body.id, { reply: 'raise', stake: ['a1', 'a2'] })).status).toBe(200);
+      return body.id;
+    };
+    return { ...s, answer, attention, raised };
+  };
+
+  it('let the attacker raise again, and the defender who backs down yield the target', async () => {
+    const s = await start();
+    const { body } = await s.declare('t', 'a1', ['a1']);
+    await s.respond(body.id, { response: 'raise', territoryId: 'b1' });
+    // Raising again takes half the target (4) over the 14 the raise asks.
+    expect((await s.answer(s.ann, body.id, { reply: 'raise', stake: ['a1'] })).body).toMatchObject({
+      error: { code: 'too-small' },
+    });
+    expect((await s.answer(s.ann, body.id, { reply: 'raise', stake: ['a1', 'a2'] })).status).toBe(200);
+    expect(await s.war(body.id)).toMatchObject({
+      status: 'countered',
+      stake: ['a1', 'a2'],
+      counter: {
+        kind: 'raise',
+        minValue: 14,
+        added: 'b1',
+        declared: ['a1'],
+        steps: [{ by: 'attacker', stake: ['a1', 'a2'], more: 6 }],
+      },
+    });
+    // Now it's Bo's answer, not Ann's.
+    expect((await s.answer(s.ann, body.id, { reply: 'withdraw' })).status).toBe(403);
+    expect([await s.attention(s.ann), await s.attention(s.bo)]).toEqual([0, 1]);
+    expect(ladder.notices.at(-1)).toMatchObject({ userId: BO, title: 'Ann raised again' });
+    // b4 is worth less than the 6 asked; b1 is already in the war.
+    for (const territoryId of ['b4', 'b1']) {
+      expect((await s.answer(s.bo, body.id, { reply: 'accept', territoryId })).body).toMatchObject({
+        error: { code: 'bad-raise' },
+      });
+    }
+    expect((await s.answer(s.bo, body.id, { reply: 'withdraw' })).status).toBe(200);
+    expect(await s.war(body.id)).toMatchObject({ status: 'resolved', outcome: 'yielded' });
+    // Only the target goes, without a game; what Bo put in stays Bo's.
+    expect((await s.view()).holdings).toMatchObject({ t: ANN, b1: BO, a1: ANN, a2: ANN });
+    const events = (await s.view()).events;
+    expect(events.find((e) => e.type === 'war.reply' && e.payload.by === 'defender')).toMatchObject({
+      actorId: BO,
+      payload: { reply: 'withdraw', auto: false },
+    });
+    expect(events.find((e) => e.type === 'war.resolved')).toMatchObject({
+      payload: { outcome: 'yielded', transfers: [{ territoryId: 't', from: BO, to: ANN }] },
+    });
+  });
+
+  it('let the defender raise again, and the attacker who backs down forfeit the stake as declared', async () => {
+    const s = await start();
+    const warId = await s.raised();
+    // b5 (12) meets the 6 Ann asked and raises 6 more: within half the target to all of it.
+    expect((await s.answer(s.bo, warId, { reply: 'raise', territoryId: 'b3' })).body).toMatchObject({
+      error: { code: 'bad-raise' },
+    });
+    expect((await s.answer(s.bo, warId, { reply: 'raise', territoryId: 'b5' })).status).toBe(200);
+    expect(await s.war(warId)).toMatchObject({ status: 'countered', counter: { minValue: 26 } });
+    // Three raises: Ann can only meet it or back down.
+    expect((await s.answer(s.ann, warId, { reply: 'raise', stake: ['a1', 'a2', 'a3', 'a4'] })).body).toMatchObject({
+      error: { code: 'cannot-raise' },
+    });
+    expect((await s.answer(s.ann, warId, { reply: 'accept', stake: ['a1', 'a2'] })).body).toMatchObject({
+      error: { code: 'too-small' },
+    });
+    expect((await s.answer(s.ann, warId, { reply: 'withdraw' })).status).toBe(200);
+    expect(await s.war(warId)).toMatchObject({ status: 'resolved', outcome: 'forfeited' });
+    expect((await s.view()).holdings).toMatchObject({ a1: BO, a2: ANN, t: BO, b1: BO, b5: BO });
+  });
+
+  it('fight for everything put in once a raise is met', async () => {
+    const s = await start();
+    const warId = await s.raised();
+    expect((await s.answer(s.bo, warId, { reply: 'accept', territoryId: 'b2' })).status).toBe(200);
+    const w = await s.war(warId);
+    expect(w).toMatchObject({ status: 'playing', stake: ['a1', 'a2'] });
+    await s.play(await s.game(w), SCHOLARS_MATE);
+    expect((await s.view()).holdings).toMatchObject({ t: ANN, b1: ANN, b2: ANN, a1: ANN, a2: ANN, b5: BO });
+  });
+
+  it('take silence after raising as backing down', async () => {
+    const s = await start();
+    const warId = await s.raised();
+    ladder.clock.advance(24 * HOUR + 1);
+    await ladder.runDue();
+    expect(await s.war(warId)).toMatchObject({ status: 'resolved', outcome: 'yielded' });
+    expect((await s.view()).holdings).toMatchObject({ t: ANN });
+
+    const t = await start();
+    const again = await t.raised();
+    await t.answer(t.bo, again, { reply: 'raise', territoryId: 'b5' });
+    ladder.clock.advance(24 * HOUR + 1);
+    await ladder.runDue();
+    expect(await t.war(again)).toMatchObject({ status: 'resolved', outcome: 'forfeited' });
+    expect((await t.view()).holdings).toMatchObject({ a1: BO, a2: ANN });
+  });
+
+  it('keep the single raise where the host allows one, as campaigns stored before', async () => {
+    const s = await start({ war: { raises: 1 } });
+    const { body } = await s.declare('t', 'a1', ['a1']);
+    await s.respond(body.id, { response: 'raise', territoryId: 'b1' });
+    expect((await s.answer(s.ann, body.id, { reply: 'raise', stake: ['a1', 'a2'] })).body).toMatchObject({
+      error: { code: 'cannot-raise' },
+    });
+    expect((await s.answer(s.ann, body.id, { reply: 'withdraw' })).status).toBe(200);
+    expect(await s.war(body.id)).toMatchObject({ status: 'resolved', outcome: 'withdrawn' });
+    expect((await s.view()).holdings).toMatchObject({ a1: ANN, t: BO, b1: BO });
+  });
+});

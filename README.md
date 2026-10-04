@@ -31,7 +31,8 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
   target.
 - The defender's answers: accept, raise (demand a stake worth 125%), redirect to another country
   of the same value, or offer tribute. Unanswered declarations go ahead after 24 hours (5 minutes
-  live).
+  live). New campaigns raise by putting a country into the war, and the stakes can go back and
+  forth up to three raises; whoever raised and then backs down loses the war as declared.
 - Chess on Lichess's chessground board with moves checked on the server by chessops, in live
   (blitz) or correspondence campaigns: server clocks with lag compensation, clock modifiers for
   home turf, terrain and supply lines, premoves, typed moves, draw offers, and an optional

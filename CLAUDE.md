@@ -33,13 +33,16 @@ when starting new work.**
   `games.ts` handles moves under a per-game lock, which may take the campaign lock inside it but
   never the other way round. Deadlines are rows in the database, polled by `scheduler.ts`, with
   in-process timers for live flag-falls. Tests drive time through the injectable `ctx.now()`.
-- How a war is answered is host settings in `rules.war` (raise style, redirects, fortifying, peace
-  terms, calling off). A new war setting must default, when absent, to what campaigns already
-  played, so stored rules (production's included) keep their game; new campaigns get the new
-  default through `DEFAULT_RULES`. Peace offers (`wars/peace.ts`) are private to the two players,
-  like accord proposals, until accepted. Anything that stops a game from a campaign change updates
-  the game row before touching anything a move also updates (peace offers), so the two can't
-  deadlock.
+- How a war is answered is host settings in `rules.war` (raise style, how many raises go back and
+  forth, redirects, fortifying, peace terms, calling off). A new war setting must default, when
+  absent, to what campaigns already played, so stored rules (production's included) keep their
+  game; new campaigns get the new default through `DEFAULT_RULES`. With raises back and forth
+  (`rules.war.raises` above 1), a countered war waits on whoever didn't raise last (`waitingOn`,
+  `owingAnswer` in SQL), not always the attacker; whoever raised and then backs down loses the war
+  as declared (outcomes `yielded` and `forfeited`), which no battle mission counts. Peace offers
+  (`wars/peace.ts`) are private to the two players, like accord proposals, until accepted.
+  Anything that stops a game from a campaign change updates the game row before touching anything
+  a move also updates (peace offers), so the two can't deadlock.
 - New campaigns declare war in turns (`rules.war.turns`; absent means anyone declares whenever they
   like, as campaigns stored before do). The rules are in `packages/rules/src/turns.ts`, the
   round's state on the campaign row (`apps/server/src/wars/turns.ts`). Declaring and fortifying

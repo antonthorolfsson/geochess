@@ -899,6 +899,66 @@ campaign view.
 
 Tests since: web 65.
 
+**Raising back and forth** (2026-10-03, at the user's request: "allow opponents to reraise back and
+forth"; the user chose "raising accepts the war", a cap of three raises, and that a war won
+without chess counts for no mission).
+
+- **The setting.** `rules.war.raises` (1 to `MAX_RAISES`, 5): how many times a war's stakes can be
+  raised, the defender's first raise included, with a matched raise only. Absent reads as 1, the
+  original single raise, so stored campaigns (production's included) keep their game;
+  `REVISED_WAR_RULES` gives new campaigns 3. The lobby shows "Raises in one war" under Matched.
+- **The rules** (`war.ts`, "Raising back and forth"). Each raise is how far you go over what you
+  were asked for, and the other side must match it. The attacker raises again by staking at least
+  half the target more than the raise demands (`attackerRaiseRange`); what they stake over it, up
+  to the target's value and never more than the defender's most valuable free country, is what the
+  defender must put in (`attackerRaiseMore`, `owedByDefender`). The defender answers with one
+  country: worth at least that to meet it, or enough more (half the target to all of it, within
+  what the attacker could still add) to raise again (`defenderAnswerOptions`). Overshoot on a meet
+  is lost, as before. Once the last raise is made, the other side can only meet it or back down.
+- **Raising accepts the war.** The attacker facing the first raise can still withdraw as before
+  (the token is spent). Anyone who has raised and then backs down loses the war as declared,
+  without a game: the defender yields the target and keeps the countries they put in (outcome
+  `yielded`); the attacker forfeits the stake as declared (`counter.declared`) and keeps what they
+  added since (`forfeited`). Silence after raising is backing down. A truce follows, as after a
+  battle.
+- **State.** All of it is in the war's `counter` JSON: `steps` (each raise and answer after the
+  first, `RaiseStep`) and `declared`. `raiseAnswerer` and `waitingOn` say who answers;
+  `addedCountries` lists every country put in, tied up from the raise on and won with the target.
+  `ActiveWar.added` is now a list, and a raise's country is tied up through `added` rather than
+  `offered`. No migration: the new outcomes are only TypeScript enum values on a text column.
+- **Server.** `POST …/wars/:warId/reply` is answered by whoever `waitingOn` names: the attacker
+  with `stake`, the defender with `territoryId`, `raise` to raise again. `war.reply` events carry
+  `by: 'defender'`, `territoryId` and `more`. Reserves meet any raise of the defender's at once,
+  never by raising. "Answer needed" counts and the bots' sweep use `owingAnswer` (SQL on the last
+  step). Notices: "Ann raised again", "Bo raised again".
+- **Missions.** Wars won because the other side backed down count for no battle mission:
+  `yielded` and `forfeited` aren't `attacker`/`defender`, and Nemesis and Backstab skip them
+  (`battles()` in `evaluate.ts`). Their wording now says backing down doesn't count. Claim
+  blockers count backing down and the countries the defender may still put in.
+- **Records.** The war record has "Won when they backed down" and "Backed down" rows
+  (`opponentBackedDown`, `backedDown`); the compare page counts them with "other".
+- **Simulator.** Mirrors all of it; the standard bot weighs meeting, raising again (given how the
+  other side would answer) and backing down. `whatif:single-raise` plays the old rule against the
+  baseline, `whatif:raise-five` allows five. The report's war table has "Raised again" and "Backed
+  down" columns. The parity test's baseline cases now raise back and forth.
+- **Web.** The war panel lists the raises, the attacker's answer has "Meet the raise" (was "Raise
+  the stake"), "Raise again" and "Back down" once they have raised; the defender answering a raise
+  gets "Meet the raise", "Raise again" and "Back down". The rules guide has "Raising back and
+  forth" and the new deadline rows. Checked in the browser on a dev campaign (Ann and Bo, "Raise
+  Check"): Ann raised again, Bo raised again, and Ann's answer offered only meeting or backing down.
+- **Balance** (a first look: live, 150 seeds at 2, 4 and 6 players, against
+  `whatif:single-raise` seed for seed). Defenders raise about as often (18–20% of declarations,
+  from 20–21%), and the bots raise again after nearly every first raise (19–20% of declarations).
+  Hardly anyone backs down after raising (under 1%), and fewer attackers withdraw (1–2%, from
+  3–4%). Wars get bigger: value taken per attacker win 17.3 / 16.0 / 14.9, from 16.2 / 14.5 /
+  13.8. Campaigns end a little sooner: median win round 13 / 10 / 8, from 13 / 12 / 9, and at 4
+  players 27% are won in rounds 15–25, from 40%. The bots' answers are one step deep, so the
+  playtest should say whether people raise back as readily. To rerun:
+  `pnpm sim --scenario baseline,whatif:single-raise --players 2-8 --seeds 300`.
+
+Tests since: rules 306, web 66, sim 27, server 219 (`war-raises.test.ts` in rules; "raising back and forth" in
+`test/war-answers.test.ts`).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

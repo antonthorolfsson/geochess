@@ -1,5 +1,10 @@
 import {
+  addedCountries,
+  owedByDefender,
   peaceTermsText,
+  raiseAnswerer,
+  valueOf,
+  waitingOn,
   winnerOf,
   type GameEndReason,
   type GameResult,
@@ -74,10 +79,17 @@ function warStanding(model: CampaignModel, war: WarView): string {
       return war.defenderId === me
         ? 'Waiting for your answer'
         : `Waiting for ${playerName(model, war.defenderId)} to answer`;
-    case 'countered':
+    case 'countered': {
+      if (war.counter && raiseAnswerer(war.counter) === 'defender') {
+        const raiser = war.attackerId === me ? 'your' : `${attacker}'s`;
+        return waitingOn(war) === me
+          ? `Waiting for your answer to ${raiser} raise`
+          : `Waiting for ${playerName(model, war.defenderId)} to answer ${raiser} raise`;
+      }
       return war.attackerId === me
         ? `Waiting for your answer to ${defender} ${war.counter?.kind ?? 'offer'}`
         : `Waiting for ${attacker} to answer ${defender} ${war.counter?.kind ?? 'offer'}`;
+    }
     case 'ready':
       // Live games wait for everyone to finish declaring, where the campaign takes turns.
       return model.campaign.rules.war.pace === 'live' && model.turns?.current
@@ -108,6 +120,10 @@ export function outcomeText(model: CampaignModel, war: WarView): string {
       return `${attacker} and ${defender} made peace`;
     case 'withdrawn':
       return `${attacker} called off the attack`;
+    case 'yielded':
+      return `${defender} backed down and yielded ${target}`;
+    case 'forfeited':
+      return `${attacker} backed down and forfeited the stake`;
     case 'cancelled':
       return 'Cancelled: the campaign ended first';
     case null:
@@ -125,6 +141,24 @@ export function counterText(model: CampaignModel, war: WarView): string {
   const paid = counter.kind !== 'tribute' && counter.tokens ? ` (paying ${tokensText(counter.tokens)})` : '';
   switch (counter.kind) {
     case 'raise': {
+      const last = counter.steps?.at(-1);
+      if (last?.by === 'attacker') {
+        const attacking = war.attackerId === model.me.userId;
+        const attacker = attacking ? 'You' : playerName(model, war.attackerId);
+        const answerer = mine ? 'you' : playerName(model, war.defenderId);
+        return (
+          `${attacker} raise${attacking ? '' : 's'} again, staking ${valueOf(model.idx, war.stake)}: ${answerer} must put ` +
+          `in a country worth at least ${owedByDefender(counter)}, or back down and yield ` +
+          `${countryName(model, war.targetId)}.`
+        );
+      }
+      if (last?.by === 'defender') {
+        const t = model.idx.byId.get(last.territoryId);
+        return (
+          `${defender} put${s} ${t?.name ?? last.territoryId} (${t?.value ?? '?'}) into the war, raising again: the ` +
+          `stake must reach ${counter.minValue}. Backing down now hands over the stake as declared.`
+        );
+      }
       if (counter.added) {
         const t = model.idx.byId.get(counter.added);
         return (
@@ -162,13 +196,35 @@ export function termsText(model: CampaignModel, war: Pick<WarView, 'attackerId' 
 }
 
 /**
- * The defender's country a matched raise put at stake alongside the target: once the attacker met
- * the raise, for as long as the war was fought over.
+ * The defender's countries matched raises put into the war alongside the target: while the raises
+ * go back and forth, and for as long as the war was fought over.
  */
-export function stakedByRaise(war: WarView): string | null {
-  if (war.counter?.kind !== 'raise' || !war.counter.added) return null;
+export function stakedByRaises(war: WarView): string[] {
   const fought = war.outcome === 'attacker' || war.outcome === 'defender' || war.outcome === 'held';
-  return war.status === 'ready' || war.status === 'playing' || fought ? war.counter.added : null;
+  const open = war.status === 'countered' || war.status === 'ready' || war.status === 'playing';
+  return open || fought ? addedCountries(war.counter) : [];
+}
+
+/**
+ * The raises back and forth in a war, oldest first, in lines: "Bo put in Chile (6)", "Ann raised the
+ * stake to 19, 6 over", "Bo put in Peru (8), meeting it". Empty for a war raised at most once.
+ */
+export function raiseLines(model: CampaignModel, war: WarView): string[] {
+  const counter = war.counter;
+  if (counter?.kind !== 'raise' || !counter.steps?.length) return [];
+  const name = (userId: string) => (userId === model.me.userId ? 'You' : playerName(model, userId));
+  const country = (id: string) => `${countryName(model, id)} (${model.idx.byId.get(id)?.value ?? '?'})`;
+  const lines = counter.added ? [`${name(war.defenderId)} put in ${country(counter.added)}`] : [];
+  for (const step of counter.steps) {
+    lines.push(
+      step.by === 'attacker'
+        ? `${name(war.attackerId)} raised the stake to ${valueOf(model.idx, step.stake)}, ${step.more} over`
+        : step.more > 0
+          ? `${name(war.defenderId)} put in ${country(step.territoryId)}, raising ${step.more} more`
+          : `${name(war.defenderId)} put in ${country(step.territoryId)}, meeting it`,
+    );
+  }
+  return lines;
 }
 
 /** A countdown to a deadline: "23h 12m", "4m 10s", "12s". */

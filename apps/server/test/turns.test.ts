@@ -4,7 +4,7 @@ import { warDataset } from '@empire/rules/testing';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaigns, holdings, members } from '../src/db/schema';
-import { signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
+import { ORIGINAL_STAKES, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
 
 /**
  * Declaring in turns, as new campaigns play it. On the war test map Ann holds A1 A2 A3 A4 A6, Bo
@@ -49,7 +49,8 @@ async function setup(rules: CampaignRulesInput = {}, opts: { owners?: Record<str
   const cy = await signIn(server.app, 'Cy');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Turn Order',
-    rules: { victory: { mode: 'open' }, ...rules },
+    // The map is sized for the original stakes.
+    rules: { victory: { mode: 'open' }, ...rules, war: { ...ORIGINAL_STAKES, ...rules.war } },
   });
   const id = body.id;
   const url = `/api/campaigns/${id}`;

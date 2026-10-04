@@ -21,7 +21,16 @@ import { campaigns, games, holdings, members, missionAwards, missionPlayers } fr
 import { loadEnv } from '../src/env';
 import { loadPlayers, loadWorld } from '../src/victory/state';
 import { runDueWork } from '../src/wars/scheduler';
-import { listen, signIn, startTestServer, tick, type Client, type TestServer, ORIGINAL_ANSWERS } from './helpers';
+import {
+  listen,
+  signIn,
+  startTestServer,
+  tick,
+  type Client,
+  type TestServer,
+  ORIGINAL_ANSWERS,
+  ORIGINAL_STAKES,
+} from './helpers';
 
 /**
  * Victory mechanics on the war test map, driven through real wars. Ann holds A1 A2 A3 A4 A6
@@ -87,7 +96,12 @@ async function objectives(opts: {
   const ann = clients[0]!;
   const created = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Missions',
-    rules: { ...opts.rules, victory: { ...opts.rules?.victory, mode: 'objectives' } },
+    // The map is sized for the original stakes.
+    rules: {
+      ...opts.rules,
+      war: { ...ORIGINAL_STAKES, ...opts.rules?.war },
+      victory: { ...opts.rules?.victory, mode: 'objectives' },
+    },
   });
   const id = created.body.id;
   const { inviteCode, rules } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;

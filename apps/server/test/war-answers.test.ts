@@ -13,7 +13,7 @@ import { makeTerritory, warDataset } from '@empire/rules/testing';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { campaigns, holdings, members } from '../src/db/schema';
-import { ORIGINAL_ANSWERS, signIn, startTestServer, type Client, type TestServer } from './helpers';
+import { ORIGINAL_ANSWERS, ORIGINAL_STAKES, signIn, startTestServer, type Client, type TestServer } from './helpers';
 
 /**
  * The revised answers new campaigns play: matched and token raises, reserves, nearby redirects
@@ -66,7 +66,8 @@ async function setup(
   const cy = opts.cy ? await signIn(srv.app, 'Cy') : null;
   const { body } = await ann.post<{ id: string }>('/api/campaigns', {
     name: 'Peace Talks',
-    rules: { victory: { mode: 'open' }, ...rules },
+    // The map is sized for the original stakes.
+    rules: { victory: { mode: 'open' }, ...rules, war: { ...ORIGINAL_STAKES, ...rules.war } },
   });
   const id = body.id;
   const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${id}`)).body;
@@ -146,7 +147,7 @@ async function setup(
 describe('new campaigns', () => {
   it('play the revised answers; campaigns stored before them keep the original ones', async () => {
     const s = await setup();
-    expect((await s.view()).rules.war).toMatchObject(REVISED_WAR_RULES);
+    expect((await s.view()).rules.war).toMatchObject({ ...REVISED_WAR_RULES, ...ORIGINAL_STAKES });
     const old = await setup({ war: ORIGINAL_ANSWERS });
     expect((await old.view()).rules.war).toMatchObject(ORIGINAL_ANSWERS);
   });

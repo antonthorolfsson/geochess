@@ -25,6 +25,7 @@ import {
   type WarRules,
   botLevelText,
   lichessPerfFor,
+  withStakeFloor,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -811,7 +812,10 @@ function WarRulesFields({
                 className="input w-24"
                 value={rules[key]}
                 disabled={disabled}
-                onChange={(e) => onSave({ [key]: Number(e.target.value) })}
+                onChange={(e) => {
+                  const pct = Number(e.target.value);
+                  onSave(key === 'stakeFloorPct' ? withStakeFloor(rules, pct) : { raisePct: pct });
+                }}
               >
                 {[...new Set([...range, rules[key]])]
                   .sort((a, b) => a - b)

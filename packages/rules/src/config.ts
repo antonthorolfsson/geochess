@@ -69,9 +69,9 @@ export type HandicapLevel = (typeof HANDICAP_LEVELS)[number];
 
 /**
  * War settings. Rules stored before a setting existed read as the original game (a free raise,
- * redirects anywhere and free, tribute, no fortifying or recall, declaring whenever you like), so
- * no campaign underway changes; new campaigns start from `DEFAULT_RULES`, which plays the revised
- * answers and turns.
+ * redirects anywhere and free, tribute, no fortifying or recall, declaring whenever you like, stakes
+ * of 80% and 125%), so no campaign underway changes; new campaigns start from `DEFAULT_RULES`,
+ * which plays the revised answers, turns and higher stakes.
  */
 export const warRulesSchema = z.object({
   pace: z.enum(PACES).default('correspondence'),
@@ -126,8 +126,13 @@ export const warRulesSchema = z.object({
   selfRatings: z.boolean().default(false),
 });
 
-/** The war settings new campaigns start with, over the original game's: the revised answers, and turns. */
+/**
+ * The war settings new campaigns start with, over the original game's: the revised answers, turns,
+ * and stakes of 110% (150% against a fortified country) so that declaring war costs more.
+ */
 export const REVISED_WAR_RULES = {
+  stakeFloorPct: 110,
+  raisePct: 150,
   raise: 'matched',
   raises: 3,
   redirect: 'nearby',
@@ -214,6 +219,18 @@ export type CampaignRulesInput = z.input<typeof campaignRulesSchema>;
 export type DraftMode = CampaignRules['draft']['mode'];
 export type WarRules = CampaignRules['war'];
 export type VictoryRules = CampaignRules['victory'];
+
+/**
+ * A new stake floor, with the raised stake (what a fortified country needs) moved by as much, so
+ * fortifying keeps adding the same share of the target: 110% and 150% become 100% and 140%.
+ */
+export function withStakeFloor(
+  war: Pick<WarRules, 'stakeFloorPct' | 'raisePct'>,
+  stakeFloorPct: number,
+): Pick<WarRules, 'stakeFloorPct' | 'raisePct'> {
+  const raisePct = Math.min(300, Math.max(100, war.raisePct + stakeFloorPct - war.stakeFloorPct));
+  return { stakeFloorPct, raisePct };
+}
 
 /**
  * Validates rules and fills defaults. Rules stored by earlier versions lack newer settings, so

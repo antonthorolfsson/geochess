@@ -485,6 +485,8 @@ VARIANTS['original-answers'] = {
     description:
       'The original answers: a free raise to 125%, redirects anywhere at no cost, tribute, no fortifying or calling off.',
     war: {
+      stakeFloorPct: 80,
+      raisePct: 125,
       raise: 'free',
       redirect: 'anywhere',
       redirectToken: false,
@@ -498,7 +500,7 @@ VARIANTS['raise-token'] = {
   variant: {
     name: 'raise-token',
     description: 'A raise to 125% that costs the defender a war token, which the attacker gets for meeting it.',
-    war: { raise: 'token' },
+    war: { raise: 'token', raisePct: 125 },
   },
 };
 VARIANTS['single-raise'] = {
@@ -520,6 +522,34 @@ VARIANTS['raise-off'] = {
     name: 'raise-off',
     description: 'No raising, and a stake floor of 100%.',
     war: { raise: 'off', stakeFloorPct: 100 },
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
+// Stakes. Campaigns play a new campaign's: at least 110% of the target, 150% against a fortified
+// country (from 4 October 2026); these play others.
+
+VARIANTS['original-stakes'] = {
+  variant: {
+    name: 'original-stakes',
+    description: 'Stakes of at least 80% of the target and 125% against a fortified country, as before October 2026.',
+    war: { stakeFloorPct: 80, raisePct: 125 },
+  },
+};
+for (const pct of [80, 100, 120]) {
+  VARIANTS[`stake-${pct}`] = {
+    variant: {
+      name: `stake-${pct}`,
+      description: `A stake floor of ${pct}% of the target's value, from 110%.`,
+      war: { stakeFloorPct: pct },
+    },
+  };
+}
+VARIANTS['fortify-125'] = {
+  variant: {
+    name: 'fortify-125',
+    description: 'A fortified country needs a stake of 125% of its value, from 150%.',
+    war: { raisePct: 125 },
   },
 };
 

@@ -950,6 +950,46 @@ To rerun: `pnpm sim --scenario baseline,values-10 --players 2-8 --paces live,cor
 then `pnpm sim:report values --missions`. The trial's scenarios are gone; `--dataset 2026.1`
 replays anything on the old values.
 
+## Higher stakes
+
+_Added 4 October 2026, and adopted the same day: new campaigns need a stake of at least 110% of the
+target (from 80%), and 150% against a fortified country (from 125%). A declared war is hard to
+get out of, so declaring should cost more; campaigns stored before keep 80% and 125%. The
+simulator plays the new stakes as its baseline now; `whatif:original-stakes` plays the old ones,
+and `whatif:stake-80`, `stake-100`, `stake-120` and `fortify-125` vary one number._
+
+The same bots on the same seeds: mission rules version 4, dataset 2026.2, a last round of 25,
+live, 200 campaigns per table size from 2 to 8, shown as 2–3 / 4–5 / 6–8 players. The 110% row
+plays fortifying at 150%; the others at 125%.
+
+| Stake floor | Declarations per player-round | Net value to the attacker per declaration | Value changing hands per campaign | Fortified per campaign | Median win round | Won on points | Round-5 leader wins |
+| ----------- | ----------------------------- | ----------------------------------------- | --------------------------------- | ---------------------- | ---------------- | ------------- | ------------------- |
+| 80%         | 0.96 / 0.93 / 0.93            | 2.65 / 2.15 / 1.66                        | 457 / 626 / 767                   | 0.02 / 0.03 / 0.05     | 12 / 10 / 8      | 16 / 8 / 4%   | 64 / 53 / 41%       |
+| 100%        | 0.95 / 0.92 / 0.91            | 1.53 / 1.08 / 0.77                        | 406 / 614 / 724                   | 0.02 / 0.04 / 0.06     | 11 / 10 / 8      | 12 / 7 / 4%   | 65 / 44 / 44%       |
+| **110%**    | 0.93 / 0.89 / 0.87            | 0.90 / 0.49 / 0.18                        | 439 / 575 / 704                   | 0.12 / 0.13 / 0.16     | 12 / 10 / 9      | 16 / 7 / 4%   | 65 / 48 / 42%       |
+| 120%        | 0.91 / 0.86 / 0.84            | 0.26 / 0.15 / −0.14                       | 372 / 535 / 638                   | 0.14 / 0.20 / 0.23     | 11 / 11 / 8      | 17 / 11 / 5%  | 64 / 50 / 41%       |
+
+- **Each 10 points roughly halves what a war is worth.** At 80% an attacker who wins half their
+  games still comes out ahead; by 110% a war is close to even in country value, and at 120% it
+  loses value at big tables. Defenders take more when they win (the stake is now worth more than
+  the target), and attackers pick cheaper targets: value taken per attacker win falls from
+  14–17 to 12–16 at 110%.
+- **The bots hardly declare less.** Declarations fall 3–6% at 110% and 5–9% at 120%, because
+  the bots declare mostly for missions, which are what win. Mission completion, game length, the
+  share won on points and how often the early leader wins are all within what 200 campaigns can
+  tell apart. People count country value more directly than the bots, so expect them to declare
+  less than this.
+- **Almost every neighbour can still be attacked.** Right after the draft, 84% of the enemy
+  countries bordering a player can be attacked at 110%, against 88% at 80%. Rounding up costs
+  most at the bottom: a target worth 1 needs a stake of 2, one worth 4 needs 5.
+- **Fortifying is used more, for the wrong reason.** The bots fortify when they have a token to
+  spare, and fewer wars worth declaring leave more tokens spare. A fortified country at 125% would
+  have been protected by only 15 points over the floor; 150% keeps the gap at 40, close to the old 45. The simulator can't tell 125%, 140% and 150% apart (the bots fortify the same countries and
+  rarely attack fortified ones either way), so the choice of 150% is a design call.
+
+To rerun: `pnpm sim --scenario baseline,whatif:original-stakes,whatif:stake-100,whatif:stake-120 --players 2-8 --paces live --seeds 200 --out stakes`,
+then `pnpm sim:report stakes --compare baseline`.
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,

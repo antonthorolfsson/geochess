@@ -637,7 +637,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   ];
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    // Clipped, not hidden: a hidden overflow can still be scrolled, and focusing something that
+    // overflows it (a visually hidden input) would scroll the whole room off screen.
+    <div className="flex h-dvh flex-col overflow-clip">
       <CampaignHeader
         model={model}
         connected={connected}

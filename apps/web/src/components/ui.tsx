@@ -99,7 +99,9 @@ export function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <label className={`flex min-h-11 cursor-pointer items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
+    // `relative` keeps the visually hidden checkbox inside the label. Positioned against a far-off
+    // ancestor instead, focusing it on click scrolled the whole screen away to reach it.
+    <label className={`relative flex min-h-11 cursor-pointer items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
       <span className="flex-1">
         <span className="block font-semibold">{label}</span>
         {description && <span className="block text-sm text-muted">{description}</span>}

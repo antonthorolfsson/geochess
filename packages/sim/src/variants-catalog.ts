@@ -612,3 +612,19 @@ for (const points of [1, 2]) {
     };
   }
 }
+
+// Military might in place of military spending (`engine/titles.ts`), one point a title, 10 to win.
+for (const [key, name] of [
+  ['mightBlend', 'blend'],
+  ['mightSqrt', 'sqrt'],
+  ['mightMixed', 'mixed'],
+] as const) {
+  VARIANTS[`titles-1-might-${name}`] = {
+    variant: {
+      name: `titles-1-might-${name}`,
+      description: `As titles-1, with military might (${key}) in place of military spending.`,
+      titles: { stats: ['population', 'areaKm2', 'gdpNominalUsd', key], points: 1 },
+      points: { toWin: 10 },
+    },
+  };
+}

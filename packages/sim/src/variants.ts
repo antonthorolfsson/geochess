@@ -13,11 +13,11 @@ import type {
   Random,
   SecretMissionKind,
   SecretMissionSpec,
-  StatKey,
   TerritoryId,
   UserId,
   WarRules,
 } from '@empire/rules';
+import type { TitleStat } from './engine/titles';
 
 export interface VariantContext {
   players: number;
@@ -51,7 +51,7 @@ export interface Variant {
    * Titles: `points` each, held by whoever leads the table on each figure from the moment the draft
    * ends, and lost with the lead (`engine/titles.ts`).
    */
-  titles?: { stats: readonly StatKey[]; points: number };
+  titles?: { stats: readonly TitleStat[]; points: number };
   /**
    * Public missions added to the campaign's (each worth the public points): these kinds, or this
    * many drawn from the playable kinds not in play that don't make for a long campaign.

@@ -87,6 +87,10 @@ pnpm sim --scenario baseline,whatif:<name> --players 2-8 --seeds 300 --out whati
 pnpm sim:report whatif-<name> --compare baseline
 ```
 
+`titles-1`, `titles-2` and their `-winN`, `-public5`/`-public6` and `-blind` forms try points for
+leading the table on population, land, GDP and military spending (`Variant.titles`, played in
+`src/engine/titles.ts`); see the balance report's "Titles".
+
 Generation parameters (how targets are chosen and options dealt) are read from the catalog by
 version and can't be varied here.
 

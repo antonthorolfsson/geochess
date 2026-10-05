@@ -197,29 +197,32 @@ describe('winning', () => {
   });
 });
 
-describe('titles (a what-if)', () => {
-  const TITLES = { stats: ['population', 'areaKm2'] as const, points: 2 };
-  const titled = (toWin = 10) =>
+describe('titles (version 5)', () => {
+  const titled = (toWin?: number) =>
     scripted({
       players: 3,
       publics: () => [EUROPE],
-      config: { variant: { name: 'titles', description: '', titles: TITLES, points: { toWin } } },
+      config: {
+        missionVersion: 5,
+        ...(toWin && { variant: { name: 'win', description: '', points: { toWin } } }),
+      },
     });
-
-  it('go to the leaders when round 1 starts, and move, points and all, when the lead changes', () => {
-    const s = titled();
-    const leader = (key: 'population' | 'areaKm2') => s.titles.get(key);
-    expect(leader('population')).not.toBeNull();
-    expect(leader('areaKm2')).not.toBeNull();
-    // Everything p2 and p3 hold but one country each goes to p1, who now leads on both.
+  /** Everything p2 and p3 hold but one country each goes to p1, who then leads on everything. */
+  const sweep = (s: ReturnType<typeof titled>) => {
     const keep = new Set(['p2', 'p3'].map((id) => [...heldBy(s, id)].sort()[0]!));
     give(
       s,
       [...s.holdings].filter(([id, h]) => h.ownerId !== 'p1' && !keep.has(id)).map(([id]) => id),
       'p1',
     );
-    expect(leader('population')).toBe('p1');
-    expect(leader('areaKm2')).toBe('p1');
+  };
+
+  it('go to the leaders when round 1 starts, and move, points and all, when the lead changes', () => {
+    const s = titled();
+    expect([...s.titles.keys()]).toEqual(['population', 'land', 'economy', 'military']);
+    expect([...s.titles.values()].every((holder) => holder !== null)).toBe(true);
+    sweep(s);
+    expect([...s.titles.values()]).toEqual(['p1', 'p1', 'p1', 'p1']);
     expect(pointsOf(s, 'p1')).toBe(4);
     expect(pointsOf(s, 'p2') + pointsOf(s, 'p3')).toBe(0);
     expect(s.history.awards.reduce((n, a) => n + a.points, 0)).toBe(4);
@@ -227,12 +230,7 @@ describe('titles (a what-if)', () => {
 
   it('count toward the points to win alongside missions', () => {
     const s = titled(6);
-    const keep = new Set(['p2', 'p3'].map((id) => [...heldBy(s, id)].sort()[0]!));
-    give(
-      s,
-      [...s.holdings].filter(([id, h]) => h.ownerId !== 'p1' && !keep.has(id)).map(([id]) => id),
-      'p1',
-    );
+    sweep(s);
     expect(s.status).toBe('active');
     // Strategic Positions, claimed from the draft, scores when round 3 starts: 4 + 2.
     nextRound(s);

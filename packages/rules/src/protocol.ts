@@ -10,6 +10,7 @@ import type { ResultReport } from './over-the-board';
 import type { MissionSpec, SeasonTiebreak, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
+import type { TitleKind } from './victory/titles';
 import type { PeaceTerms, Transfer, Truce, WarCounter, WarOutcome } from './war';
 
 /**
@@ -202,6 +203,21 @@ export type CampaignEvent =
       payload: { userId: string; missionKey: string; kind: MissionSpec['kind']; points: number; total: number };
     }
   /**
+   * A title changed hands (from mission rules version 5): `from` loses its `points` and `to` gains
+   * them; either may be nobody (a lead shared by players who didn't hold it). `totals` are both
+   * players' points after it.
+   */
+  | {
+      type: 'title.changed';
+      payload: {
+        title: TitleKind;
+        from: string | null;
+        to: string | null;
+        points: number;
+        totals: Record<string, number>;
+      };
+    }
+  /**
    * The campaign is won (by several players when they tie) and over: by reaching the points to win,
    * or with `seasonEnd`, on points (then value) when the last round ended.
    */
@@ -364,7 +380,10 @@ export interface RevealedSecretView {
 
 export interface VictoryPlayerView {
   userId: string;
+  /** Mission points and the points of the titles held now. */
   points: number;
+  /** The titles they hold. */
+  titles: TitleKind[];
   awards: AwardView[];
   /** While secret missions are being chosen: whether this player has one. */
   ready: boolean;
@@ -375,6 +394,13 @@ export interface VictoryPlayerView {
    * the war begins.
    */
   progress: Record<string, Evaluation>;
+}
+
+export interface TitleView {
+  kind: TitleKind;
+  holderId: string | null;
+  /** Each player's figure (people, km², US dollars, or might: see `titleFigure`), once the war has begun. */
+  totals: Record<string, number>;
 }
 
 export interface VictoryResultView {
@@ -399,6 +425,8 @@ export interface VictoryResultView {
     /** The tiebreak's measures (`seasonMeasures`). Unset in results stored before 2026-10-02. */
     measures?: number[];
     countries: number;
+    /** Titles held when the campaign ended. Unset in results stored before titles existed. */
+    titles?: TitleKind[];
     awards: AwardView[];
     secret: { mission: MissionView; completed: boolean } | null;
   }[];
@@ -419,6 +447,9 @@ export interface VictoryView {
   /** What decides the season between players level on points. */
   tiebreak: SeasonTiebreak;
   publicMissions: MissionView[];
+  /** Titles (from version 5), each worth `titlePoints`: who holds each, and everyone's figure. Empty before. */
+  titles: TitleView[];
+  titlePoints: number;
   players: VictoryPlayerView[];
   /** Claims waiting to score. */
   claims: ClaimView[];

@@ -1,11 +1,12 @@
 'use client';
 
-import { botLevel, missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
+import { TITLES, botLevel, missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { requirementText } from '@/lib/victory';
 import { termsText, tokensText } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
+import { TitleToken } from '../victory/title-tokens';
 
 const countries = (n: number) => `${n} ${n === 1 ? 'country' : 'countries'}`;
 
@@ -14,7 +15,8 @@ export function dispatchTone(type: EventView['type']): 'war' | 'accord' | 'broke
   if (type === 'accord.broken') return 'broken';
   if (type.startsWith('war.') || type === 'country.fortified') return 'war';
   if (type.startsWith('accord.') || type.startsWith('reputation.')) return 'accord';
-  if (type.startsWith('mission') || type.startsWith('claim.') || type === 'campaign.won') return 'mission';
+  if (type.startsWith('mission') || type.startsWith('claim.') || type.startsWith('title.') || type === 'campaign.won')
+    return 'mission';
   return 'plain';
 }
 
@@ -248,6 +250,28 @@ export function DispatchLine({
         <strong className="text-amber">
           {name(userId)} scored {missionName({ kind }, version)}: +{points}, {total} {total === 1 ? 'point' : 'points'}.
         </strong>
+      );
+    }
+    case 'title.changed': {
+      const { title, from, to, points } = event.payload;
+      const titleName = TITLES[title].name;
+      const pts = `${points} ${points === 1 ? 'point' : 'points'}`;
+      return (
+        <span className="inline-flex items-start gap-2">
+          <TitleToken kind={title} size={20} label={false} />
+          <span>
+            {to ? (
+              <strong className="text-amber">
+                {name(to)} {from ? `took ${titleName} from ${name(from)}` : `holds ${titleName}`}: +{pts}
+                {to in event.payload.totals && `, ${event.payload.totals[to]} in all`}.
+              </strong>
+            ) : (
+              <strong>
+                {name(from)} lost {titleName}: nobody holds it while the lead is shared.
+              </strong>
+            )}
+          </span>
+        </span>
       );
     }
     case 'campaign.won': {

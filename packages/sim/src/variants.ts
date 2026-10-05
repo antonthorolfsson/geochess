@@ -49,9 +49,9 @@ export interface Variant {
   toWinFor?(players: number): number;
   /**
    * Titles: `points` each, held by whoever leads the table on each figure from the moment the draft
-   * ends, and lost with the lead (`engine/titles.ts`).
+   * ends, and lost with the lead (`engine/titles.ts`), in place of the version's own; null: none.
    */
-  titles?: { stats: readonly TitleStat[]; points: number };
+  titles?: { stats: readonly TitleStat[]; points: number } | null;
   /**
    * Public missions added to the campaign's (each worth the public points): these kinds, or this
    * many drawn from the playable kinds not in play that don't make for a long campaign.

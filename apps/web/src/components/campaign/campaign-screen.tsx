@@ -1,6 +1,6 @@
 'use client';
 
-import { missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
+import { TITLES, missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -25,6 +25,7 @@ import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
 import { LobbyPanel } from './lobby-panel';
+import { TitlesProvider } from '../victory/title-tokens';
 import { CampaignRoomProvider } from './room-context';
 import { TerritoryPanel } from './territory-panel';
 import { WarDetail, type StakePreview } from './war-detail';
@@ -72,8 +73,22 @@ const MAIN_LABEL: Record<CampaignStatus, string> = {
   finished: 'Wars',
 };
 
-/** A campaign: the map room, with any page opened over it (an empire's statistics) as `children`. */
+/**
+ * A campaign: the map room, with any page opened over it (an empire's statistics) as `children`,
+ * and who holds each title for every player's name in it (`PlayerName`).
+ */
 export function CampaignScreen({ id, children }: { id: string; children?: ReactNode }) {
+  const titles = useCampaign(id).data?.victory?.titles ?? NO_TITLES;
+  return (
+    <TitlesProvider value={titles}>
+      <CampaignScreenInner id={id}>{children}</CampaignScreenInner>
+    </TitlesProvider>
+  );
+}
+
+const NO_TITLES: never[] = [];
+
+function CampaignScreenInner({ id, children }: { id: string; children?: ReactNode }) {
   const router = useRouter();
   const me = useMe();
   const campaign = useCampaign(id);
@@ -389,6 +404,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       } else if (e.type === 'mission.awarded' && e.payload.userId === me) {
         setToast(`+${e.payload.points} victory points`);
         navigator.vibrate?.(120);
+      } else if (e.type === 'title.changed' && (e.payload.to === me || e.payload.from === me)) {
+        const title = TITLES[e.payload.title].name;
+        setToast(e.payload.to === me ? `${title}: +${e.payload.points}` : `${title} lost`);
       } else if (e.type === 'campaign.won') {
         const winners = e.payload.winners;
         setToast(

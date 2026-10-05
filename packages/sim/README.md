@@ -25,7 +25,8 @@ Runs write one JSON line per campaign to `packages/sim/out/<name>/shard-*.jsonl`
 pick up where they stopped if interrupted. `--workers` sets the number of child processes (default:
 cores − 2); `--out` names the directory.
 
-Campaigns play what a new campaign plays: the current mission rules version, a last round of 25,
+Campaigns play what a new campaign plays: the current mission rules version (5: titles for leading on
+population, land, GDP and military might, 10 points to win), a last round of 25,
 the revised war answers (a matched raise, nearby redirects that cost a token, fortifying, calling a
 declaration off, and peace terms in place of tribute), declaring in turns, and stakes of at least 110% of
 the target (150% against a fortified country). `--mission-rules 2` plays an earlier version
@@ -47,7 +48,7 @@ add `whatif:original-answers` (see [Adding a what-if](#adding-a-what-if)) to com
    later waves only answer and fight. A war stays open
    0, 1, 2… rounds past its declaration with the chances in `latency` (live: always 0;
    correspondence: 20/50/30%), holding up claims it could break.
-5. The campaign ends at 7 points (`normal`), or when the host moves on from the last round, on points
+5. The campaign ends at the points to win (10 from version 5, 7 before; `normal`), or when the host moves on from the last round, on points
    then value (as the server's `endSeason`), or runs to the round cap without ending (`horizon`, to
    measure missions apart from game length). A normal campaign with no last round that reaches the
    cap has stalled.

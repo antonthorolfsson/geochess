@@ -1,6 +1,7 @@
 /** What must always hold in a simulated campaign; checked after every change in debug runs. */
 import { activeWar, warLocks, type TerritoryId } from '@empire/rules';
 import { openWars } from './board';
+import { titleRules } from './titles';
 import type { SimState } from './types';
 
 export function checkInvariants(s: SimState): void {
@@ -43,7 +44,7 @@ export function checkInvariants(s: SimState): void {
     points.set(a.userId, points.get(a.userId)! + a.points);
   }
   // Titles (a what-if) add the points of those held now.
-  const perTitle = s.cfg.variant?.titles?.points ?? 0;
+  const perTitle = titleRules(s)?.points ?? 0;
   for (const holder of s.titles.values()) if (holder !== null) points.set(holder, points.get(holder)! + perTitle);
   for (const [id, p] of points) if (s.points.get(id) !== p) fail(`${id}'s points don't match the awards`);
   let last = 0;

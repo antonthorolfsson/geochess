@@ -1,22 +1,29 @@
 import { botLevel, type MemberView } from '@empire/rules';
 import Link from 'next/link';
 import { EmpireSwatch } from '../hatch';
+import { TitleTokens, useTitlesOf } from '../victory/title-tokens';
 
 /**
  * A player shown as an empire: their color and hatching, and their name in stencil, tagged with
- * its level if it's a bot. With `href` (their empire's statistics page), the name is a link.
+ * its level if it's a bot, then the tokens of the titles they hold. With `href` (their empire's
+ * statistics page), the name is a link.
  */
 export function PlayerName({
   member,
   you = false,
   size = 'md',
   href,
+  showTitles = true,
 }: {
   member: MemberView | undefined;
   you?: boolean;
   size?: 'sm' | 'md' | 'lg';
   href?: string;
+  /** Off where the titles are already the subject (the Titles list itself). */
+  showTitles?: boolean;
 }) {
+  const held = useTitlesOf(member?.userId);
+  const titles = showTitles ? held : [];
   if (!member) return <span className="text-muted">Unknown player</span>;
   const text = { sm: 'text-[0.95rem]', md: 'text-lg', lg: 'text-2xl' }[size];
   const content = (
@@ -31,6 +38,7 @@ export function PlayerName({
       </span>
       {you && <span className="shrink-0 text-xs font-bold tracking-widest text-muted uppercase">you</span>}
       {member.bot && <BotTag level={member.bot.level} standIn={member.bot.standIn} />}
+      <TitleTokens titles={titles} size={{ sm: 16, md: 18, lg: 24 }[size]} />
     </>
   );
   const box = 'inline-flex max-w-full min-w-0 items-center gap-2';

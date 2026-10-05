@@ -13,6 +13,7 @@ import {
   type SecretMissionSpec,
   type SecretOption,
   type TimeControl,
+  type TitleHolders,
   type VictoryResultView,
   type WarCounter,
 } from '@empire/rules';
@@ -121,6 +122,8 @@ export const campaigns = pgTable('campaigns', {
   turnPassed: jsonb('turn_passed').$type<string[]>().notNull().default([]),
   turnUserId: text('turn_user_id'),
   turnDeadline: timestamp('turn_deadline', { withTimezone: true }),
+  /** Who holds each title (mission rules version 5 on), from round 1; `settleVictory` keeps it current. */
+  titles: jsonb('titles').$type<TitleHolders>().notNull().default({}),
 });
 
 export const members = pgTable(

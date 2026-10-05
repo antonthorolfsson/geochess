@@ -1,7 +1,7 @@
 /** A finished campaign as one JSON line: what the report aggregates. */
 import { valueOfSet, type TerritoryId, type UserId } from '@empire/rules';
 import { heldBy, pointsToWin } from './engine/state';
-import { titlesOf } from './engine/titles';
+import { titleRules, titlesOf } from './engine/titles';
 import type { SimState, WarStats } from './engine/types';
 
 export interface PlayerRecord {
@@ -90,6 +90,8 @@ export interface CampaignRecord {
   /** The points to win, and how often a title changed hands after round 1 began (what-ifs with titles). */
   toWin?: number;
   titleMoves?: number;
+  /** Points a title is worth. */
+  titlePoints?: number;
   ms: number;
 }
 
@@ -144,7 +146,7 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
       attackLosses: count((w) => w.attackerId === p.id && w.outcome === 'defender'),
       defenceWins: count((w) => w.defenderId === p.id && w.outcome === 'defender'),
       defenceLosses: count((w) => w.defenderId === p.id && w.outcome === 'attacker'),
-      ...(s.cfg.variant?.titles ? { titles: titlesOf(s, p.id), titlesAtStart: s.titlesAtStart?.[p.id] ?? [] } : {}),
+      ...(titleRules(s) ? { titles: titlesOf(s, p.id), titlesAtStart: s.titlesAtStart?.[p.id] ?? [] } : {}),
       mates: count(
         (w) =>
           w.endReason === 'checkmate' &&
@@ -207,7 +209,7 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
     accords: s.accordStats,
     tokensWasted: s.tokensWasted,
     toWin: pointsToWin(s),
-    ...(s.cfg.variant?.titles ? { titleMoves: s.titleMoves } : {}),
+    ...(titleRules(s) ? { titleMoves: s.titleMoves, titlePoints: titleRules(s)!.points } : {}),
     ms: Math.round(ms),
   };
 }

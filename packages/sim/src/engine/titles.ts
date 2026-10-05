@@ -1,28 +1,36 @@
 /**
- * Titles, a what-if (`Variant.titles`): points held by whoever leads the table on a real-world
- * figure (population, land area, GDP, military spending), from the moment the draft ends. A title
- * moves when someone else's total passes the holder's; a holder who is only matched keeps it, and
- * when nobody holds it, a lead shared by several players gives it to none of them. Unlike mission
- * points, title points are lost with the title. Each move is marked in the history's awards (plus
- * for the new holder, minus for the old), so points-at-a-time (Kingslayer's leader) counts them.
+ * Titles: points held by whoever leads the table on a figure, from round 1, moving with the lead
+ * (`@empire/rules` `titles.ts` has the rule). Campaigns on mission rules version 5 play the catalog's
+ * titles, as the server does (`settleTitles` in apps/server/src/victory/settle.ts); a what-if can
+ * play others (`Variant.titles`), or none. Each move is marked in the history's awards (minus for
+ * the old holder, plus for the new), so points-at-a-time (Kingslayer's leader) counts them.
  */
-import type { DatasetIndex, StatKey, TerritoryId, UserId } from '@empire/rules';
+import {
+  TITLE_KINDS,
+  nextHolder,
+  titleFigure,
+  type DatasetIndex,
+  type StatKey,
+  type TerritoryId,
+  type TitleKind,
+  type UserId,
+} from '@empire/rules';
 import { nextSeq, note } from './state';
 import type { SimState } from './types';
 
 /**
- * Military might, a figure made up for titles so that one country can't own the title (the USA has
- * 37% of the world's military spending, but 5% of its soldiers): each country's share of the
- * world's military spending and of its armed forces, averaged and counted per 1,000 of the world.
+ * Military might as the what-ifs tried it (docs/balance-report.md, "Military might instead of
+ * military spending"): each country's share of the world's military spending and of its armed
+ * forces, averaged, per 1,000 of the world.
  * - `mightBlend`: the shares as they are.
- * - `mightSqrt`: shares of the square roots, which flattens the giants (the top country has 5.6%).
- * - `mightMixed`: the square root of spending, armed forces as they are (China, the USA and India
- *   about level at 7% each).
+ * - `mightSqrt`: shares of the square roots (what version 5 plays, as `military`).
+ * - `mightMixed`: the square root of spending, armed forces as they are.
  * Unknown figures count as zero.
  */
 export const MIGHT_KEYS = ['mightBlend', 'mightSqrt', 'mightMixed'] as const;
 export type MightKey = (typeof MIGHT_KEYS)[number];
-export type TitleStat = StatKey | MightKey;
+/** What a title can count: the catalog's titles, a dataset figure, or a might the what-ifs tried. */
+export type TitleStat = TitleKind | StatKey | MightKey;
 
 const MIGHT: Record<MightKey, [(x: number) => number, (x: number) => number]> = {
   mightBlend: [(x) => x, (x) => x],
@@ -32,8 +40,7 @@ const MIGHT: Record<MightKey, [(x: number) => number, (x: number) => number]> = 
 
 const mightCache = new WeakMap<DatasetIndex, Map<MightKey, Map<TerritoryId, number>>>();
 
-/** A military might figure for every country of the map. */
-export function mightOf(idx: DatasetIndex, key: MightKey): Map<TerritoryId, number> {
+function mightOf(idx: DatasetIndex, key: MightKey): Map<TerritoryId, number> {
   let byKey = mightCache.get(idx);
   if (!byKey) mightCache.set(idx, (byKey = new Map()));
   let out = byKey.get(key);
@@ -48,54 +55,48 @@ export function mightOf(idx: DatasetIndex, key: MightKey): Map<TerritoryId, numb
   return out;
 }
 
+const isKind = (key: TitleStat): key is TitleKind => (TITLE_KINDS as readonly string[]).includes(key);
 const isMight = (key: TitleStat): key is MightKey => (MIGHT_KEYS as readonly string[]).includes(key);
 
-export type TitleHolders = ReadonlyMap<TitleStat, UserId | null>;
-
-/** Each player's totals for the titles' figures, unknown figures counting as zero. */
-function totals(s: SimState, stats: readonly TitleStat[], owners: Iterable<[TerritoryId, UserId]>) {
-  const figure = stats.map((key) => {
-    if (isMight(key)) {
-      const might = mightOf(s.idx, key);
-      return (id: TerritoryId) => might.get(id) ?? 0;
-    }
-    return (id: TerritoryId) => s.idx.byId.get(id)?.stats[key] ?? 0;
-  });
-  const out = new Map<UserId, number[]>(s.players.map((p) => [p.id, stats.map(() => 0)]));
-  for (const [id, owner] of owners) {
-    const row = out.get(owner);
-    if (!row || !s.idx.byId.has(id)) continue;
-    figure.forEach((f, i) => (row[i]! += f(id)));
+function figureOf(idx: DatasetIndex, key: TitleStat): (id: TerritoryId) => number {
+  if (isKind(key)) return (id) => titleFigure(idx, key, id);
+  if (isMight(key)) {
+    const might = mightOf(idx, key);
+    return (id) => might.get(id) ?? 0;
   }
-  return out;
+  return (id) => idx.byId.get(id)?.stats[key] ?? 0;
 }
 
-const ownersOf = (s: SimState): Iterable<[TerritoryId, UserId]> =>
-  [...s.holdings].map(([id, h]): [TerritoryId, UserId] => [id, h.ownerId]);
+/** The titles a campaign plays: the variant's (null: none), else its mission rules version's. */
+export function titleRules(s: SimState): { stats: readonly TitleStat[]; points: number } | null {
+  const variant = s.cfg.variant?.titles;
+  if (variant !== undefined) return variant;
+  return s.mr.titles ? { stats: s.mr.titles.kinds, points: s.mr.titles.points } : null;
+}
+
+export type TitleHolders = ReadonlyMap<TitleStat, UserId | null>;
 
 /** Who would hold each title with this map, given who holds them now. */
 export function titleHoldersFor(
   s: SimState,
-  owners: Iterable<[TerritoryId, UserId]>,
+  owners: Iterable<readonly [TerritoryId, UserId]>,
   current: TitleHolders = s.titles,
 ): Map<TitleStat, UserId | null> {
-  const stats = s.cfg.variant?.titles?.stats ?? [];
-  const sums = totals(s, stats, owners);
-  const out = new Map<TitleStat, UserId | null>();
-  stats.forEach((key, i) => {
-    let top = -Infinity;
-    for (const row of sums.values()) top = Math.max(top, row[i]!);
-    const leaders = [...sums].filter(([, row]) => row[i] === top).map(([id]) => id);
-    const holder = current.get(key) ?? null;
-    if (holder !== null && leaders.includes(holder)) out.set(key, holder);
-    else out.set(key, leaders.length === 1 && top > 0 ? leaders[0]! : null);
-  });
-  return out;
+  const stats = titleRules(s)?.stats ?? [];
+  const figures = stats.map((key) => figureOf(s.idx, key));
+  const sums = stats.map(() => new Map(s.players.map((p) => [p.id, 0])));
+  for (const [id, owner] of owners) {
+    figures.forEach((f, i) => {
+      const row = sums[i]!;
+      if (row.has(owner)) row.set(owner, row.get(owner)! + f(id));
+    });
+  }
+  return new Map(stats.map((key, i) => [key, nextHolder(sums[i]!, current.get(key) ?? null)]));
 }
 
 /** Title points a player holds under these holders. */
 export function titlePointsOf(s: SimState, holders: TitleHolders, userId: UserId): number {
-  const per = s.cfg.variant?.titles?.points ?? 0;
+  const per = titleRules(s)?.points ?? 0;
   let n = 0;
   for (const holder of holders.values()) if (holder === userId) n += per;
   return n;
@@ -107,9 +108,10 @@ export const titlesOf = (s: SimState, userId: UserId): TitleStat[] =>
 
 /** Moves titles to whoever leads now, adjusting points. Whether any moved. */
 export function settleTitles(s: SimState): boolean {
-  const cfg = s.cfg.variant?.titles;
+  const cfg = titleRules(s);
   if (!cfg) return false;
-  const next = titleHoldersFor(s, ownersOf(s));
+  const owners = [...s.holdings].map(([id, h]): [TerritoryId, UserId] => [id, h.ownerId]);
+  const next = titleHoldersFor(s, owners);
   let moved = false;
   for (const [key, holder] of next) {
     const before = s.titles.get(key) ?? null;

@@ -63,7 +63,7 @@ import { accordInForce, answer, propose, renounce } from '../engine/diplomacy';
 import type { DraftPicker } from '../engine/lifecycle';
 import { heldBy, pointsToWin } from '../engine/state';
 import type { SimAccord, SimPeaceOffer, SimPlayer, SimState, SimWar } from '../engine/types';
-import { titleHoldersFor, titlePointsOf } from '../engine/titles';
+import { titleHoldersFor, titlePointsOf, titleRules } from '../engine/titles';
 import { hasScored, isComplete } from '../engine/victory';
 import type { Declaration, Reply, Response } from '../engine/wars';
 import { missionWorld } from '../engine/world';
@@ -253,7 +253,7 @@ function rivalSwing(ctx: Ctx, rivalId: UserId, after: MissionWorld): number {
  */
 function titleSwing(ctx: Ctx, opponentId: UserId, owners: ReadonlyMap<TerritoryId, UserId>): number {
   const { s } = ctx;
-  if (!s.cfg.variant?.titles || ctx.knobs.titleWeight === 0) return 0;
+  if (!titleRules(s) || ctx.knobs.titleWeight === 0) return 0;
   const next = titleHoldersFor(s, owners);
   const mine = titlePointsOf(s, next, ctx.me) - titlePointsOf(s, s.titles, ctx.me);
   const theirs = titlePointsOf(s, next, opponentId) - titlePointsOf(s, s.titles, opponentId);
@@ -459,9 +459,7 @@ function preScore(ctx: Ctx, targetId: TerritoryId): number {
   for (const m of rivalModels(ctx, defenderId))
     if (m.complete && m.critical.has(targetId)) block += rivalStake(ctx, defenderId, m);
   // Titles the target alone would move, where the campaign has them.
-  const titles = s.cfg.variant?.titles
-    ? titleSwing(ctx, defenderId, new Map(ctx.world.owners).set(targetId, ctx.me))
-    : 0;
+  const titles = titleRules(s) ? titleSwing(ctx, defenderId, new Map(ctx.world.owners).set(targetId, ctx.me)) : 0;
   return (
     o.attacker * (t.value + progressGain(ctx, ctx.mine, [targetId], e) + block + titles) -
     o.defender * stakeFloor(s.rules, t.value) +

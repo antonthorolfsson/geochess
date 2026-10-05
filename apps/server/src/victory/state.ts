@@ -58,6 +58,7 @@ type ResolvedPayload = Extract<CampaignEvent, { type: 'war.resolved' }>['payload
 type SignedPayload = Extract<CampaignEvent, { type: 'accord.signed' }>['payload'];
 type BrokenPayload = Extract<CampaignEvent, { type: 'accord.broken' }>['payload'];
 type AwardedPayload = Extract<CampaignEvent, { type: 'mission.awarded' }>['payload'];
+type TitlePayload = Extract<CampaignEvent, { type: 'title.changed' }>['payload'];
 
 const HISTORY_EVENTS = [
   'war.declared',
@@ -67,6 +68,7 @@ const HISTORY_EVENTS = [
   'accord.kept',
   'round.started',
   'mission.awarded',
+  'title.changed',
 ];
 
 /**
@@ -164,6 +166,13 @@ export async function loadHistory(db: Tx | Db, campaignId: string): Promise<Miss
         history.awards.push({ userId: p.userId, points: p.points, seq: e.id });
         break;
       }
+      // A title's points go with it: minus for who lost it, plus for who took it.
+      case 'title.changed': {
+        const p = e.payload as TitlePayload;
+        if (p.from) history.awards.push({ userId: p.from, points: -p.points, seq: e.id });
+        if (p.to) history.awards.push({ userId: p.to, points: p.points, seq: e.id });
+        break;
+      }
     }
   }
   return history;
@@ -227,9 +236,19 @@ export async function loadOpenWars(db: Tx | Db, campaignId: string): Promise<Ope
   }));
 }
 
-/** Each player's points, from the award ledger. */
-export function pointsOf(awards: readonly Pick<AwardRow, 'userId' | 'points'>[], memberIds: readonly string[]) {
+/** Each player's points: the award ledger, and the titles they hold now (mission rules version 5 on). */
+export function pointsOf(
+  awards: readonly Pick<AwardRow, 'userId' | 'points'>[],
+  memberIds: readonly string[],
+  campaign?: Pick<CampaignRow, 'rules' | 'titles'>,
+) {
   const points = new Map(memberIds.map((id) => [id, 0]));
   for (const a of awards) points.set(a.userId, (points.get(a.userId) ?? 0) + a.points);
+  const per = campaign ? (missionRules(campaign.rules.victory.version).titles?.points ?? 0) : 0;
+  if (per > 0) {
+    for (const holder of Object.values(campaign!.titles)) {
+      if (holder && points.has(holder)) points.set(holder, points.get(holder)! + per);
+    }
+  }
   return points;
 }

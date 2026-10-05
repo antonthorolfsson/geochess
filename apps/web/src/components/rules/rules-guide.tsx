@@ -25,6 +25,7 @@ import {
   REPUTATION_PER_ROUND,
   REPUTATION_START,
   RESPONSE_WINDOW_TEXT,
+  TITLES,
   SUPPLY_LINE_PCT,
   TERRAIN_PCT,
   TURN_WINDOW_TEXT,
@@ -310,6 +311,9 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
           {rules.victory.mode === 'objectives' ? 'once everyone has a secret mission' : 'the moment the draft ends'},
           and everyone gets {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves
           in rounds, and the host starts each one.
+          {rules.victory.mode === 'objectives' &&
+            missionRules(rules.victory.version).titles &&
+            ' The titles go to whoever leads the table on population, land, GDP and military might.'}
           {rules.victory.mode === 'objectives' &&
             ` The first to ${missionRules(rules.victory.version).points.toWin} victory points wins${
               lastRoundOf(rules) === null ? '' : `, or the most points once round ${lastRoundOf(rules)} is over`
@@ -1185,7 +1189,9 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
     );
   }
   const cfg = missionRules(rules.victory.version);
-  const { points } = cfg;
+  const { points, titles } = cfg;
+  const titleNames = joinWords((titles?.kinds ?? []).map((k) => TITLES[k].name));
+  const titlePts = titles ? `${titles.points} ${titles.points === 1 ? 'point' : 'points'}` : '';
   const hold = durationText(holdMs(rules));
   const holdOther = standard
     ? ` (${durationText(cfg.holdMinutes[rules.war.pace === 'live' ? 'correspondence' : 'live'] * 60_000)} in ${
@@ -1204,9 +1210,19 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
     <Section id="ending" title="Winning">
       <p className="text-lg">
         The first to {points.toWin} victory points wins. Four public missions are worth {points.public} points each and
-        every player has one secret mission worth {points.secret}: two public missions and the secret make{' '}
-        {points.public * 2 + points.secret}, and all four public ones make {points.public * 4}, so a player can win
-        without their secret.
+        every player has one secret mission worth {points.secret}
+        {titles ? (
+          <>
+            , and {titles.kinds.length} titles are worth {titlePts} each to whoever leads the table on population, land,
+            GDP and military might. Missions make {points.public * 4 + points.secret} points at most, so a winner holds
+            a title or two as well.
+          </>
+        ) : (
+          <>
+            : two public missions and the secret make {points.public * 2 + points.secret}, and all four public ones make{' '}
+            {points.public * 4}, so a player can win without their secret.
+          </>
+        )}
         {last !== null &&
           ` If nobody has ${points.toWin} when round ${last} ends, the campaign ends anyway, and the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`}
         {standard && ' (The host can pick another last round, or none, in the lobby.)'}
@@ -1292,10 +1308,33 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             : `${joinWords(records)} are records, not positions: they score the moment they’re done.`}
         </p>
       </Part>
+      {titles && (
+        <Part title="Titles">
+          <p>
+            {titleNames} are worth {titlePts} each. When round 1 starts, each goes to the player whose countries add up
+            to the most people, the most land, the largest GDP, or the greatest military might. From then on a title
+            moves the moment someone passes its holder, in a war, a peace or anything else that moves a country, and its
+            points go with it: there is no claim and no waiting, so taking a title can win the campaign on the spot.
+          </p>
+          <p>
+            A holder who is only matched keeps the title. If someone passes the holder level with another player, or
+            several players share the lead when round 1 starts, nobody holds it until one of them leads alone.
+          </p>
+          <p>
+            Military might counts each country&apos;s share of the world&apos;s military spending and its share of the
+            world&apos;s armed forces, averaged, both by their square roots, so that no superpower owns it: an empire of
+            middling armies can outrank one giant. The <UI>Missions</UI> tab shows who holds each title, their figure
+            and yours, and each holder&apos;s name carries the title&apos;s token.
+          </p>
+        </Part>
+      )}
       <Part title="Points and the finish">
         <p>
-          Points are never taken away: losing a country after a mission has scored costs nothing. When several players
-          reach {points.toWin} with the same change, the highest total wins, and equal totals share the victory.
+          {titles
+            ? 'Mission points are never taken away: losing a country after a mission has scored costs nothing. Only titles change hands.'
+            : 'Points are never taken away: losing a country after a mission has scored costs nothing.'}{' '}
+          When several players reach {points.toWin} with the same change, the highest total wins, and equal totals share
+          the victory.
         </p>
         <p>
           The campaign then ends and can no longer change: wars still underway are cancelled without a winner (their

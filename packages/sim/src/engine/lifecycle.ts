@@ -28,7 +28,7 @@ import {
 } from '@empire/rules';
 import { startRoundForAccords } from './diplomacy';
 import { heldBy, nextSeq, note, valueOfPlayer } from './state';
-import { titlesOf } from './titles';
+import { titleRules, titlesOf } from './titles';
 import { beginTurns } from './turns';
 import type { SimPlayer, SimState } from './types';
 import { settle, slotsFor } from './victory';
@@ -251,7 +251,7 @@ export function openCampaign(s: SimState): void {
   s.status = 'active';
   startRound(s, 1);
   settle(s);
-  if (s.cfg.variant?.titles) {
+  if (titleRules(s)) {
     s.titlesAtStart = Object.fromEntries(s.players.map((p) => [p.id, titlesOf(s, p.id)]));
   }
 }

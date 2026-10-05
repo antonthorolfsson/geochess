@@ -974,6 +974,41 @@ stakes; `whatif:original-stakes` plays the old. Findings in
 value per declaration for the attacker, the bots declare 3–6% less, and game length and missions
 don't move. The playtest should say whether people declare much less than the bots.
 
+**Titles, mission rules version 5** (2026-10-05, at the user's request after the simulator runs in
+[balance-report.md](balance-report.md#titles)). New campaigns play version 5: version 4's missions
+plus four titles worth a point each, with 10 points to win (from 7). Stored campaigns keep their
+version, so production's campaigns have no titles.
+
+- **The rule** (`packages/rules/src/victory/titles.ts`): Largest Population, Largest Territory,
+  Largest Economy (nominal GDP) and Greatest Military Might go to whoever leads the table on that
+  figure when round 1 starts (the first `settleVictory` of the war), and move the moment someone
+  passes the holder, points and all: no claim, no holding time, so taking one can win on the spot.
+  A holder who is only matched keeps it; a lead shared by players who don't hold it goes to nobody
+  (`nextHolder`). Unknown figures count as zero.
+- **Military might** (`militaryMight`): each country's share of the world's military spending and
+  of its armed forces, both by their square roots, averaged, in whole millionths of the world (so
+  sums are exact and the server and simulator agree to the unit); shown per thousand (USA 56.0,
+  China 41, India 31, Russia 29). The user chose it over spending (the USA held that title 92% of
+  the time) and over the plain or mixed blends.
+- **Server.** `campaigns.titles` (migration `0013_titles`) holds who has each. `settleVictory`
+  settles titles first, before missions, logging one public `title.changed` event per move (with
+  both players' totals) and notifying both; it then checks the finish line if a title moved even
+  when nothing was awarded. `pointsOf(awards, members, campaign)` adds title points everywhere
+  points are counted (the view, awards, `endSeason`); `loadHistory` turns `title.changed` into a
+  minus and a plus mark, so Kingslayer's "leader at the time" counts titles. The results keep each
+  player's titles. Bots see the holders (`LiveCampaign.titles`) and weigh titles a war would win,
+  keep or lose (`titleSwing` in the simulator's standard bot).
+- **Simulator.** Version 5 plays the catalog's titles through the rules package
+  (`engine/titles.ts` keeps the what-ifs' other figures); the parity test passes. `whatif:no-titles`
+  plays version 4's scoring. Scripted sim tests and the server's mission tests pin version 4 so
+  missions alone score; titles have their own tests.
+- **Web.** The tokens (art in `media/titles/`, rendered to `apps/web/public/titles/` by
+  `pnpm --filter @empire/web titles`) sit after every player's name in a campaign: `PlayerName`
+  reads the holders from `TitlesProvider` (`components/victory/title-tokens.tsx`), overlapping like
+  a stack of coins at small sizes. The Missions tab has a Titles section (holder, figure, yours);
+  dispatches and toasts say when a title moves; the rules guide has a Titles part; the race uses
+  thinner marks for 10 points so names fit.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

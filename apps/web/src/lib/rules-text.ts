@@ -88,7 +88,9 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
   return [
     {
       label: 'Victory',
-      value: objectives ? `First to ${missionRules(victory.version).points.toWin} points` : 'Open-ended',
+      value: objectives
+        ? `First to ${missionRules(victory.version).points.toWin} points${missionRules(victory.version).titles ? ', with titles' : ''}`
+        : 'Open-ended',
     },
     ...(objectives
       ? [

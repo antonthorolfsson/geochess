@@ -13,7 +13,8 @@
     "start": "next start --port 3000",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "titles": "node scripts/make-titles.mjs"
   },
   "dependencies": {
     "@empire/rules": "workspace:*",

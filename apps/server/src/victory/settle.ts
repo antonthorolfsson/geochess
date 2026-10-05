@@ -9,14 +9,17 @@ import {
   missionName,
   missionRequirement,
   missionRules,
+  titleHolders,
+  TITLES,
   victoryWinners,
+  type MissionWorld,
 } from '@empire/rules';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { MutationScope } from '../campaigns/mutate';
 import { loadBoard } from '../wars/board';
 import { settleFinishedGames } from '../wars/service';
 import type { AppContext } from '../context';
-import { missionAwards, missionClaims, missionPlayers, users } from '../db/schema';
+import { campaigns, missionAwards, missionClaims, missionPlayers, users } from '../db/schema';
 import type { Notice } from '../notifications/notifier';
 import { finishCampaign } from './finish';
 import {
@@ -94,6 +97,65 @@ export async function revealSecret(
   }
 }
 
+/**
+ * Moves titles to whoever leads now (mission rules version 5 on): the campaign row keeps who holds
+ * each, and every move is logged with both players' points after it. Whether any moved.
+ */
+async function settleTitles(
+  ctx: AppContext,
+  scope: MutationScope,
+  world: MissionWorld,
+  points: Map<string, number>,
+  names: ReadonlyMap<string, string>,
+): Promise<boolean> {
+  const { tx } = scope;
+  const campaign = scope.campaign;
+  const cfg = missionRules(campaign.rules.victory.version).titles;
+  if (!cfg) return false;
+  const memberIds = scope.members.map((m) => m.userId);
+  const next = titleHolders(world.idx, world.owners, memberIds, campaign.titles, cfg.kinds);
+  const moved = cfg.kinds.filter((k) => (campaign.titles[k] ?? null) !== next[k]);
+  if (moved.length === 0) return false;
+  await tx.update(campaigns).set({ titles: next }).where(eq(campaigns.id, campaign.id));
+  scope.campaign = { ...campaign, titles: next };
+  for (const title of moved) {
+    const from = campaign.titles[title] ?? null;
+    const to = next[title];
+    if (from) points.set(from, (points.get(from) ?? 0) - cfg.points);
+    if (to) points.set(to, (points.get(to) ?? 0) + cfg.points);
+    const totals = Object.fromEntries([from, to].filter((id) => id !== null).map((id) => [id, points.get(id!) ?? 0]));
+    await scope.log.add(
+      { type: 'title.changed', payload: { title, from, to, points: cfg.points, totals } },
+      null,
+      campaign.round,
+    );
+    const name = TITLES[title].name;
+    if (to) {
+      notifyAfter(ctx, scope, {
+        userId: to,
+        title: `+${cfg.points} victory point: ${name}`,
+        body: from
+          ? `You took ${name} from ${names.get(from) ?? 'a rival'}. It's yours while nobody passes you.`
+          : `You hold ${name}. It's yours while nobody passes you.`,
+        url: missionsUrl(campaign.id),
+        tag: `title:${campaign.id}:${title}`,
+      });
+    }
+    if (from) {
+      notifyAfter(ctx, scope, {
+        userId: from,
+        title: `${name} lost`,
+        body: to
+          ? `${names.get(to) ?? 'A rival'} passed you and took ${name}, and its point.`
+          : `Someone matched you, and ${name} is held by nobody until one of you leads.`,
+        url: missionsUrl(campaign.id),
+        tag: `title:${campaign.id}:${title}`,
+      });
+    }
+  }
+  return true;
+}
+
 interface Award {
   userId: string;
   mission: MissionSlot;
@@ -132,6 +194,9 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
   const round = campaign.round;
   const hold = holdMs(campaign.rules);
   const due: Award[] = [];
+  // Titles first, from the map as it is now; the simulator settles them in the same order.
+  const points = pointsOf(awards, memberIds, campaign);
+  const titlesMoved = await settleTitles(ctx, scope, world, points, names);
 
   for (const player of players) {
     const { userId } = player;
@@ -227,11 +292,10 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
       if (served && blockers.length === 0) due.push({ userId, mission, claim });
     }
   }
-  if (due.length === 0) return;
+  if (due.length === 0 && !titlesMoved) return;
 
   // Every award of this change first, then the finish line.
   const cfg = missionRules(campaign.rules.victory.version);
-  const points = pointsOf(awards, memberIds);
   const awarded: Award[] = [];
   for (const a of due) {
     const inserted = await tx
@@ -280,7 +344,7 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
       tag: `award:${campaign.id}:${a.mission.key}`,
     });
   }
-  if (awarded.length === 0) return;
+  if (awarded.length === 0 && !titlesMoved) return;
   const winners = victoryWinners(points, cfg.points.toWin);
   if (winners.length > 0) await finishCampaign(ctx, scope, { players, world, points, winners, names });
 }

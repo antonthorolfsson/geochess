@@ -5,6 +5,7 @@ import {
   missionRules,
   seasonMeasures,
   seasonWinners,
+  titlesHeldBy,
   valueOfSet,
   type MissionWorld,
   type VictoryResultView,
@@ -61,7 +62,7 @@ export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<
   const memberIds = scope.members.map((m) => m.userId);
   const players = await loadPlayers(tx, campaign.id);
   const world = await loadWorld(ctx, tx, campaign, memberIds, players);
-  const points = pointsOf(await loadAwards(tx, campaign.id), memberIds);
+  const points = pointsOf(await loadAwards(tx, campaign.id), memberIds, campaign);
   const tiebreak = campaign.rules.victory.tiebreak;
   const standings = new Map(
     memberIds.map((id) => [
@@ -154,6 +155,7 @@ export async function finishCampaign(
         value: valueOfSet(idx, held),
         measures: [...seasonMeasures(idx, held, tiebreak)],
         countries: held.length,
+        ...(cfg.titles && { titles: titlesHeldBy(campaign.titles, userId) }),
         awards: awards.filter((a) => a.userId === userId),
         secret,
       };

@@ -13,6 +13,8 @@ import {
   type MissionHistory,
   type SecretOption,
   type TerritoryId,
+  type TitleHolders,
+  type TitleKind,
   type TurnState,
   type UserId,
 } from '@empire/rules';
@@ -59,6 +61,8 @@ export interface LiveCampaign {
   awards: Award[];
   /** Declaring in turns this round, or null where anyone declares whenever they like. */
   turns: TurnState | null;
+  /** Who holds each title (mission rules version 5 on). */
+  titles?: TitleHolders;
 }
 
 export function liveState(c: LiveCampaign): SimState {
@@ -85,10 +89,17 @@ export function liveState(c: LiveCampaign): SimState {
   };
   const points = new Map(c.players.map((p) => [p.id, 0]));
   for (const a of c.awards) points.set(a.userId, (points.get(a.userId) ?? 0) + a.points);
+  const mr = missionRules(c.rules.victory.version);
+  const titles = new Map<TitleKind, UserId | null>();
+  for (const kind of mr.titles?.kinds ?? []) {
+    const holder = c.titles?.[kind] ?? null;
+    titles.set(kind, holder);
+    if (holder && points.has(holder)) points.set(holder, points.get(holder)! + mr.titles!.points);
+  }
   return {
     cfg,
     rules: c.rules,
-    mr: missionRules(c.rules.victory.version),
+    mr,
     idx: c.idx,
     rng: streams(c.seed),
     seed: c.seed,
@@ -113,7 +124,7 @@ export function liveState(c: LiveCampaign): SimState {
     claimLog: [...c.claims],
     awards: c.awards,
     points,
-    titles: new Map(),
+    titles,
     titleMoves: 0,
     titlesAtStart: null,
     winners: [],

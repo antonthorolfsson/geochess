@@ -110,8 +110,8 @@ export function skill(recs: readonly Rec[]): string {
 
 /** Points a winner holds in titles at the end (what-ifs with titles), from their record. */
 function titlePointsAtEnd(r: Rec, p: Rec['seats'][number]): number {
-  const per = r.variant?.match(/^titles-(\d)/)?.[1];
-  return (p.titles?.length ?? 0) * Number(per ?? 0);
+  const per = r.titlePoints ?? Number(r.variant?.match(/^titles-(\d)/)?.[1] ?? 0);
+  return (p.titles?.length ?? 0) * per;
 }
 
 /**

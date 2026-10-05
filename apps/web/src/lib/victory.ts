@@ -4,6 +4,7 @@ import {
   missionRequirement,
   SEASON_MEASURE_NAMES,
   joinWords,
+  mightText,
   missionTargets,
   seasonDecider,
   tiebreakText,
@@ -13,6 +14,7 @@ import {
   type MissionView,
   type SeasonStanding,
   type TerritoryId,
+  type TitleKind,
   type VictoryPlayerView,
   type VictoryResultView,
   type WarView,
@@ -182,4 +184,18 @@ export function tiebreakClause(result: VictoryResultView): string {
   if (decider === null) return `, then ${tiebreakText(tiebreak)}`;
   const { text, format } = DECIDERS[tiebreak][decider]!;
   return `, then ${text}: ${format(first.measures![decider]!)} to ${format(rest.measures![decider]!)}`;
+}
+
+/** A title's figure as players read it: people, land, GDP, or military might per 1,000 of the world. */
+export function titleFigureText(kind: TitleKind, n: number): string {
+  switch (kind) {
+    case 'population':
+      return `${formatCount(n)} people`;
+    case 'land':
+      return formatAreaCompact(n);
+    case 'economy':
+      return formatUsd(n);
+    case 'military':
+      return mightText(n);
+  }
 }

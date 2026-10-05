@@ -992,6 +992,11 @@ then `pnpm sim:report stakes --compare baseline`.
 
 ## Titles
 
+_Adopted the same day as mission rules version 5: one point a title, 10 to win, with the
+square-root military might (below) for the military title. The simulator's baseline plays it now;
+`whatif:no-titles` plays version 4's scoring. The tables below were run on version 4 with titles as
+a what-if._
+
 _Added 5 October 2026, a what-if, not in the game. The idea under test: on top of the missions, a
 point or two for each of **the most population, the most land, the largest GDP and the largest
 military spending**, held by whoever leads the table on that figure from the moment the draft ends

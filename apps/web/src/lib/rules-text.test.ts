@@ -45,7 +45,7 @@ describe('rules in words', () => {
   it('lists the settings a campaign plays with', () => {
     const standard = Object.fromEntries(settingsList(DEFAULT_RULES).map((s) => [s.label, s.value]));
     expect(standard).toMatchObject({
-      Victory: 'First to 7 points',
+      Victory: 'First to 10 points, with titles',
       'Last round': 'Round 25, then the most points win',
       'Level on points': 'The largest population, then the most land, then the largest GDP',
       'Claims are held': '24 hours after the next round starts',

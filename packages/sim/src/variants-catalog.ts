@@ -628,3 +628,12 @@ for (const [key, name] of [
     },
   };
 }
+
+VARIANTS['no-titles'] = {
+  variant: {
+    name: 'no-titles',
+    description: 'No titles, 7 points to win: mission rules version 4 as it was played before titles.',
+    titles: null,
+    points: { toWin: 7 },
+  },
+};

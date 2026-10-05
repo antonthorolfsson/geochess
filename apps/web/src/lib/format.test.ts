@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatArea, formatAreaCompact, formatCount, formatUsd, ordinal, relativeTime } from './format';
+import {
+  formatArea,
+  formatAreaCompact,
+  formatCount,
+  formatTwh,
+  formatUsd,
+  formatWhole,
+  ordinal,
+  relativeTime,
+} from './format';
 import { safeNext } from './paths';
 
 describe('number formatting', () => {
@@ -11,9 +20,19 @@ describe('number formatting', () => {
     expect(formatAreaCompact(25_341_708)).toBe('25.3M km²');
   });
 
+  it('writes counts in full and energy in terawatt-hours', () => {
+    expect(formatWhole(4666)).toBe('4,666');
+    expect(formatTwh(9977.384)).toBe('9,977 TWh');
+    expect(formatTwh(34.412)).toBe('34.4 TWh');
+    expect(formatTwh(0.145)).toBe('0.145 TWh');
+    expect(formatTwh(0)).toBe('0 TWh');
+  });
+
   it('shows a dash for missing data', () => {
     expect(formatCount(null)).toBe('—');
     expect(formatUsd(null)).toBe('—');
+    expect(formatWhole(null)).toBe('—');
+    expect(formatTwh(null)).toBe('—');
   });
 
   it('writes ordinals', () => {

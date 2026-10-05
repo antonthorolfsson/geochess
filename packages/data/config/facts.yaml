@@ -1,0 +1,17 @@
+# The arsenals and energy table (facts/facts.json): figures the statistics pages show and no rule
+# reads, so editing this never changes a game. Rebuild with `pnpm --filter @empire/data facts` and
+# review facts/REPORT.md.
+#
+# Countries are matched to the statistics codes of canon.yaml: Global Firepower by name (the
+# territory's or a member's), Our World in Data by ISO code (or by name, below,
+# for an economy it gives none). The build fails on any Global
+# Firepower name it can't place, so list the ones spelled differently here.
+
+gfp_names:
+  Beliz: BLZ
+  Democratic Republic of the Congo: COD
+  Ivory Coast: CIV
+  Turkiye: TUR
+
+owid_names:
+  Kosovo: XKX

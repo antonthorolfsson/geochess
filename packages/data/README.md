@@ -10,6 +10,7 @@ pnpm --filter @empire/data generate --refresh  # re-download all sources first
 pnpm --filter @empire/data test                # check the committed dataset
 pnpm --filter @empire/data preview             # render SVG/PNG previews into raw/
 pnpm --filter @empire/data openings            # build openings/openings.json (offline after the first run)
+pnpm --filter @empire/data facts               # build facts/facts.json (offline after the first run)
 ```
 
 Downloads are cached in `raw/` (gitignored), so rebuilding is fast and needs no network. Only
@@ -54,6 +55,16 @@ every named position of the [Lichess openings list](https://github.com/lichess-o
 from `@empire/rules`), so games are named however they reached a position. The server names each
 game's opening with it for the chess profiles. Campaigns don't pin it: a renamed opening is
 harmless.
+
+The arsenals and energy table is separate too: `facts/facts.json` (`FactTable` from
+`@empire/rules`) holds each territory's standing army, tanks, combat aircraft (fighters and attack
+aircraft) and naval ships from Global Firepower 2025, and its oil, gas and electricity production
+in TWh a year from Our World in Data, each with its year. Both sources are pinned to a commit in
+`scripts/facts.ts`; `config/facts.yaml` maps the names that differ from the canon, and the build
+fails on any it can't place. A territory sums its statistics codes as the dataset does; review
+`facts/REPORT.md` after a rebuild. Only the statistics pages show these figures and no rule reads
+them, so the table isn't versioned with the datasets: territory ids are the same in every version,
+and a revised figure changes no game.
 
 ## What the build does
 
@@ -120,6 +131,10 @@ The game must show `Dataset.attribution` (for example on an About screen):
 - **World Bank World Development Indicators**: CC BY 4.0, attribution required:
   "World Bank, World Development Indicators, CC BY 4.0".
 - **Lichess openings list** (opening names): CC0, no attribution required, credited anyway.
+- **Global Firepower** (arsenals, 2025 edition), via a third-party scrape on GitHub: not openly
+  licensed, credited on the statistics pages.
+- **Our World in Data** energy dataset (oil, gas, electricity): CC BY 4.0, from the Energy
+  Institute Statistical Review of World Energy, Ember and The Shift Project.
 - **Gap estimates**, listed per figure in `REPORT.md`: IMF World Economic Outlook, Eurostat
   (CC BY 4.0), Statistics Netherlands (CBS, CC BY 4.0), SIPRI Military Expenditure Database
   (free to use with attribution), INSEE, UN World Population Prospects via UNFPA, the CIA World
@@ -132,8 +147,10 @@ The game must show `Dataset.attribution` (for example on an About screen):
 config/            hand-edited decisions (YAML)
 datasets/          committed outputs, one directory per version
 openings/          the opening names table (committed output)
+facts/             the arsenals and energy table and its report (committed output)
 scripts/build.ts   the pipeline entry point
 scripts/openings.ts builds the opening names table
+scripts/facts.ts   builds the arsenals and energy table
 scripts/preview.ts SVG/PNG previews for eyeballing the map
 scripts/lib/       pipeline modules (canon, geometry, adjacency, sealanes, stats, values, ...)
 test/              checks run against the latest committed dataset

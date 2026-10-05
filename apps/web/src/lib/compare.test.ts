@@ -1,4 +1,11 @@
-import { indexDataset, type ChessProfile, type Dataset, type WarRecord, type WarTally } from '@empire/rules';
+import {
+  indexDataset,
+  type ChessProfile,
+  type Dataset,
+  type FactTable,
+  type WarRecord,
+  type WarTally,
+} from '@empire/rules';
 import { lineDataset, makeTerritory } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
 import { amountOf, chessResults, leaderOf, score, shareRow, warResults, worldAmount } from './compare';
@@ -63,6 +70,21 @@ describe('measuring empires', () => {
     const people = shareRow(idx, holdings, ['bo', 'ann', 'cy'], 'population');
     expect(people.parts.map((p) => p.share)).toEqual([50 / 115, 25 / 115, 0]);
     expect(people.parts[2]!.amount).toBeNull();
+  });
+
+  it('measure arsenals and energy from their table', () => {
+    const facts: FactTable = {
+      generatedAt: '2026-10-05T00:00:00.000Z',
+      attribution: [],
+      sources: {} as FactTable['sources'],
+      territories: { A: { oilTwh: { value: 30, year: 2024 } }, C: { oilTwh: { value: 10, year: 2016 } } },
+    };
+    expect(amountOf(idx, ['C', 'E'], 'oilTwh', facts)).toBe(10);
+    expect(amountOf(idx, ['C', 'E'], 'oilTwh')).toBeNull();
+    expect(worldAmount(idx, 'oilTwh', facts)).toBe(40);
+    const oil = shareRow(idx, holdings, ['bo', 'ann', 'cy'], 'oilTwh', facts);
+    expect(oil.parts.map((p) => p.share)).toEqual([0.75, 0.25, 0]);
+    expect(oil.unclaimed).toBe(0);
   });
 });
 

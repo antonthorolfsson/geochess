@@ -1,4 +1,4 @@
-import { indexDataset, type Dataset } from '@empire/rules';
+import { indexDataset, type Dataset, type FactTable } from '@empire/rules';
 import { lineDataset, makeTerritory } from '@empire/rules/testing';
 import { describe, expect, it } from 'vitest';
 import { empireFigures, formatShare, totalOf, valueRank } from './empire';
@@ -19,6 +19,17 @@ const holdings = new Map([
   ['bo', ['A']],
   ['cy', []],
 ]);
+/** Tanks for A, C and D only. */
+const facts: FactTable = {
+  generatedAt: '2026-10-05T00:00:00.000Z',
+  attribution: [],
+  sources: {} as FactTable['sources'],
+  territories: {
+    A: { tanks: { value: 100, year: 2025 } },
+    C: { tanks: { value: 40, year: 2025 } },
+    D: { tanks: { value: 60, year: 2025 } },
+  },
+};
 
 describe('empire figures', () => {
   it('total a figure, with its share of the world', () => {
@@ -49,6 +60,20 @@ describe('empire figures', () => {
     expect(gdpNominalUsd).toMatchObject({ total: null, missing: 2, share: null, worldRank: null, empireRank: null });
     expect(empireFigures(idx, holdings, 'cy').population).toMatchObject({ total: null, missing: 0 });
     expect(totalOf(idx, ['A', 'nowhere'], 'population')).toBe(50e6);
+  });
+
+  it('count the arsenals and energy figures from their table', () => {
+    const { tanks } = empireFigures(idx, holdings, 'ann', facts);
+    // Ann holds C (40) and E (none): 40 of the world's 200, behind D (60) and A (100).
+    expect(tanks).toMatchObject({ total: 40, missing: 1, estimated: 0, share: 0.2, worldRank: 3, empireRank: 2 });
+    expect([tanks.above?.id, tanks.below]).toEqual(['D', null]);
+    expect(empireFigures(idx, holdings, 'bo', facts).tanks).toMatchObject({ total: 100, worldRank: 1, empireRank: 1 });
+    expect(totalOf(idx, ['A', 'C', 'E'], 'tanks', facts)).toBe(140);
+  });
+
+  it('leave the arsenals and energy figures blank until their table loads', () => {
+    expect(empireFigures(idx, holdings, 'bo').tanks).toMatchObject({ total: null, worldRank: null, share: null });
+    expect(totalOf(idx, ['A'], 'tanks')).toBeNull();
   });
 
   it('place empires by game value, ties sharing a place', () => {

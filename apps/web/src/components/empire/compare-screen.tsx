@@ -5,6 +5,7 @@ import {
   REPUTATION_START,
   type CampaignStats,
   type EmpireRecordView,
+  type FactTable,
   type MemberView,
 } from '@empire/rules';
 import Link from 'next/link';
@@ -24,8 +25,9 @@ import {
   type Results,
 } from '@/lib/compare';
 import { formatShare } from '@/lib/empire';
+import { FACT_ROWS, FACTS_CREDIT, FACTS_NOTE } from '@/lib/facts';
 import { formatAreaCompact, formatCount, formatInt, formatUsd } from '@/lib/format';
-import { useCampaignStats } from '@/lib/queries';
+import { useCampaignStats, useFacts } from '@/lib/queries';
 import { useElementWidth } from '@/lib/use-element-width';
 import { PlayerName } from '../campaign/player-name';
 import { useCampaignRoom, useEmpireHref } from '../campaign/room-context';
@@ -36,8 +38,10 @@ import { HistoryChart } from './history-chart';
 
 const formatPlain = (n: number | null) => (n === null ? '—' : formatInt(n));
 
+type Share = { measure: Measure; label: string; format(n: number | null): string };
+
 /** The measures empires are split by, as on the empire page's real-world totals. */
-const SHARES: { measure: Measure; label: string; format(n: number | null): string }[] = [
+const SHARES: Share[] = [
   { measure: 'value', label: 'Game value', format: formatPlain },
   { measure: 'countries', label: 'Countries', format: formatPlain },
   { measure: 'population', label: 'Population', format: formatCount },
@@ -47,6 +51,9 @@ const SHARES: { measure: Measure; label: string; format(n: number | null): strin
   { measure: 'militarySpendingUsd', label: 'Military spending', format: formatUsd },
   { measure: 'armedForces', label: 'Armed forces', format: formatCount },
 ];
+
+/** The arsenals and energy, split the same way. */
+const FACT_SHARES: Share[] = FACT_ROWS.map(({ key, label, format }) => ({ measure: key, label, format }));
 
 /** Unclaimed land, as on the map. */
 const UNCLAIMED = '#4b5320';
@@ -62,6 +69,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function CompareScreen() {
   const { model } = useCampaignRoom();
   const stats = useCampaignStats(model.campaign.id);
+  const facts = useFacts();
   const { status, victory } = model.campaign;
   const showPoints = victory !== null && (status === 'active' || status === 'finished');
   const pointsOf = new Map(victory?.players.map((p) => [p.userId, p.points]) ?? []);
@@ -97,7 +105,16 @@ export function CompareScreen() {
               {stats.data ? <HistoryChart model={model} history={stats.data.history} userId={null} /> : pending}
             </Section>
             <Section title="Shares of the world" note="Each empire’s part of the whole map’s total">
-              <ShareBars model={model} order={order} />
+              <ShareBars model={model} order={order} shares={SHARES} />
+            </Section>
+            <Section title="Arsenals and energy" note={`${FACTS_NOTE}, as shares of the whole map’s`}>
+              {facts.data ? (
+                <ShareBars model={model} order={order} shares={FACT_SHARES} facts={facts.data} />
+              ) : facts.error ? (
+                <Notice tone="error">{errorMessage(facts.error)}</Notice>
+              ) : (
+                <Spinner label="Counting the arsenals" />
+              )}
             </Section>
             <Section title="Wars" note="Won, drawn and lost, attacking and defending">
               {stats.data ? <WarBars model={model} order={order} stats={stats.data} /> : pending}
@@ -115,8 +132,8 @@ export function CompareScreen() {
         </>
       )}
       <p className="border-t border-line pt-4 text-xs text-faint">
-        Country data: World Bank World Development Indicators (CC BY 4.0) and Natural Earth. Shares count every country
-        on the map, claimed or not, that has the figure.
+        Country data: World Bank World Development Indicators (CC BY 4.0) and Natural Earth. {FACTS_CREDIT} Shares count
+        every country on the map, claimed or not, that has the figure.
       </p>
     </article>
   );
@@ -289,7 +306,18 @@ function LeaderName({ model, userId }: { model: CampaignModel; userId: string })
  * the world unclaimed. Picking an empire (from the key or a bar) quiets the others and reads its
  * figures out beside each bar.
  */
-function ShareBars({ model, order }: { model: CampaignModel; order: MemberView[] }) {
+function ShareBars({
+  model,
+  order,
+  shares,
+  facts = null,
+}: {
+  model: CampaignModel;
+  order: MemberView[];
+  shares: Share[];
+  /** The arsenals and energy table, for measures from it. */
+  facts?: FactTable | null;
+}) {
   const [pinned, setPinned] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [ref, width] = useElementWidth();
@@ -343,8 +371,8 @@ function ShareBars({ model, order }: { model: CampaignModel; order: MemberView[]
         </defs>
       </svg>
       <ul ref={ref} className="space-y-3">
-        {SHARES.map(({ measure, label, format }) => {
-          const row = shareRow(model.idx, model.holdingsByUser, ids, measure);
+        {shares.map(({ measure, label, format }) => {
+          const row = shareRow(model.idx, model.holdingsByUser, ids, measure, facts);
           const part = lit === null ? null : row.parts.find((p) => p.userId === lit);
           const name = (u: string) => (u === model.me.userId ? 'You' : (model.membersById.get(u)?.name ?? 'Unknown'));
           const top = row.parts.reduce<(typeof row.parts)[number] | null>(

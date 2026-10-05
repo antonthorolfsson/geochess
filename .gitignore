@@ -15,6 +15,7 @@ packages/data/raw/
 
 # Datasets are copied into the web app at dev/build time
 apps/web/public/datasets/
+apps/web/public/facts/
 
 .DS_Store
 

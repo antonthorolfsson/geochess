@@ -5,8 +5,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
+import { FACT_ROWS } from '@/lib/facts';
 import { formatArea, formatCount, formatUsd } from '@/lib/format';
-import { keys } from '@/lib/queries';
+import { keys, useFacts } from '@/lib/queries';
 import { EmpireSwatch } from '../hatch';
 import { Notice, ValueBadge } from '../ui';
 import { WarAction } from './declare-war';
@@ -54,6 +55,7 @@ export function TerritoryPanel({
   const { reset } = claim;
   useEffect(() => reset(), [territoryId, reset]);
   const empireHref = useEmpireHref(campaignId);
+  const facts = useFacts().data;
 
   const t = model.idx.byId.get(territoryId);
   if (!t) return null;
@@ -132,6 +134,28 @@ export function TerritoryPanel({
             );
           })}
         </dl>
+
+        {facts && (
+          <section aria-label="Arsenal and energy">
+            <h3 className="label mb-1 border-t border-line pt-2 lg:mb-2 lg:pt-3">Arsenal and energy</h3>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:gap-y-3">
+              {FACT_ROWS.map(({ key, label, format }) => {
+                const fact = facts.territories[t.id]?.[key];
+                return (
+                  <div key={key} className="min-w-0">
+                    <dt className="label">{label}</dt>
+                    <dd
+                      title={fact ? `${facts.sources[key]}${fact.year === null ? '' : `, ${fact.year}`}` : undefined}
+                      className="truncate text-base font-semibold tabular-nums lg:text-lg"
+                    >
+                      {format(fact?.value ?? null)}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </section>
+        )}
 
         {(t.terrain.length > 0 || t.members.length > 0) && (
           <div className="space-y-2 text-[0.95rem]">

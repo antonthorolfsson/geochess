@@ -13,8 +13,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { errorMessage } from '@/lib/api';
 import { totalValue, type CampaignModel } from '@/lib/campaign';
 import { empireFigures, formatShare, valueRank, type EmpireFigure } from '@/lib/empire';
+import { FACT_ROWS, FACTS_CREDIT, FACTS_NOTE } from '@/lib/facts';
 import { formatArea, formatAreaCompact, formatCount, formatUsd, ordinal } from '@/lib/format';
-import { useCampaignStats } from '@/lib/queries';
+import { useCampaignStats, useFacts } from '@/lib/queries';
 import { playerName } from '@/lib/wars';
 import { BotTag } from '../campaign/player-name';
 import { useCampaignRoom, useCompareHref, useEmpireHref } from '../campaign/room-context';
@@ -100,7 +101,7 @@ export function EmpireScreen({ userId }: { userId: string }) {
       </Section>
       <p className="border-t border-line pt-4 text-xs text-faint">
         Country data: World Bank World Development Indicators (CC BY 4.0) and Natural Earth. Figures marked est. include
-        estimates. Opening names: the Lichess openings list (public domain).
+        estimates. {FACTS_CREDIT} Opening names: the Lichess openings list (public domain).
       </p>
     </article>
   );
@@ -175,6 +176,7 @@ function EmpireHeader({ model, userId }: { model: CampaignModel; userId: string 
 }
 
 function Totals({ model, userId }: { model: CampaignModel; userId: string }) {
+  const facts = useFacts();
   const ids = model.holdingsByUser.get(userId) ?? [];
   if (ids.length === 0) {
     return (
@@ -183,7 +185,7 @@ function Totals({ model, userId }: { model: CampaignModel; userId: string }) {
       </p>
     );
   }
-  const figures = empireFigures(model.idx, model.holdingsByUser, userId);
+  const figures = empireFigures(model.idx, model.holdingsByUser, userId, facts.data ?? null);
   const empires = model.campaign.members.length;
   const whose = userId === model.me.userId ? 'Your' : `${playerName(model, userId)}’s`;
   return (
@@ -213,6 +215,23 @@ function Totals({ model, userId }: { model: CampaignModel; userId: string }) {
           );
         })}
       </ul>
+      <section aria-label="Arsenal and energy" className="space-y-3">
+        <div>
+          <h3 className="text-lg font-bold">Arsenal and energy</h3>
+          <p className="text-sm text-muted">{FACTS_NOTE}</p>
+        </div>
+        {facts.data ? (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+            {FACT_ROWS.map(({ key, label, format }) => (
+              <Figure key={key} label={label} figure={figures[key]} format={format} empires={empires} />
+            ))}
+          </dl>
+        ) : facts.error ? (
+          <Notice tone="error">{errorMessage(facts.error)}</Notice>
+        ) : (
+          <Spinner label="Counting the arsenals" />
+        )}
+      </section>
     </div>
   );
 }

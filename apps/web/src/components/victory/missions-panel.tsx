@@ -16,9 +16,10 @@ import {
   type VictoryResultView,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
+import { awardKey } from '@/lib/ceremony';
 import { keys } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
 import {
@@ -39,6 +40,7 @@ import { PlayerName } from '../campaign/player-name';
 import { useEmpireHref } from '../campaign/room-context';
 import { Notice } from '../ui';
 import { MissionCard, PointsBadge, ProgressParts } from './mission-card';
+import { PointsCounter, ScoredStamp, useFresh, useReorderSlide } from './score-effects';
 import { TitleToken } from './title-tokens';
 
 /** What the map is asked to call out: a mission someone plays, or a secret option being weighed. */
@@ -90,36 +92,31 @@ export function PointsRace({ model }: { model: CampaignModel }) {
   const winners = new Set(victory.result?.winners ?? []);
   // Ten or more points to win leave less room for names (and their title tokens): thinner marks.
   const narrow = victory.pointsToWin > 8;
+  const race = pointsRace(model);
+  const list = useRef<HTMLOListElement>(null);
+  useReorderSlide(list, race.map((r) => r.userId).join());
   return (
     <section aria-labelledby="race-heading">
       <h2 id="race-heading" className="label mb-2">
         Victory points · first to {victory.pointsToWin}
         {victory.lastRound !== null && ` · last round ${victory.lastRound}`}
       </h2>
-      <ol className="space-y-2">
-        {pointsRace(model).map(({ userId, points }) => {
+      <ol ref={list} className="relative space-y-2">
+        {race.map(({ userId, points }) => {
           const member = model.membersById.get(userId);
           return (
-            <li key={userId} className="flex items-center gap-2">
+            <li key={userId} data-key={userId} className="flex items-center gap-2">
               <span className="min-w-0 flex-1">
                 <PlayerName member={member} you={userId === model.me.userId} size="sm" href={empireHref(userId)} />
               </span>
-              <span
-                className={`flex shrink-0 ${narrow ? 'gap-0.5' : 'gap-1'}`}
-                role="img"
-                aria-label={`${member?.name ?? 'Player'}: ${points} of ${victory.pointsToWin} points`}
-              >
-                {Array.from({ length: Math.max(victory.pointsToWin, points) }, (_, i) => (
-                  <span
-                    key={i}
-                    className={`h-3.5 ${narrow ? 'w-2' : 'w-2.5'} rounded-[1px] border ${
-                      i < points ? 'border-amber bg-amber' : 'border-line-strong'
-                    }`}
-                  />
-                ))}
-              </span>
-              <span className="w-10 text-right font-semibold tabular-nums" aria-hidden="true">
-                {points}
+              <RaceMarks
+                points={points}
+                toWin={victory.pointsToWin}
+                narrow={narrow}
+                label={`${member?.name ?? 'Player'}: ${points} of ${victory.pointsToWin} points`}
+              />
+              <span className="w-10 text-right font-semibold" aria-hidden="true">
+                <PointsCounter value={points} delta={false} />
                 {winners.has(userId) && ' ★'}
               </span>
             </li>
@@ -127,6 +124,47 @@ export function PointsRace({ model }: { model: CampaignModel }) {
         })}
       </ol>
     </section>
+  );
+}
+
+/**
+ * A player's marks in the race to the points to win. Marks just won fill in one after another;
+ * marks lost (a title taken away) drain to grease red and empty.
+ */
+function RaceMarks({
+  points,
+  toWin,
+  narrow,
+  label,
+}: {
+  points: number;
+  toWin: number;
+  narrow: boolean;
+  label: string;
+}) {
+  const [last, setLast] = useState(points);
+  const [change, setChange] = useState<{ from: number; to: number; nonce: number } | null>(null);
+  if (points !== last) {
+    setLast(points);
+    setChange({ from: last, to: points, nonce: (change?.nonce ?? 0) + 1 });
+  }
+  return (
+    <span className={`flex shrink-0 ${narrow ? 'gap-0.5' : 'gap-1'}`} role="img" aria-label={label}>
+      {Array.from({ length: Math.max(toWin, points) }, (_, i) => {
+        const gained = change !== null && i >= change.from && i < change.to;
+        const lost = change !== null && i >= change.to && i < change.from;
+        return (
+          <span
+            // A mark that changed is drawn anew, so its animation plays.
+            key={gained || lost ? `${i}:${change!.nonce}` : i}
+            className={`h-3.5 ${narrow ? 'w-2' : 'w-2.5'} rounded-[1px] border ${
+              i < points ? 'border-amber bg-amber' : 'border-line-strong'
+            } ${gained ? 'pip-fill' : lost ? 'pip-drain' : ''}`}
+            style={gained ? { animationDelay: `${(i - change!.from) * 140}ms` } : undefined}
+          />
+        );
+      })}
+    </span>
   );
 }
 
@@ -344,6 +382,7 @@ function MySecret({ model, onSelectCountry, onShowOnMap }: PanelProps) {
         mission={mine.mission}
         highlight
         held={new Set(progress?.evidence.territories ?? [])}
+        stamp={scored && <AwardStamp model={model} userId={model.me.userId} missionKey="secret" />}
         onSelectCountry={onSelectCountry}
         onShowOnMap={
           hasMapView(mine.mission.spec, progress)
@@ -389,6 +428,7 @@ function RevealedSecrets({ model, onSelectCountry, onShowOnMap }: PanelProps) {
               model={model}
               mission={p.secret!.mission}
               held={new Set(progress?.evidence.territories ?? [])}
+              stamp={scored && <AwardStamp model={model} userId={p.userId} missionKey="secret" />}
               onSelectCountry={onSelectCountry}
               onShowOnMap={
                 hasMapView(p.secret!.mission.spec, progress)
@@ -524,12 +564,14 @@ function PublicMissions({ model, onSelectCountry, onShowOnMap }: PanelProps) {
       </div>
       {victory.publicMissions.map((mission: MissionView) => {
         const mine = progressOf(model, me, mission.key);
+        const scored = victoryPlayer(model, me)?.awards.some((a) => a.missionKey === mission.key) ?? false;
         return (
           <MissionCard
             key={mission.key}
             model={model}
             mission={mission}
             held={new Set(mine?.evidence.territories ?? [])}
+            stamp={scored && <AwardStamp model={model} userId={me} missionKey={mission.key} />}
             onSelectCountry={onSelectCountry}
             onShowOnMap={
               hasMapView(mission.spec, mine)
@@ -537,9 +579,7 @@ function PublicMissions({ model, onSelectCountry, onShowOnMap }: PanelProps) {
                 : undefined
             }
           >
-            {atWar && mine && !victoryPlayer(model, me)?.awards.some((a) => a.missionKey === mission.key) && (
-              <ProgressParts parts={mine.parts} label="Your progress" />
-            )}
+            {atWar && mine && !scored && <ProgressParts parts={mine.parts} label="Your progress" />}
             {atWar && (
               <ul className="space-y-1 border-t border-line pt-2" aria-label="Everyone’s standing">
                 {victory.players.map((p) => (
@@ -561,6 +601,12 @@ function PublicMissions({ model, onSelectCountry, onShowOnMap }: PanelProps) {
       {victory.publicMissions.length === 0 && <p className="text-muted">No public missions yet.</p>}
     </section>
   );
+}
+
+/** "Scored" on a mission card, coming down hard if the points were won a moment ago. */
+function AwardStamp({ model, userId, missionKey }: { model: CampaignModel; userId: string; missionKey: string }) {
+  const fresh = useFresh(awardKey(model.campaign.id, userId, missionKey));
+  return <ScoredStamp fresh={fresh} />;
 }
 
 function ScoringNote({ model }: { model: CampaignModel }) {
@@ -674,7 +720,12 @@ function FinalResults({ model, result, onSelectCountry }: PanelProps & { result:
                     </ul>
                   )}
                   {s.secret ? (
-                    <MissionCard model={model} mission={s.secret.mission} onSelectCountry={onSelectCountry}>
+                    <MissionCard
+                      model={model}
+                      mission={s.secret.mission}
+                      stamp={s.secret.completed && <ScoredStamp />}
+                      onSelectCountry={onSelectCountry}
+                    >
                       <p className={`text-sm font-semibold ${s.secret.completed ? 'text-amber' : 'text-muted'}`}>
                         {s.secret.completed ? 'Completed and scored.' : 'Not completed.'}
                       </p>

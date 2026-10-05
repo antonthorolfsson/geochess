@@ -113,6 +113,7 @@ export function MissionCard({
   onShowOnMap,
   held,
   highlight = false,
+  stamp,
   children,
 }: {
   model: CampaignModel;
@@ -122,6 +123,8 @@ export function MissionCard({
   held?: ReadonlySet<TerritoryId>;
   /** Drawn in amber: the viewer's own secret mission. */
   highlight?: boolean;
+  /** Stamped beside the points: "Scored" (`ScoredStamp`), for a mission the card's player has scored. */
+  stamp?: ReactNode;
   children?: ReactNode;
 }) {
   const info = missionInfo(mission.spec.kind);
@@ -142,6 +145,7 @@ export function MissionCard({
           <h3 className="font-stencil text-xl leading-tight tracking-wide">{name}</h3>
           <p className="text-xs font-semibold tracking-[0.12em] text-muted uppercase">{tags.join(' · ')}</p>
         </div>
+        {stamp}
         <PointsBadge points={mission.points} />
       </header>
       <p className="text-[0.95rem] leading-snug">{requirementText(model, mission.spec)}</p>

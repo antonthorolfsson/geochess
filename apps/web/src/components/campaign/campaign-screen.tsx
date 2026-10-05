@@ -1,6 +1,6 @@
 'use client';
 
-import { TITLES, missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
+import { missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -20,6 +20,7 @@ import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
 import { StandInBanner } from './stand-in';
+import { AwardCeremonies } from '../victory/award-ceremony';
 import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
@@ -212,6 +213,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const openWar = warInView ?? olderWar.data;
   const myGames = useMyGames(model);
   const myMoves = myGames.filter((g) => g.myMove).length;
+  // Award ceremonies wait while the clock may be running on the player (until a game's state says otherwise).
+  const inLiveGame =
+    campaign.rules.war.pace === 'live' &&
+    myGames.some((g) => !g.overTheBoard && (g.game === undefined || g.game.status === 'playing'));
   const answers = model.answers.length;
   const unread = useUnread(campaign.id);
   // A finished Objectives campaign opens on its results.
@@ -337,7 +342,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
 
   const openGame = useCallback((gameId: string) => panels.set('game', gameId), [panels]);
 
-  // Intel reports: wars declared on me, answers I'm owed, battles starting and ending.
+  // Intel reports: wars declared on me, answers I'm owed, battles starting and ending. Missions
+  // scored and titles changing hands play as award ceremonies instead (`AwardCeremonies`).
   const modelRef = useRef(model);
   useEffect(() => {
     modelRef.current = model;
@@ -401,12 +407,6 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         );
       } else if (e.type === 'claim.interrupted' && e.payload.userId === me) {
         setToast(`Claim lost: ${missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version)}`);
-      } else if (e.type === 'mission.awarded' && e.payload.userId === me) {
-        setToast(`+${e.payload.points} victory points`);
-        navigator.vibrate?.(120);
-      } else if (e.type === 'title.changed' && (e.payload.to === me || e.payload.from === me)) {
-        const title = TITLES[e.payload.title].name;
-        setToast(e.payload.to === me ? `${title}: +${e.payload.points}` : `${title} lost`);
       } else if (e.type === 'campaign.won') {
         const winners = e.payload.winners;
         setToast(
@@ -868,16 +868,22 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           <div className={overPage ? 'absolute inset-0 z-40 overflow-y-auto bg-gunmetal' : 'hidden'}>{children}</div>
         </CampaignRoomProvider>
 
-        {toast && (
-          <div
-            role="status"
-            className={`sheet-in pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 rounded-[3px] bg-amber px-4 py-2 text-center font-stencil text-xl tracking-wide whitespace-nowrap text-gunmetal shadow-xl ${
-              overPage ? 'top-3' : 'top-18'
-            }`}
-          >
-            {toast}
-          </div>
-        )}
+        {/* Intel reports, and under them any award ceremony playing. */}
+        <div
+          className={`pointer-events-none absolute left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2 ${
+            overPage ? 'top-3' : 'top-18'
+          }`}
+        >
+          {toast && (
+            <div
+              role="status"
+              className="sheet-in rounded-[3px] bg-amber px-4 py-2 text-center font-stencil text-xl tracking-wide whitespace-nowrap text-gunmetal shadow-xl"
+            >
+              {toast}
+            </div>
+          )}
+          {objectives && <AwardCeremonies model={model} hold={inLiveGame} />}
+        </div>
       </div>
 
       {!isDesktop && (

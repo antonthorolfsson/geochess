@@ -3,6 +3,7 @@
 import type { TerritoryId } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRef } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { totalValue, type CampaignModel } from '@/lib/campaign';
 import { relativeTime } from '@/lib/format';
@@ -10,6 +11,7 @@ import { keys } from '@/lib/queries';
 import { DispatchLine } from '../diplo/dispatch-line';
 import { EmpireSwatch } from '../hatch';
 import { Notice } from '../ui';
+import { PointsCounter, useReorderSlide } from '../victory/score-effects';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
 import { RemainingCountries } from './remaining-countries';
@@ -203,6 +205,9 @@ export function Standings({ model }: { model: CampaignModel }) {
       return { member: m, count: ids.length, value: totalValue(model.idx, ids), points: pointsOf.get(m.userId) ?? 0 };
     })
     .sort((a, b) => (showPoints ? b.points - a.points : 0) || b.value - a.value || b.count - a.count);
+  // Players overtaking each other slide into their new places.
+  const body = useRef<HTMLTableSectionElement>(null);
+  useReorderSlide(body, rows.map((r) => r.member.userId).join());
   const showUnclaimed = model.campaign.status !== 'lobby' && model.unclaimed > 0;
   const showTokens = model.campaign.status === 'active';
   const showReputation = model.campaign.status !== 'lobby';
@@ -242,9 +247,9 @@ export function Standings({ model }: { model: CampaignModel }) {
             )}
           </tr>
         </thead>
-        <tbody className="divide-y divide-line">
+        <tbody ref={body} className="divide-y divide-line">
           {rows.map(({ member, count, value, points }) => (
-            <tr key={member.userId}>
+            <tr key={member.userId} data-key={member.userId}>
               <td className="max-w-0 py-1.5">
                 <PlayerName
                   member={member}
@@ -257,7 +262,11 @@ export function Standings({ model }: { model: CampaignModel }) {
                   {member.autodraft && !member.bot && model.campaign.status === 'draft' && ' · auto-draft'}
                 </span>
               </td>
-              {showPoints && <td className="py-1.5 pl-2 text-right font-bold text-amber tabular-nums">{points}</td>}
+              {showPoints && (
+                <td className="py-1.5 pl-2 text-right font-bold text-amber tabular-nums">
+                  <PointsCounter value={points} />
+                </td>
+              )}
               <td className={`py-1.5 pl-2 text-right tabular-nums ${showPoints ? '' : 'font-semibold'}`}>{value}</td>
               {showTokens && <td className="py-1.5 pl-3 text-right tabular-nums">{member.tokens}</td>}
               {showReputation && <td className="py-1.5 pl-3 text-right tabular-nums">{member.reputation}</td>}

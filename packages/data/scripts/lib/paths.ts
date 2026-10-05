@@ -8,3 +8,5 @@ export const RAW_DIR = path.join(DATA_DIR, 'raw');
 export const DATASETS_DIR = path.join(DATA_DIR, 'datasets');
 /** The opening names table, built from the Lichess openings list. */
 export const OPENINGS_DIR = path.join(DATA_DIR, 'openings');
+/** The arsenals and energy table, shown on the statistics pages and read by no rule. */
+export const FACTS_DIR = path.join(DATA_DIR, 'facts');

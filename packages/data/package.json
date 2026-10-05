@@ -7,12 +7,14 @@
   "type": "module",
   "exports": {
     "./datasets/*": "./datasets/*",
-    "./openings/*": "./openings/*"
+    "./openings/*": "./openings/*",
+    "./facts/*": "./facts/*"
   },
   "scripts": {
     "generate": "tsx scripts/build.ts",
     "openings": "tsx scripts/openings.ts",
     "preview": "tsx scripts/preview.ts",
+    "facts": "tsx scripts/facts.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },

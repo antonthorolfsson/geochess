@@ -1,8 +1,28 @@
-import { STAT_KEYS, type DatasetIndex, type StatKey, type Territory, type TerritoryId } from '@empire/rules';
+import {
+  FACT_KEYS,
+  factOf,
+  STAT_KEYS,
+  type DatasetIndex,
+  type FactKey,
+  type FactTable,
+  type StatKey,
+  type Territory,
+  type TerritoryId,
+} from '@empire/rules';
+
+/** A real-world figure: one of the dataset's, or one of the arsenals and energy table's. */
+export type FigureKey = StatKey | FactKey;
+
+const isStatKey = (key: FigureKey): key is StatKey => (STAT_KEYS as readonly string[]).includes(key);
+
+/** A territory's figure, or null when it has none (or the table it's in hasn't loaded). */
+export function figureOf(t: Territory, key: FigureKey, facts: FactTable | null = null): number | null {
+  return isStatKey(key) ? t.stats[key] : factOf(facts, t.id, key);
+}
 
 /** An empire's total of one real-world figure, and how it compares. */
 export interface EmpireFigure {
-  key: StatKey;
+  key: FigureKey;
   /** Sum over the countries that have the figure; null when none of them has it. */
   total: number | null;
   /** Countries without the figure. */
@@ -20,64 +40,84 @@ export interface EmpireFigure {
   empireRank: number | null;
 }
 
-/** Every territory with the figure, largest first, per dataset. */
-const rankings = new WeakMap<DatasetIndex, Map<StatKey, Territory[]>>();
+/** Every territory with the figure, largest first, per dataset (and figures table). */
+const rankings = new WeakMap<DatasetIndex, Map<FigureKey, Territory[]>>();
+const factRankings = new WeakMap<FactTable, WeakMap<DatasetIndex, Map<FigureKey, Territory[]>>>();
 
-function ranking(idx: DatasetIndex, key: StatKey): Territory[] {
-  let byKey = rankings.get(idx);
-  if (!byKey) rankings.set(idx, (byKey = new Map()));
+function ranking(idx: DatasetIndex, key: FigureKey, facts: FactTable | null): Territory[] {
+  if (!isStatKey(key) && !facts) return [];
+  let byIdx = rankings;
+  if (!isStatKey(key)) {
+    byIdx = factRankings.get(facts!) ?? new WeakMap();
+    factRankings.set(facts!, byIdx);
+  }
+  let byKey = byIdx.get(idx);
+  if (!byKey) byIdx.set(idx, (byKey = new Map()));
   let list = byKey.get(key);
   if (!list) {
     list = idx.dataset.territories
-      .filter((t) => t.stats[key] !== null)
-      .sort((a, b) => b.stats[key]! - a.stats[key]! || a.name.localeCompare(b.name));
+      .filter((t) => figureOf(t, key, facts) !== null)
+      .sort((a, b) => figureOf(b, key, facts)! - figureOf(a, key, facts)! || a.name.localeCompare(b.name));
     byKey.set(key, list);
   }
   return list;
 }
 
 /** The sum of a figure over some countries, or null when none of them has it. */
-export function totalOf(idx: DatasetIndex, ids: readonly TerritoryId[], key: StatKey): number | null {
+export function totalOf(
+  idx: DatasetIndex,
+  ids: readonly TerritoryId[],
+  key: FigureKey,
+  facts: FactTable | null = null,
+): number | null {
   let total: number | null = null;
   for (const id of ids) {
-    const figure = idx.byId.get(id)?.stats[key];
-    if (figure !== null && figure !== undefined) total = (total ?? 0) + figure;
+    const t = idx.byId.get(id);
+    const figure = t ? figureOf(t, key, facts) : null;
+    if (figure !== null) total = (total ?? 0) + figure;
   }
   return total;
 }
 
-/** Each real-world figure for one empire: its total, share of the world and rankings. */
+/**
+ * Each real-world figure for one empire: its total, share of the world and rankings. The arsenals
+ * and energy figures need their table; without it they have no total.
+ */
 export function empireFigures(
   idx: DatasetIndex,
   holdingsByUser: ReadonlyMap<string, readonly TerritoryId[]>,
   userId: string,
-): Record<StatKey, EmpireFigure> {
+  facts: FactTable | null = null,
+): Record<FigureKey, EmpireFigure> {
   const ids = holdingsByUser.get(userId) ?? [];
   const own = new Set(ids);
-  const entries = STAT_KEYS.map((key): [StatKey, EmpireFigure] => {
-    const total = totalOf(idx, ids, key);
-    const territories = ids.flatMap((id) => idx.byId.get(id) ?? []);
-    const world = idx.dataset.territories.reduce((sum, t) => sum + (t.stats[key] ?? 0), 0);
-    const ranked = ranking(idx, key);
+  const territories = ids.flatMap((id) => idx.byId.get(id) ?? []);
+  const entries = [...STAT_KEYS, ...FACT_KEYS].map((key): [FigureKey, EmpireFigure] => {
+    const of = (t: Territory) => figureOf(t, key, facts);
+    const total = totalOf(idx, ids, key, facts);
+    const world = idx.dataset.territories.reduce((sum, t) => sum + (of(t) ?? 0), 0);
+    const ranked = ranking(idx, key, facts);
     let worldRank: number | null = null;
     let above: Territory | null = null;
     let below: Territory | null = null;
     if (total !== null) {
-      const bigger = ranked.filter((t) => t.stats[key]! > total);
+      const bigger = ranked.filter((t) => of(t)! > total);
       worldRank = bigger.length + 1;
       above = bigger.filter((t) => !own.has(t.id)).at(-1) ?? null;
-      below = ranked.find((t) => t.stats[key]! <= total && !own.has(t.id)) ?? null;
+      below = ranked.find((t) => of(t)! <= total && !own.has(t.id)) ?? null;
     }
     const others = [...holdingsByUser.keys()]
       .filter((u) => u !== userId)
-      .map((u) => totalOf(idx, holdingsByUser.get(u)!, key));
+      .map((u) => totalOf(idx, holdingsByUser.get(u)!, key, facts));
     return [
       key,
       {
         key,
         total,
-        missing: territories.filter((t) => t.stats[key] === null).length,
-        estimated: territories.filter((t) => t.stats[key] !== null && t.statMeta[key].estimated).length,
+        missing: territories.filter((t) => of(t) === null).length,
+        estimated: isStatKey(key)
+          ? territories.filter((t) => t.stats[key] !== null && t.statMeta[key].estimated).length
+          : 0,
         share: total !== null && world > 0 ? total / world : null,
         worldRank,
         above,
@@ -86,7 +126,7 @@ export function empireFigures(
       },
     ];
   });
-  return Object.fromEntries(entries) as Record<StatKey, EmpireFigure>;
+  return Object.fromEntries(entries) as Record<FigureKey, EmpireFigure>;
 }
 
 /** An empire's place by game value among the campaign's empires: 1 for the largest, ties sharing a place. */

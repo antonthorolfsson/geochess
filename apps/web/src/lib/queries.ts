@@ -1,6 +1,6 @@
 'use client';
 
-import { indexDataset, type Dataset, type DatasetIndex, type GameView } from '@empire/rules';
+import { indexDataset, type Dataset, type DatasetIndex, type FactTable, type GameView } from '@empire/rules';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Topology } from 'topojson-specification';
 import { ApiError, api } from './api';
@@ -11,6 +11,7 @@ export const keys = {
   campaign: (id: string) => ['campaign', id] as const,
   invite: (code: string) => ['invite', code] as const,
   mapData: (version: string) => ['map-data', version] as const,
+  facts: ['facts'] as const,
   /** Mutation key for saving a draft list, so bursts of edits can be told apart from other changes. */
   draftList: (campaignId: string) => ['draft-list', campaignId] as const,
   game: (gameId: string) => ['game', gameId] as const,
@@ -123,5 +124,18 @@ export function useMapData(version: string | undefined) {
       ]);
       return { dataset, idx: indexDataset(dataset), topo };
     },
+  });
+}
+
+/**
+ * The arsenals and energy table, for the statistics pages. One table serves every dataset version,
+ * and it only changes with a deploy, so read it once a visit.
+ */
+export function useFacts() {
+  return useQuery({
+    queryKey: keys.facts,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    queryFn: () => fetchJson<FactTable>('/facts/facts.json'),
   });
 }

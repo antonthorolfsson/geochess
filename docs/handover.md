@@ -1092,6 +1092,37 @@ and scores in the change that ends them.
   holding-time picker only where the time applies; claim cards say whose turns they wait for; the
   rules guide, scoring notes and settings list describe whichever rule the campaign plays.
 
+**Arsenals and energy** (GitHub issue #32, 2026-10-05: "without affecting gameplay the stats pages
+should show standing army size, number of tanks, naval ships, fighter jet, oil production, natural
+gas production and energy production"). Seven figures beside the dataset's own, in a table no rule
+reads, so no game can change.
+
+- **The table.** `packages/data/facts/facts.json` (`FactTable`, `FACT_KEYS` and `factOf` in
+  `packages/rules/src/facts.ts`), built by `pnpm data:facts` (`scripts/facts.ts`, names in
+  `config/facts.yaml`, review in `facts/REPORT.md`). It is not part of a dataset version: territory
+  ids and members are the same in every version, so one table serves every campaign, old ones too,
+  and nothing pins it. Each territory sums its canon statistics codes, like the dataset's figures.
+- **Arsenals: Global Firepower 2025**, read from a third-party scrape on GitHub
+  (`nupurmadaan04/unified-military-analytics`, pinned to a commit), the user's choice: the
+  container's network policy blocks globalfirepower.com and Wikipedia, and Global Firepower isn't
+  openly licensed. 145 countries; the other 43 territories show —. **Standing army** is Global
+  Firepower's active personnel (2025), shown beside the dataset's **Armed forces** (World Bank,
+  2020, paramilitaries included), which the military-might title keeps using. **Combat aircraft**
+  adds Global Firepower's fighters and attack aircraft: it files the F-35 under attack, which left
+  Norway and the Netherlands with no fighters. **Naval ships** is its total naval assets, patrol
+  craft included.
+- **Energy: Our World in Data** (CC BY 4.0; the GitHub energy file, pinned): oil and gas
+  production (Energy Institute to 2024 for the big producers, The Shift Project to 2016 for the
+  rest) and electricity generation (Ember, mostly 2024–25), all in terawatt-hours a year. "Energy
+  production" is electricity: Our World in Data has no total of primary energy produced.
+- **Web.** `/facts/facts.json` (copied by `copy-datasets.mjs`, read once a visit with `useFacts`).
+  A country's panel lists the seven under "Arsenal and energy" (source and year on hover); an
+  empire page's real-world totals add them with the same share, world rank and empire rank; the
+  comparison page adds an "Arsenals and energy" section of share bars. `lib/empire.ts` and
+  `lib/compare.ts` take the table for the new keys (`FigureKey`), with tests.
+
+Tests since: data 72, web 88.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

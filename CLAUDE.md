@@ -12,6 +12,7 @@ when starting new work.**
 - `pnpm test`, `pnpm typecheck`, `pnpm build`: run across all packages
 - `pnpm data:build`: rebuild the country dataset (downloads are cached in `packages/data/raw/`)
 - `pnpm data:openings`: rebuild the opening names table from the Lichess openings list
+- `pnpm data:facts`: rebuild the arsenals and energy table (Global Firepower, Our World in Data)
 - `pnpm db:generate`: new SQL migration after editing `apps/server/src/db/schema.ts`
 - `pnpm sim --scenario baseline --players 2-8 --seeds 400`, then `pnpm sim:report baseline`: the
   balance simulator (`packages/sim`, see its README); findings are in `docs/balance-report.md`
@@ -48,6 +49,10 @@ when starting new work.**
   round's state on the campaign row (`apps/server/src/wars/turns.ts`). Declaring and fortifying
   check the turn (`requireTurn`) and pass it on (`turnTaken`); anything new that should cost a turn
   must do the same. Live games wait until declaring is over.
+- The statistics pages also show arsenals and energy (standing army, tanks, combat aircraft, naval
+  ships, oil, gas, electricity) from `packages/data/facts/facts.json` (`FactTable` in
+  `packages/rules/src/facts.ts`). It is display only: no rule, bot or title may read it, so it can
+  change without a new dataset version, and one table serves every version.
 - Empire statistics are derived on each request, never stored: `apps/server/src/stats/` gathers the
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target

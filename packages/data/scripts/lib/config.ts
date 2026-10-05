@@ -419,3 +419,24 @@ export function loadTerrain(): TerrainConfig {
     mountains: asStringList(root['mountains'], `${file} mountains`),
   };
 }
+
+export interface FactsConfig {
+  /** Global Firepower country names that differ from the canon's, to statistics codes. */
+  gfpNames: Map<string, string>;
+  /** Our World in Data names of economies it gives no ISO code, to statistics codes. */
+  owidNames: Map<string, string>;
+}
+
+/** config/facts.yaml: how the sources of the arsenals and energy table name countries. */
+export function loadFacts(): FactsConfig {
+  const file = 'facts.yaml';
+  const root = asOptionalRecord(loadConfigFile(file), file, ['gfp_names', 'owid_names']);
+  const codes = (key: string) =>
+    new Map(
+      Object.entries(asOptionalRecord(root[key], `${file} ${key}`)).map(([name, code]) => [
+        name,
+        asString(code, `${file} ${key}.${name}`),
+      ]),
+    );
+  return { gfpNames: codes('gfp_names'), owidNames: codes('owid_names') };
+}

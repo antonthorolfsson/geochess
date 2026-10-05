@@ -15,6 +15,7 @@
     "test": "pnpm -r test",
     "data:build": "pnpm --filter @empire/data generate",
     "data:openings": "pnpm --filter @empire/data openings",
+    "data:facts": "pnpm --filter @empire/data facts",
     "db:generate": "pnpm --filter @empire/server db:generate",
     "sim": "pnpm --filter @empire/sim sim",
     "sim:report": "pnpm --filter @empire/sim report",

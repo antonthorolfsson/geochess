@@ -6,6 +6,7 @@ const compactUsd = new Intl.NumberFormat('en-US', {
   maximumSignificantDigits: 3,
 });
 const wholeNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const threeDigits = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 });
 
 export const formatCount = (n: number | null) => (n === null ? '—' : compactNumber.format(n));
 export const formatUsd = (n: number | null) => (n === null ? '—' : compactUsd.format(n));
@@ -13,6 +14,11 @@ export const formatArea = (km2: number | null) => (km2 === null ? '—' : `${who
 /** Area in a few characters, for large totals: "25.3M km²". */
 export const formatAreaCompact = (km2: number | null) => (km2 === null ? '—' : `${compactNumber.format(km2)} km²`);
 export const formatInt = (n: number) => wholeNumber.format(n);
+/** A count in full, for things counted in the hundreds or thousands: "4,666". */
+export const formatWhole = (n: number | null) => (n === null ? '—' : wholeNumber.format(n));
+/** Energy in terawatt-hours: whole from 100 up ("9,977 TWh"), three digits below ("34.4 TWh"). */
+export const formatTwh = (n: number | null) =>
+  n === null ? '—' : `${n >= 100 ? wholeNumber.format(n) : threeDigits.format(n)} TWh`;
 
 export function ordinal(n: number): string {
   const rem100 = n % 100;

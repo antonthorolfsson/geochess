@@ -1,19 +1,27 @@
-import type { ChessProfile, DatasetIndex, StatKey, TerritoryId, WarRecord } from '@empire/rules';
-import { totalOf } from './empire';
+import type { ChessProfile, DatasetIndex, FactTable, TerritoryId, WarRecord } from '@empire/rules';
+import { totalOf, type FigureKey } from './empire';
 
 /** What the comparison page measures empires by: game value, countries, or a real-world figure. */
-export type Measure = 'value' | 'countries' | StatKey;
+export type Measure = 'value' | 'countries' | FigureKey;
 
-/** An empire's amount of a measure: null when none of its countries has the figure. */
-export function amountOf(idx: DatasetIndex, ids: readonly TerritoryId[], measure: Measure): number | null {
+/**
+ * An empire's amount of a measure: null when none of its countries has the figure. The arsenals
+ * and energy figures need their table.
+ */
+export function amountOf(
+  idx: DatasetIndex,
+  ids: readonly TerritoryId[],
+  measure: Measure,
+  facts: FactTable | null = null,
+): number | null {
   if (measure === 'countries') return ids.length;
   if (measure === 'value') return ids.reduce((sum, id) => sum + (idx.byId.get(id)?.value ?? 0), 0);
-  return totalOf(idx, ids, measure);
+  return totalOf(idx, ids, measure, facts);
 }
 
 /** The whole map's amount of a measure: every country's, claimed or not. */
-export function worldAmount(idx: DatasetIndex, measure: Measure): number {
-  return amountOf(idx, idx.ids, measure) ?? 0;
+export function worldAmount(idx: DatasetIndex, measure: Measure, facts: FactTable | null = null): number {
+  return amountOf(idx, idx.ids, measure, facts) ?? 0;
 }
 
 /** One empire's part of a measure. */
@@ -39,10 +47,11 @@ export function shareRow(
   holdingsByUser: ReadonlyMap<string, readonly TerritoryId[]>,
   userIds: readonly string[],
   measure: Measure,
+  facts: FactTable | null = null,
 ): ShareRow {
-  const world = worldAmount(idx, measure);
+  const world = worldAmount(idx, measure, facts);
   const parts = userIds.map((userId) => {
-    const amount = amountOf(idx, holdingsByUser.get(userId) ?? [], measure);
+    const amount = amountOf(idx, holdingsByUser.get(userId) ?? [], measure, facts);
     return { userId, amount, share: world > 0 && amount !== null ? amount / world : 0 };
   });
   const claimed = parts.reduce((sum, p) => sum + p.share, 0);

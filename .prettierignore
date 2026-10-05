@@ -5,6 +5,7 @@ empire-chess-implementation-plan.md
 # Generated or managed by tools
 packages/data/datasets/
 packages/data/openings/
+packages/data/facts/
 # Hand-aligned comments for human review
 packages/data/config/
 packages/data/raw/
@@ -13,6 +14,7 @@ apps/server/drizzle/
 apps/server/engine/
 apps/server/.data/
 apps/web/public/datasets/
+apps/web/public/facts/
 apps/web/next-env.d.ts
 apps/web/AGENTS.md
 apps/web/CLAUDE.md

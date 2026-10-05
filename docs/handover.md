@@ -1336,7 +1336,11 @@ pnpm format       # Prettier
     pinned to the newest message.
 - **The map:** d3-zoom handles zoom imperatively; `counter-scale` keeps markers the same screen
   size; programmatic zooms go through `clamp()`. War arrows and the stake preview are the
-  `WarArrows` layer, drawn beneath labels.
+  `WarArrows` layer, drawn beneath labels. Framing and panning keep clear of the controls along
+  the top (`topInset`) and the phone's sheet (`bottomInset`), both measured by the campaign screen.
+  The sheet is measured just after the zoom that opens it, so a zoom asked for from outside
+  (`focus`, `fit`) is done again if the room changes within a moment. One country is framed on
+  `focusBounds()`, which leaves out pieces stranded across the date line or far out at sea.
 - **Visual language** (plan section 9): gunmetal, panel, olive-drab land, deep sea, grease-pencil
   red for wars (`.btn-war`), signal amber for alerts and your turn; Sofia Sans Condensed with Saira
   Stencil for names and headlines only; plain button labels; 44px tap targets; reduced motion

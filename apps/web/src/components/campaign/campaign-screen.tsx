@@ -457,7 +457,15 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
 
-  // How much of the map the phone's bottom sheet covers, so the map can keep clear of it.
+  // How far down the controls along the map's top reach, and how much of the map the phone's
+  // bottom sheet covers, so the map can keep clear of both.
+  const [controlsBottom, setControlsBottom] = useState(0);
+  const controlsRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const observer = new ResizeObserver(() => setControlsBottom(el.offsetTop + el.offsetHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
@@ -717,6 +725,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             onSelect={selectOnMap}
             focus={focus}
             initialFrame={initialFrame}
+            topInset={controlsBottom}
             bottomInset={isDesktop ? 0 : sheetHeight}
             listed={model.draftListOpen ? model.campaign.myDraftList : undefined}
             fortified={fortifiedIds}
@@ -735,7 +744,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             }}
           />
 
-          <div className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2">
+          <div
+            ref={controlsRef}
+            className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2"
+          >
             <div className="flex items-start gap-2">
               <div className="pointer-events-auto flex-1">
                 <CountrySearch idx={model.idx} onPick={flyTo} />
@@ -771,11 +783,16 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             )}
           </div>
 
-          {/* Phones: a sheet over the map for the selected country or war, or the campaign at a glance. */}
+          {/* Phones: a sheet over the map for the selected country or war, or the campaign at a glance.
+              A country's sheet stays low, so the map above keeps room to show it. */}
           {!isDesktop && tab === 'map' && (
             <div ref={sheetRef} className="absolute inset-x-0 bottom-0">
               {warPanel || territoryPanel ? (
-                <div className="sheet-in max-h-[58dvh] overflow-y-auto rounded-t-md border-t border-line-strong bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
+                <div
+                  className={`sheet-in overflow-y-auto rounded-t-md border-t border-line-strong bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.4)] ${
+                    warPanel ? 'max-h-[58dvh]' : 'max-h-[42dvh]'
+                  }`}
+                >
                   {warPanel ?? territoryPanel}
                 </div>
               ) : (

@@ -80,3 +80,45 @@ describe('frameAround', () => {
     expect(frameAround(geo, ['NOWHERE'])).toBeNull();
   });
 });
+
+describe('focusBounds', () => {
+  const height = ([[, y0], [, y1]]: Bounds) => y1 - y0;
+  const near = (a: Bounds, b: Bounds) => a.flat().every((n, i) => Math.abs(n - b.flat()[i]!) < 0.01);
+
+  it('frames Russia without the tip of Chukotka over the date line', () => {
+    const focus = geo.focusBounds('RUS')!;
+    expect(width(focus)).toBeLessThan(W / 2);
+    expect(has(focus, anchor('RUS'))).toBe(true);
+    // From the Baltic to the Pacific.
+    expect(geo.partWithin('LTU', focus)).not.toBeNull();
+    expect(focus[1][0]).toBeCloseTo(box('RUS')[1][0]);
+  });
+
+  it('frames the United States with Alaska and Hawaii but not the western Aleutians', () => {
+    const focus = geo.focusBounds('USA')!;
+    expect(width(focus)).toBeLessThan(W / 3);
+    expect(has(focus, anchor('USA'))).toBe(true);
+    // Alaska's north shore and Hawaii are the top and bottom of the whole box.
+    expect(height(focus)).toBeCloseTo(height(box('USA')));
+  });
+
+  it('leaves out islands far at sea', () => {
+    for (const id of ['NZL', 'FJI', 'CHL', 'ECU']) {
+      const focus = geo.focusBounds(id)!;
+      expect(width(focus)).toBeLessThan(width(box(id)) / 2);
+      expect(contains(box(id), focus)).toBe(true);
+    }
+  });
+
+  it('keeps countries in several pieces whole', () => {
+    for (const id of ['IDN', 'MYS', 'PHL', 'GBR', 'FRA', 'CAN', 'GRC']) {
+      expect(near(geo.focusBounds(id)!, box(id))).toBe(true);
+    }
+  });
+
+  it('frames a microstate on its dot', () => {
+    const micro = geo.shapes.find((s) => s.micro)!;
+    expect(geo.focusBounds(micro.id)).toEqual([micro.anchor, micro.anchor]);
+    expect(geo.focusBounds('NOWHERE')).toBeNull();
+  });
+});

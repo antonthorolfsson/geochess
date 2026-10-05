@@ -12,6 +12,8 @@ import { HATCH_TILE, HatchTile, patternRotation, svgId } from '../hatch';
 import { FullscreenIcon } from '../ui';
 
 const MAX_ZOOM = 40;
+/** How long after a zoom is asked for it is done again if the room left for the map changes. */
+const SETTLE_MS = 1500;
 const OCEAN = '#16232b';
 const UNCLAIMED = '#4b5320';
 const INK = '#161b1e';
@@ -35,6 +37,8 @@ export interface WorldMapProps {
   fit?: { ids: readonly TerritoryId[]; nonce: number } | null;
   /** Territories to frame when the map first appears, such as the player's empire. */
   initialFrame?: readonly TerritoryId[];
+  /** Height in CSS pixels hidden behind controls along the top; framing and panning keep clear of it. */
+  topInset?: number;
   /** Height in CSS pixels hidden behind a bottom sheet; framing and panning keep clear of it. */
   bottomInset?: number;
   /** The player's draft list, marked on the map with its order. */
@@ -106,6 +110,7 @@ export function WorldMap(props: WorldMapProps) {
     showValues,
     focus,
     initialFrame,
+    topInset = 0,
     bottomInset = 0,
     listed = [],
     fortified = [],
@@ -125,6 +130,12 @@ export function WorldMap(props: WorldMapProps) {
   const transformRef = useRef<ZoomTransform>(zoomIdentity);
   const pxPerUnitRef = useRef(1);
   const framedRef = useRef(false);
+  /**
+   * The last zoom asked for from outside: a country, or a mission's targets. A phone's sheet that
+   * opens along with it is only measured a moment later, so when the room left for the map (`box`)
+   * changes soon after, the zoom is done again to fit it, unless the player has moved the map since.
+   */
+  const framingRef = useRef<{ bounds: Bounds; maxK: number; box: string; at: number } | null>(null);
 
   const [size, setSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [labelScale, setLabelScale] = useState(1);
@@ -136,16 +147,20 @@ export function WorldMap(props: WorldMapProps) {
     onSelectRef.current = props.onSelect;
     onSelectWarRef.current = props.onSelectWar;
   });
-  const select_ = useCallback((id: TerritoryId | null) => onSelectRef.current(id), []);
+  const select_ = useCallback((id: TerritoryId | null) => {
+    framingRef.current = null;
+    onSelectRef.current(id);
+  }, []);
   const selectWar = useCallback((id: string) => onSelectWarRef.current?.(id), []);
 
   const vb = useMemo(() => viewBoxFor(size.width, size.height, geo.H), [size, geo.H]);
 
-  /** The part of the view box that isn't hidden behind a bottom sheet. */
+  /** The part of the view box that isn't hidden behind the controls along the top or a bottom sheet. */
   const visibleBox = useCallback((): [number, number, number, number] => {
-    const hidden = Math.min(bottomInset / pxPerUnitRef.current, vb[3] * 0.7);
-    return [vb[0], vb[1], vb[2], vb[3] - hidden];
-  }, [bottomInset, vb]);
+    const top = Math.min(topInset / pxPerUnitRef.current, vb[3] * 0.2);
+    const bottom = Math.min(bottomInset / pxPerUnitRef.current, vb[3] * 0.7);
+    return [vb[0], vb[1] + top, vb[2], vb[3] - top - bottom];
+  }, [topInset, bottomInset, vb]);
 
   /** Keeps markers, labels and hatching the same size on screen at any zoom. */
   const applyScreenScale = useCallback(() => {
@@ -187,6 +202,8 @@ export function WorldMap(props: WorldMapProps) {
       ])
       .clickDistance(6)
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
+        // A drag, pinch or scroll: the map stays where the player puts it.
+        if (event.sourceEvent) framingRef.current = null;
         transformRef.current = event.transform;
         viewport.setAttribute('transform', event.transform.toString());
         applyScreenScale();
@@ -218,7 +235,7 @@ export function WorldMap(props: WorldMapProps) {
   );
 
   // Pan and zoom limits apply to the unobstructed part of the map, so a country can always be
-  // brought out from under a bottom sheet.
+  // brought out from under the controls or a bottom sheet.
   useEffect(() => {
     const [vx, vy, vw, vh] = visibleBox();
     zoomRef.current?.extent([
@@ -249,30 +266,49 @@ export function WorldMap(props: WorldMapProps) {
     select(svg).call(behavior.transform, clamp(transform));
   }, [size, vb, geo, initialFrame, clamp]);
 
+  /** Zooms to fit `bounds` in the part of the map that nothing covers. */
+  const frameTo = useCallback(
+    (bounds: Bounds, maxK: number) => {
+      const svg = svgRef.current;
+      const behavior = zoomRef.current;
+      if (!svg || !behavior) return;
+      const next = clamp(frame(bounds, visibleBox(), maxK));
+      if (prefersReducedMotion()) select(svg).call(behavior.transform, next);
+      else select(svg).transition().duration(650).call(behavior.transform, next);
+    },
+    [clamp, visibleBox],
+  );
+
+  const requestFrame = (bounds: Bounds | null, maxK: number) => {
+    if (!bounds) return;
+    framingRef.current = { bounds, maxK, box: visibleBox().join(), at: Date.now() };
+    frameTo(bounds, maxK);
+  };
+
   useEffect(() => {
-    const svg = svgRef.current;
-    const behavior = zoomRef.current;
     const shape = focus && geo.byId.get(focus.id);
-    if (!svg || !behavior || !shape) return;
-    const next = clamp(frame(shape.bounds, visibleBox(), shape.micro ? 16 : 8));
-    if (prefersReducedMotion()) select(svg).call(behavior.transform, next);
-    else select(svg).transition().duration(650).call(behavior.transform, next);
+    if (shape) requestFrame(geo.focusBounds(shape.id), shape.micro ? 16 : 8);
     // Only react to new focus requests, not to resizes.
   }, [focus?.nonce]);
 
   useEffect(() => {
-    const svg = svgRef.current;
-    const behavior = zoomRef.current;
-    const bounds = fit && frameAround(geo, fit.ids);
-    if (!svg || !behavior || !bounds) return;
-    const next = clamp(frame(bounds, visibleBox(), 8));
-    if (prefersReducedMotion()) select(svg).call(behavior.transform, next);
-    else select(svg).transition().duration(650).call(behavior.transform, next);
+    if (fit) requestFrame(frameAround(geo, fit.ids), 8);
     // Only react to new requests, not to resizes.
   }, [fit?.nonce]);
 
-  // A country tapped low on a phone would end up under the sheet that opens; slide it into view.
+  // The room left for the map changed, as when a phone's sheet opens. A zoom just asked for is done
+  // again to fit it; otherwise a country tapped low on the map, which would end up under the sheet
+  // that opens, slides into view.
   useEffect(() => {
+    const framing = framingRef.current;
+    if (framing && Date.now() - framing.at < SETTLE_MS) {
+      const box = visibleBox().join();
+      if (framing.box !== box) {
+        framing.box = box;
+        frameTo(framing.bounds, framing.maxK);
+      }
+      return;
+    }
     const svg = svgRef.current;
     const behavior = zoomRef.current;
     const shape = selectedId ? geo.byId.get(selectedId) : undefined;
@@ -289,9 +325,10 @@ export function WorldMap(props: WorldMapProps) {
       .transition()
       .duration(prefersReducedMotion() ? 0 : 300)
       .call(behavior.translateBy, dx / t.k, dy / t.k);
-  }, [selectedId, bottomInset, geo, visibleBox]);
+  }, [selectedId, bottomInset, geo, visibleBox, frameTo]);
 
   const zoomBy = (factor: number) => {
+    framingRef.current = null;
     const svg = svgRef.current;
     if (svg && zoomRef.current)
       select(svg)
@@ -300,12 +337,13 @@ export function WorldMap(props: WorldMapProps) {
         .call(zoomRef.current.scaleBy, factor);
   };
   const reset = () => {
+    framingRef.current = null;
     const svg = svgRef.current;
     if (svg && zoomRef.current)
       select(svg)
         .transition()
         .duration(prefersReducedMotion() ? 0 : 400)
-        .call(zoomRef.current.transform, zoomIdentity);
+        .call(zoomRef.current.transform, clamp(zoomIdentity));
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -320,8 +358,10 @@ export function WorldMap(props: WorldMapProps) {
       ArrowDown: [0, -step],
     };
     const move = moves[event.key];
-    if (move) select(svg).call(behavior.translateBy, move[0], move[1]);
-    else if (event.key === '+' || event.key === '=') zoomBy(1.5);
+    if (move) {
+      framingRef.current = null;
+      select(svg).call(behavior.translateBy, move[0], move[1]);
+    } else if (event.key === '+' || event.key === '=') zoomBy(1.5);
     else if (event.key === '-' || event.key === '_') zoomBy(1 / 1.5);
     else if (event.key === '0') reset();
     else if (event.key === 'Escape') select_(null);

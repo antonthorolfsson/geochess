@@ -65,13 +65,14 @@ export function TerritoryPanel({
 
   return (
     <section aria-label={t.name} className="flex h-full flex-col">
-      <div className="flex-1 space-y-5 overflow-y-auto p-4">
+      {/* Tighter on phones, where it's a sheet over the map. */}
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 pt-3 pb-4 lg:space-y-5 lg:pt-4">
         <header className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="label">
               {KIND_LABEL[t.kind]} · {t.subregion}
             </div>
-            <h2 className="text-[1.7rem] leading-tight font-bold">{t.name}</h2>
+            <h2 className="text-[1.45rem] leading-tight font-bold lg:text-[1.7rem]">{t.name}</h2>
           </div>
           <div className="flex shrink-0 flex-col items-center">
             <span className="label">Value</span>
@@ -87,8 +88,8 @@ export function TerritoryPanel({
           </button>
         </header>
 
-        <div>
-          <div className="label mb-1">Held by</div>
+        <div className="flex min-w-0 items-center gap-3 lg:block">
+          <div className="label shrink-0 lg:mb-1">Held by</div>
           {owner ? (
             <PlayerName member={owner} you={owner.userId === model.me.userId} href={empireHref(owner.userId)} />
           ) : (
@@ -110,13 +111,13 @@ export function TerritoryPanel({
         {model.draftListOpen && !owner && <DraftListButton model={model} territoryId={t.id} />}
         <WarAction model={model} territory={t} onOpenWar={onOpenWar} onPreview={onPreview} />
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:gap-y-3">
           {STAT_ROWS.map(({ key, label, format }) => {
             const meta = t.statMeta[key];
             return (
               <div key={key} className="min-w-0">
                 <dt className="label">{label}</dt>
-                <dd className="truncate text-lg font-semibold tabular-nums">
+                <dd className="truncate text-base font-semibold tabular-nums lg:text-lg">
                   {format(t.stats[key])}
                   {meta.estimated && t.stats[key] !== null && (
                     <abbr

@@ -69,10 +69,31 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
     return best;
   };
 
+  const byId = new Map(shapes.map((s) => [s.id, s]));
+  const focusBoxes = new Map<TerritoryId, Bounds>();
+  /** A territory's pieces of land, largest first. */
+  const pieces = (id: TerritoryId): { bounds: Bounds; area: number }[] => {
+    const f = features.get(id);
+    const geometry = f && 'geometry' in f ? f.geometry : null;
+    const polygons =
+      geometry?.type === 'MultiPolygon'
+        ? geometry.coordinates
+        : geometry?.type === 'Polygon'
+          ? [geometry.coordinates]
+          : [];
+    return polygons
+      .map((coordinates) => {
+        const piece: GeoPermissibleObjects = { type: 'Polygon', coordinates };
+        return { bounds: path.bounds(piece), area: path.area(piece) };
+      })
+      .filter(({ bounds }) => Number.isFinite(bounds[0][0]))
+      .sort((a, b) => b.area - a.area);
+  };
+
   return {
     H,
     shapes,
-    byId: new Map(shapes.map((s) => [s.id, s])),
+    byId,
     ocean: path({ type: 'Sphere' }) ?? '',
     graticule: path(geoGraticule10()) ?? '',
     borders: path(mesh(topo, object, (a, b) => a !== b)) ?? '',
@@ -89,6 +110,41 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
       clip.clipExtent(box);
       const bounds = clipPath.bounds(shape);
       return Number.isFinite(bounds[0][0]) ? bounds : null;
+    },
+    /**
+     * What to frame to show one territory: its largest piece of land, any piece at least a fifth
+     * its size (both halves of Malaysia), and every piece within reach of what's gathered so far.
+     * Russia leaves out the tip of Chukotka over the date line, the United States the western
+     * Aleutians, Chile Easter Island: their whole boxes would center on the wrong continent, or on
+     * open sea. A microstate is framed on its dot.
+     */
+    focusBounds(id: TerritoryId): Bounds | null {
+      const shape = byId.get(id);
+      if (!shape) return null;
+      if (shape.micro) return [shape.anchor, shape.anchor];
+      let box = focusBoxes.get(id);
+      if (box) return box;
+      const [first, ...others] = pieces(id);
+      if (!first) return shape.bounds;
+      const large = others.filter((p) => p.area >= first.area / 5);
+      box = union([first, ...large].map((p) => p.bounds))!;
+      const rest = others.filter((p) => !large.includes(p)).map((p) => p.bounds);
+      let grew: boolean;
+      do {
+        grew = false;
+        const [[x0, y0], [x1, y1]] = box;
+        const dx = Math.max((x1 - x0) / 4, 10);
+        const dy = Math.max((y1 - y0) / 4, 10);
+        for (let i = rest.length - 1; i >= 0; i--) {
+          const [[a0, b0], [a1, b1]] = rest[i]!;
+          if (a1 < x0 - dx || a0 > x1 + dx || b1 < y0 - dy || b0 > y1 + dy) continue;
+          box = union([box, rest[i]!])!;
+          rest.splice(i, 1);
+          grew = true;
+        }
+      } while (grew);
+      focusBoxes.set(id, box);
+      return box;
     },
   };
 }

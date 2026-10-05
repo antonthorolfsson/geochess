@@ -38,6 +38,8 @@ import {
 } from './state';
 
 export const missionsUrl = (campaignId: string) => `/c/${campaignId}?missions=1`;
+/** The results page, where the ending plays for whoever hasn't seen it. */
+export const resultsUrl = (campaignId: string) => `/c/${campaignId}/results`;
 
 export async function memberNames(scope: MutationScope): Promise<Map<string, string>> {
   const ids = scope.members.map((m) => m.userId);

@@ -179,7 +179,12 @@ describe('empire statistics', () => {
 
     const lobby = await stats();
     expect(lobby.history.points).toEqual([
-      { round: 0, value: { [ANN]: 0, [BO]: 0 }, countries: { [ANN]: 0, [BO]: 0 } },
+      {
+        round: 0,
+        value: { [ANN]: 0, [BO]: 0 },
+        countries: { [ANN]: 0, [BO]: 0 },
+        victoryPoints: { [ANN]: 0, [BO]: 0 },
+      },
     ]);
     expect(lobby.acquisitions).toEqual({});
 
@@ -197,10 +202,12 @@ describe('empire statistics', () => {
 
   it('start from the draft, and are for members only', async () => {
     const { stats } = await setup();
+    // An open-ended campaign has no points to win.
+    const NONE = { [ANN]: 0, [BO]: 0 };
     const s = await stats();
     expect(s.history.points).toEqual([
-      { round: 0, value: { [ANN]: 16, [BO]: 29 }, countries: { [ANN]: 5, [BO]: 7 } },
-      { round: 1, value: { [ANN]: 16, [BO]: 29 }, countries: { [ANN]: 5, [BO]: 7 } },
+      { round: 0, value: { [ANN]: 16, [BO]: 29 }, countries: { [ANN]: 5, [BO]: 7 }, victoryPoints: NONE },
+      { round: 1, value: { [ANN]: 16, [BO]: 29 }, countries: { [ANN]: 5, [BO]: 7 }, victoryPoints: NONE },
     ]);
     expect(s.history.wars).toEqual([]);
     expect(s.empires[0]!.chess).toMatchObject({ played: 0, averageMoves: null, games: [] });

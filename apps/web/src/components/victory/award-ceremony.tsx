@@ -1,15 +1,7 @@
 'use client';
 
 import { TITLES, missionName, type TitleKind } from '@empire/rules';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import {
   awardKey,
@@ -31,7 +23,7 @@ import { findMission, requirementText } from '@/lib/victory';
 import { PlayerName } from '../campaign/player-name';
 import { EmpireSwatch } from '../hatch';
 import { PointsBadge } from './mission-card';
-import { PointsCounter, ScoredStamp, useReducedMotion } from './score-effects';
+import { PointsCounter, ScoredStamp, usePageVisible, useReducedMotion } from './score-effects';
 import { TitleToken } from './title-tokens';
 
 /** Ceremonies waiting beyond this many give way, oldest first: the standings have their result. */
@@ -67,24 +59,28 @@ const COIN = 44;
  * plays it out. A title's token is tossed from its old holder's row to the new holder's (or from
  * the table, or back to it); a scored mission's card is dealt, stamped, and its points thrown into
  * the player's row. Totals count up or down and the rows re-sort. One at a time; they wait while the
- * viewer is in a live game, or away from the page.
+ * viewer is in a live game, or away from the page. `onBusy` hears whether any is playing or waiting,
+ * so the campaign's ending can wait for the points that brought it.
  */
-export function AwardCeremonies({ model, hold }: { model: CampaignModel; hold: boolean }) {
+export function AwardCeremonies({
+  model,
+  hold,
+  onBusy,
+}: {
+  model: CampaignModel;
+  hold: boolean;
+  onBusy?(busy: boolean): void;
+}) {
   const [queue, setQueue] = useCeremonies(model);
-  const visible = useSyncExternalStore(
-    (onChange) => {
-      document.addEventListener('visibilitychange', onChange);
-      return () => document.removeEventListener('visibilitychange', onChange);
-    },
-    () => document.visibilityState === 'visible',
-    () => true,
-  );
+  const visible = usePageVisible();
   const [playing, setPlaying] = useState<Ceremony | null>(null);
   useEffect(() => {
     if (playing || hold || !visible || queue.length === 0) return;
     setPlaying(queue[0]!);
     setQueue((q) => q.slice(1));
   }, [playing, hold, visible, queue, setQueue]);
+  const busy = playing !== null || queue.length > 0;
+  useEffect(() => onBusy?.(busy), [busy, onBusy]);
   const done = useCallback(() => setPlaying(null), []);
   if (!playing) return null;
   return <CeremonyCard key={playing.id} model={model} ceremony={playing} onDone={done} />;

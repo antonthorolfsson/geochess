@@ -26,7 +26,7 @@ import {
 } from '../db/schema';
 import { publishGame } from '../wars/games';
 import { settleFinishedGames } from '../wars/service';
-import { memberNames, missionsUrl, notifyAfter, revealSecret, settleVictory } from './settle';
+import { memberNames, notifyAfter, resultsUrl, revealSecret, settleVictory } from './settle';
 import { loadAwards, loadPlayers, loadWorld, pointsOf, type MissionPlayerRow } from './state';
 import { toAwardView } from './views';
 
@@ -203,7 +203,7 @@ export async function finishCampaign(
         body: seasonEnd
           ? `${campaign.name} is over: round ${round} was its last, and the most points won. Every secret mission is now revealed.`
           : `${campaign.name} is over after round ${round}. Every secret mission is now revealed.`,
-        url: missionsUrl(campaign.id),
+        url: resultsUrl(campaign.id),
         tag: `victory:${campaign.id}`,
       },
       { ending: true },

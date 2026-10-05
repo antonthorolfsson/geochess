@@ -1,11 +1,23 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { isFresh } from '@/lib/ceremony';
 import { useMediaQuery } from '@/lib/use-media-query';
 
 /** Whether the player asked for less motion: animations then hold still or skip to their end. */
 export const useReducedMotion = () => useMediaQuery('(prefers-reduced-motion: reduce)');
+
+/** Whether the page is in front of the player: what plays out for them waits while it's hidden. */
+export function usePageVisible(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      document.addEventListener('visibilitychange', onChange);
+      return () => document.removeEventListener('visibilitychange', onChange);
+    },
+    () => document.visibilityState === 'visible',
+    () => true,
+  );
+}
 
 /**
  * Slides a list's rows to their new places when their order changes, so a player overtaking

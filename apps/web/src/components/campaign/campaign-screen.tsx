@@ -21,13 +21,15 @@ import { WorldMap, type MapWar } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
 import { StandInBanner } from './stand-in';
 import { AwardCeremonies } from '../victory/award-ceremony';
+import { Finale, useFinale } from '../victory/finale';
 import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
+import { usePageVisible } from '../victory/score-effects';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
 import { LobbyPanel } from './lobby-panel';
 import { TitlesProvider } from '../victory/title-tokens';
-import { CampaignRoomProvider } from './room-context';
+import { CampaignRoomProvider, useResultsHref } from './room-context';
 import { TerritoryPanel } from './territory-panel';
 import { WarDetail, type StakePreview } from './war-detail';
 import { WarsPanel } from './wars-panel';
@@ -219,6 +221,17 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     myGames.some((g) => !g.overTheBoard && (g.game === undefined || g.game.status === 'playing'));
   const answers = model.answers.length;
   const unread = useUnread(campaign.id);
+  // The campaign's ending, once any ceremony for the points that brought it has played; then the results.
+  const [ceremoniesBusy, setCeremoniesBusy] = useState(false);
+  const visible = usePageVisible();
+  const finale = useFinale(model, !ceremoniesBusy && !inLiveGame && visible);
+  const resultsHref = useResultsHref(campaign.id);
+  const { leave: leaveFinale } = finale;
+  const finaleLeaving = useCallback(() => {
+    leaveFinale();
+    if (pageSegment !== 'results') router.push(resultsHref);
+  }, [leaveFinale, pageSegment, router, resultsHref]);
+  const finished = campaign.status === 'finished' && Boolean(campaign.victory?.result);
   // A finished Objectives campaign opens on its results.
   const [side, setSide] = useState<Side>(campaign.status === 'finished' && objectives ? 'missions' : 'main');
   const [diploView, setDiploView] = useState<DiploView>('dispatches');
@@ -343,7 +356,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const openGame = useCallback((gameId: string) => panels.set('game', gameId), [panels]);
 
   // Intel reports: wars declared on me, answers I'm owed, battles starting and ending. Missions
-  // scored and titles changing hands play as award ceremonies instead (`AwardCeremonies`).
+  // scored and titles changing hands play as award ceremonies instead (`AwardCeremonies`), and the
+  // campaign won as its ending.
   const modelRef = useRef(model);
   useEffect(() => {
     modelRef.current = model;
@@ -407,11 +421,6 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         );
       } else if (e.type === 'claim.interrupted' && e.payload.userId === me) {
         setToast(`Claim lost: ${missionName({ kind: e.payload.kind }, current.campaign.rules.victory.version)}`);
-      } else if (e.type === 'campaign.won') {
-        const winners = e.payload.winners;
-        setToast(
-          winners.includes(me) ? 'Victory' : `${winners.map((id) => playerName(current, id)).join(' and ')} won`,
-        );
       }
     }
   });
@@ -470,7 +479,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       ? 'Rules · '
       : pageSegment === 'compare'
         ? 'Compare empires · '
-        : '';
+        : pageSegment === 'results'
+          ? 'Results · '
+          : '';
   useDocumentTitle(`${flag}${page}${campaign.name} · Geo Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
@@ -685,8 +696,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
 
   return (
     // Clipped, not hidden: a hidden overflow can still be scrolled, and focusing something that
-    // overflows it (a visually hidden input) would scroll the whole room off screen.
-    <div className="flex h-dvh flex-col overflow-clip">
+    // overflows it (a visually hidden input) would scroll the whole room off screen. Out of reach
+    // while the campaign's ending plays over it.
+    <div className="flex h-dvh flex-col overflow-clip" inert={finale.playing}>
       <CampaignHeader
         model={model}
         connected={connected}
@@ -695,6 +707,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         mustChoose={mustChoose}
         declareTurn={declareTurn}
         onAct={act}
+        results={finished ? { href: resultsHref, open: pageSegment === 'results' } : null}
         back={
           overPage
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
@@ -863,7 +876,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           </aside>
         )}
 
-        <CampaignRoomProvider value={{ model, showCountry }}>
+        <CampaignRoomProvider
+          value={{ model, showCountry, finale: { pending: finale.pending, replay: finale.replay } }}
+        >
           {/* One element either way, so opening and closing a page doesn't remount Next's router below. */}
           <div className={overPage ? 'absolute inset-0 z-40 overflow-y-auto bg-gunmetal' : 'hidden'}>{children}</div>
         </CampaignRoomProvider>
@@ -882,9 +897,12 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
               {toast}
             </div>
           )}
-          {objectives && <AwardCeremonies model={model} hold={inLiveGame} />}
+          {objectives && <AwardCeremonies model={model} hold={inLiveGame} onBusy={setCeremoniesBusy} />}
         </div>
       </div>
+      {finale.showing && (
+        <Finale key={finale.play} model={model} result={finale.showing} onLeave={finaleLeaving} onDone={finale.done} />
+      )}
 
       {!isDesktop && (
         <nav
@@ -963,6 +981,7 @@ function CampaignHeader({
   onAct,
   back,
   rules,
+  results,
 }: {
   model: CampaignModel;
   connected: boolean;
@@ -978,6 +997,8 @@ function CampaignHeader({
   back: { href: string; label: string };
   /** The rules page, always a tap away; `open` while it's showing. */
   rules: { href: string; open: boolean };
+  /** A finished campaign's results page; `open` while it's showing. */
+  results: { href: string; open: boolean } | null;
 }) {
   const { campaign } = model;
   const victory = campaign.victory;
@@ -1048,6 +1069,17 @@ function CampaignHeader({
           </span>
         </button>
       )}
+      {results && !results.open && (
+        <Link
+          href={results.href}
+          title="The final standings, honors and statistics"
+          className="group flex min-h-11 shrink-0 items-center"
+        >
+          <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase group-hover:bg-[#efb940]">
+            Results
+          </span>
+        </Link>
+      )}
       <Link
         href={rules.href}
         aria-label="Rules"
@@ -1068,6 +1100,7 @@ function CampaignHeader({
 
 function MapFooter({ model, onOpen }: { model: CampaignModel; onOpen(tab: Tab): void }) {
   const { campaign } = model;
+  const resultsHref = useResultsHref(campaign.id);
   const atWar = campaign.status === 'active' || campaign.status === 'finished';
   const toMissions = campaign.victory !== null && (campaign.status === 'selection' || campaign.status === 'finished');
   const target: Tab = toMissions ? 'missions' : atWar ? 'wars' : 'draft';
@@ -1090,9 +1123,15 @@ function MapFooter({ model, onOpen }: { model: CampaignModel; onOpen(tab: Tab): 
           <div className="min-w-0 flex-1">
             <DraftStatus model={model} compact />
           </div>
-          <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => onOpen(target)}>
-            {label}
-          </button>
+          {campaign.status === 'finished' && campaign.victory?.result ? (
+            <Link href={resultsHref} className="btn btn-ghost btn-sm shrink-0">
+              Results
+            </Link>
+          ) : (
+            <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => onOpen(target)}>
+              {label}
+            </button>
+          )}
         </div>
       )}
     </div>

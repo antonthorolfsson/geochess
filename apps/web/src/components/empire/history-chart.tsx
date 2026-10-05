@@ -9,11 +9,12 @@ import { useIsDesktop } from '@/lib/use-media-query';
 import { countryName, playerName } from '@/lib/wars';
 import { PlayerName } from '../campaign/player-name';
 
-type Measure = 'value' | 'countries';
+type Measure = 'value' | 'countries' | 'points';
 
-const MEASURES: Record<Measure, { label: string; caption: string }> = {
-  value: { label: 'Value', caption: 'Game value at the end of each round' },
-  countries: { label: 'Countries', caption: 'Countries held at the end of each round' },
+const MEASURES: Record<Measure, { label: string; caption: string; unit: string }> = {
+  value: { label: 'Value', caption: 'Game value at the end of each round', unit: 'game value' },
+  countries: { label: 'Countries', caption: 'Countries held at the end of each round', unit: 'countries' },
+  points: { label: 'Points', caption: 'Victory points at the end of each round', unit: 'victory points' },
 };
 
 const MARGIN = { top: 12, right: 40, bottom: 26, left: 34 };
@@ -38,19 +39,30 @@ const readoutLabel = (round: number) => (round === 0 ? 'End of the draft' : `Rou
  * own color and its wars marked. Other empires light up from the readout below the chart, which
  * gives every value at a round: the one under the mouse, else the one picked (click, tap or arrow
  * keys), else now. A table view holds the rest. Without `userId` (the comparison page) every
- * empire is drawn in its color, and picking one from the readout quiets the rest.
+ * empire is drawn in its color, and picking one from the readout quiets the rest. Campaigns played
+ * for victory points can show the race for them, with the points to win marked.
  */
 export function HistoryChart({
   model,
   history,
   userId,
+  initialMeasure = 'value',
+  draw = false,
 }: {
   model: CampaignModel;
   history: HistoryView;
   userId: string | null;
+  /** What the chart opens on. */
+  initialMeasure?: Measure;
+  /** The lines draw themselves in, left to right, when the chart first shows. */
+  draw?: boolean;
 }) {
   const isDesktop = useIsDesktop();
-  const [measure, setMeasure] = useState<Measure>('value');
+  // Points only where the campaign plays for them (and the server counts them).
+  const goal = model.campaign.victory?.pointsToWin ?? null;
+  const measures: Measure[] =
+    goal !== null && history.points[0]?.victoryPoints ? ['points', 'value', 'countries'] : ['value', 'countries'];
+  const [measure, setMeasure] = useState<Measure>(measures.includes(initialMeasure) ? initialMeasure : 'value');
   const [asTable, setAsTable] = useState(false);
   /** The round picked by a click, tap or key, which stays until another is picked. */
   const [picked, setPicked] = useState<number | null>(null);
@@ -69,7 +81,7 @@ export function HistoryChart({
   const controls = (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex" role="group" aria-label="Measure">
-        {(Object.keys(MEASURES) as Measure[]).map((m) => (
+        {measures.map((m) => (
           <button
             key={m}
             type="button"
@@ -103,7 +115,8 @@ export function HistoryChart({
     );
   }
 
-  const valueAt = (i: number, u: string) => points[i]![measure][u] ?? 0;
+  const valueAt = (i: number, u: string) =>
+    (measure === 'points' ? points[i]!.victoryPoints?.[u] : points[i]![measure][u]) ?? 0;
   const active = hover ?? picked;
   const shown = active ?? last;
   const me = userId === null ? undefined : model.membersById.get(userId);
@@ -168,11 +181,13 @@ export function HistoryChart({
   const plotH = isDesktop ? 220 : 170;
   const plotW = Math.max(0, width - MARGIN.left - MARGIN.right);
   // Lines needn't start at zero: fit the range to the data, so a round's gains and losses show.
+  // Points do, with the points to win in view.
+  const finish = measure === 'points' ? goal : null;
   const all = points.flatMap((_, i) => members.map((m) => valueAt(i, m.userId)));
-  const [lo, hi] = [Math.min(...all), Math.max(...all)];
+  const [lo, hi] = finish === null ? [Math.min(...all), Math.max(...all)] : [0, Math.max(finish, ...all)];
   const step = niceStep(Math.max(hi - lo, 4) / 4);
-  const bottom = Math.max(0, Math.floor((lo - step / 2) / step) * step);
-  const top = Math.ceil((hi + step / 2) / step) * step;
+  const bottom = finish === null ? Math.max(0, Math.floor((lo - step / 2) / step) * step) : 0;
+  const top = Math.ceil((hi + (finish === null ? step / 2 : 0)) / step) * step;
   const ticks = Array.from({ length: Math.round((top - bottom) / step) + 1 }, (_, k) => bottom + k * step);
   const x = (i: number) => MARGIN.left + (i / last) * plotW;
   const y = (v: number) => MARGIN.top + plotH - ((v - bottom) / (top - bottom)) * plotH;
@@ -227,6 +242,9 @@ export function HistoryChart({
     : [highlight, userId].filter((u): u is string => u !== null && u !== userId).concat(userId ?? []);
   /** The line whose latest value is written at its end. */
   const labelled = userId ?? highlight;
+  /** Lines drawn in from the left (`pathLength` makes the dash the whole line), and what sits on them after. */
+  const drawn = draw ? { pathLength: 1, className: 'line-draw' } : {};
+  const afterDraw = draw ? 'line-draw-after' : undefined;
 
   return (
     <div className="space-y-3">
@@ -274,6 +292,26 @@ export function HistoryChart({
               ) : null,
             )}
 
+            {finish !== null && (
+              <g className="text-amber">
+                <line
+                  x1={MARGIN.left}
+                  x2={MARGIN.left + plotW}
+                  y1={y(finish)}
+                  y2={y(finish)}
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                />
+                <text
+                  x={MARGIN.left + 6}
+                  y={y(finish) + 14}
+                  className="fill-amber text-[11px] font-bold tracking-wider"
+                >
+                  {finish} TO WIN
+                </text>
+              </g>
+            )}
             {others.map((m) => (
               <path
                 key={m.userId}
@@ -283,6 +321,7 @@ export function HistoryChart({
                 strokeWidth={1.5}
                 strokeLinejoin="round"
                 strokeLinecap="round"
+                {...drawn}
               />
             ))}
             {emphasized.map((u) => (
@@ -294,6 +333,7 @@ export function HistoryChart({
                 strokeWidth={u === labelled ? 2.5 : 2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
+                {...drawn}
               />
             ))}
 
@@ -317,6 +357,7 @@ export function HistoryChart({
                   fill="none"
                   stroke={lineOf(u)}
                   strokeWidth={2}
+                  className={afterDraw}
                 />
               ) : (
                 <circle
@@ -327,6 +368,7 @@ export function HistoryChart({
                   fill={lineOf(u)}
                   stroke={SURFACE}
                   strokeWidth={2}
+                  className={afterDraw}
                 />
               ),
             )}
@@ -348,7 +390,7 @@ export function HistoryChart({
                 x={x(last) + 12}
                 y={y(valueAt(last, labelled))}
                 dy="0.32em"
-                className="fill-paper text-[12px] font-semibold tabular-nums"
+                className={`fill-paper text-[12px] font-semibold tabular-nums ${afterDraw ?? ''}`}
               >
                 {valueAt(last, labelled)}
               </text>
@@ -461,7 +503,7 @@ function Readout({
                 <button
                   type="button"
                   aria-pressed={member.userId === highlight}
-                  aria-label={`${member.name}: ${value} ${measure === 'value' ? 'game value' : 'countries'}. Show their line.`}
+                  aria-label={`${member.name}: ${value} ${MEASURES[measure].unit}. Show their line.`}
                   onClick={() => onPin(member.userId)}
                   onPointerEnter={(e) => e.pointerType === 'mouse' && onHover(member.userId)}
                   onPointerLeave={() => onHover(null)}

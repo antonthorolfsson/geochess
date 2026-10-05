@@ -743,6 +743,11 @@ export interface HistoryPoint {
   value: Record<string, number>;
   /** Countries each player held, by player id. */
   countries: Record<string, number>;
+  /**
+   * Victory points each player had, by player id: missions scored and titles held (all zero in an
+   * open-ended campaign). Unset from servers older than the results page.
+   */
+  victoryPoints?: Record<string, number>;
 }
 
 export interface HistoryWar {

@@ -14,6 +14,7 @@ import type {
   PublicMissionSpec,
   RoundStart,
   SecretMissionSpec,
+  StatKey,
   SecretOption,
   TerritoryId,
   Transfer,
@@ -268,7 +269,13 @@ export interface SimState {
   claims: Map<string, Claim>;
   claimLog: Claim[];
   awards: Award[];
+  /** Mission points and title points (`Variant.titles`) together. */
   points: Map<UserId, number>;
+  /** Who holds each title (`Variant.titles`), and how often one changed hands after round 1 began. */
+  titles: Map<StatKey, UserId | null>;
+  titleMoves: number;
+  /** The titles each player held when round 1 began. */
+  titlesAtStart: Record<UserId, StatKey[]> | null;
   winners: UserId[];
   finishedRound: number | null;
   /** Public missions each player had complete when the draft ended. */

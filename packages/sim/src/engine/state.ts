@@ -117,6 +117,9 @@ export function createState(cfg: SimConfig, idx: DatasetIndex, seed: number): Si
     claimLog: [],
     awards: [],
     points: new Map(ids.map((id) => [id, 0])),
+    titles: new Map(),
+    titleMoves: 0,
+    titlesAtStart: null,
     winners: [],
     finishedRound: null,
     draftComplete: [],
@@ -161,7 +164,8 @@ export function note(s: SimState, text: string | (() => string)): void {
   if (s.cfg.trace) s.log.push(`[r${s.round}] ${typeof text === 'function' ? text() : text}`);
 }
 
-/** The points needed to win, the variant's if it changes them. */
-export const pointsToWin = (s: SimState) => s.cfg.variant?.points?.toWin ?? s.mr.points.toWin;
+/** The points needed to win, the variant's if it changes them (by table size, where it does). */
+export const pointsToWin = (s: SimState) =>
+  s.cfg.variant?.toWinFor?.(s.cfg.players) ?? s.cfg.variant?.points?.toWin ?? s.mr.points.toWin;
 export const publicPoints = (s: SimState) => s.cfg.variant?.points?.public ?? s.mr.points.public;
 export const secretPoints = (s: SimState) => s.cfg.variant?.points?.secret ?? s.mr.points.secret;

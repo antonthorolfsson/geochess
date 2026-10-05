@@ -2,7 +2,7 @@
 import { MISSIONS, type MissionKind } from '@empire/rules';
 import type { CampaignRecord } from '../record';
 import { band, groupBy } from './aggregate';
-import { mean, num, pct, table, wilson } from './stats';
+import { mean, num, pct, quantile, table, wilson } from './stats';
 
 type Rec = CampaignRecord;
 const name = (kind: string) => MISSIONS[kind as MissionKind]?.name ?? kind;
@@ -106,4 +106,75 @@ export function skill(recs: readonly Rec[]): string {
     return [scenario!, n, rs.length, wins.map((w) => pct(w / rs.length)).join(' · '), pct(1 / n)];
   });
   return table(['Scenario', 'Players', 'Campaigns', 'Win rate by rating, strongest first', 'Fair share'], rows);
+}
+
+/** Points a winner holds in titles at the end (what-ifs with titles), from their record. */
+function titlePointsAtEnd(r: Rec, p: Rec['seats'][number]): number {
+  const per = r.variant?.match(/^titles-(\d)/)?.[1];
+  return (p.titles?.length ?? 0) * Number(per ?? 0);
+}
+
+/**
+ * How campaigns end with titles (points for leading the table on a real-world figure) against
+ * without: game length, how they're won, what winners hold, and whether the draft's biggest
+ * empire, or the one starting with the most titles, runs away with it.
+ */
+export function titles(recs: readonly Rec[]): string {
+  const rows = [...groupBy(recs, (r) => `${r.scenario}|${String(r.players).padStart(2)}`)].map(([k, rs]) => {
+    const [scenario, players] = k.split('|');
+    const won = rs.filter((r) => r.finished);
+    const rounds = rs.map((r) => (r.finished && r.winRound !== null ? r.winRound : Infinity));
+    const winners = won.flatMap((r) => r.seats.filter((p) => p.won).map((p) => ({ r, p })));
+    const shareOf = (pick: (r: Rec) => Rec['seats'][number][]) =>
+      rs.reduce((n, r) => {
+        const picked = pick(r);
+        return n + picked.filter((p) => p.won).length / Math.max(1, picked.length);
+      }, 0) / rs.length;
+    const biggest = (r: Rec) => {
+      const top = Math.max(...r.seats.map((p) => p.drafted));
+      return r.seats.filter((p) => p.drafted === top);
+    };
+    const mostTitles = (r: Rec) => {
+      const top = Math.max(...r.seats.map((p) => p.titlesAtStart?.length ?? 0));
+      return top === 0 ? [] : r.seats.filter((p) => (p.titlesAtStart?.length ?? 0) === top);
+    };
+    const withTitles = rs.some((r) => r.titleMoves !== undefined);
+    return [
+      scenario!,
+      players!.trim(),
+      rs.length,
+      rs[0]?.toWin ?? '',
+      num(quantile(rounds, 0.5), 0),
+      pct(won.filter((r) => !r.byLimit).length / rs.length),
+      pct(rs.filter((r) => r.byLimit).length / rs.length),
+      num(mean(winners.map(({ r, p }) => p.vp - titlePointsAtEnd(r, p))), 1),
+      withTitles ? num(mean(winners.map(({ r, p }) => titlePointsAtEnd(r, p))), 1) : '–',
+      withTitles ? num(mean(rs.map((r) => Math.max(...r.seats.map((p) => p.titlesAtStart?.length ?? 0)))), 1) : '–',
+      withTitles ? pct(shareOf(mostTitles)) : '–',
+      pct(shareOf(biggest)),
+      pct(rs.filter((r) => r.leaderAt5?.some((id) => r.winners.includes(id))).length / rs.length),
+      withTitles ? num(mean(rs.map((r) => r.titleMoves ?? 0)), 1) : '–',
+      num(mean(rs.map((r) => r.wars.declared / (r.rounds * r.players))), 2),
+    ];
+  });
+  return table(
+    [
+      'Scenario',
+      'Players',
+      'Campaigns',
+      'To win',
+      'Median win round',
+      'Reached the points to win',
+      'Won on points at the last round',
+      "Winners' mission points",
+      "Winners' title points",
+      'Most titles one player starts with',
+      'Who starts with the most titles wins',
+      'Biggest drafted empire wins',
+      'Round-5 leader wins',
+      'Titles changing hands',
+      'Declarations per player-round',
+    ],
+    rows,
+  );
 }

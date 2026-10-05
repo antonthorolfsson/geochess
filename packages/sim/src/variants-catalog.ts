@@ -564,3 +564,51 @@ VARIANTS['no-turns'] = {
     war: { turns: false },
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Titles (October 2026): points for the most population, land, GDP and military spending, held by
+// whoever leads on each from the draft's end and lost with the lead, with 10 points to win.
+
+const TITLE_STATS = ['population', 'areaKm2', 'gdpNominalUsd', 'militarySpendingUsd'] as const;
+
+/** Points to win by table size: `byPlayers[n]`, or `toWin` where it says nothing. */
+const toWinTable = (toWin: number, byPlayers: Record<number, number>) => (players: number) =>
+  byPlayers[players] ?? toWin;
+
+for (const points of [1, 2]) {
+  const titles = { stats: TITLE_STATS, points };
+  const what = `${points} point${points > 1 ? 's' : ''} each for the most population, land, GDP and military spending (held by the leader, from the draft's end)`;
+  VARIANTS[`titles-${points}`] = {
+    variant: { name: `titles-${points}`, description: `${what}; 10 points to win.`, titles, points: { toWin: 10 } },
+  };
+  VARIANTS[`titles-${points}-blind`] = {
+    scenario: 'titles-blind',
+    variant: {
+      name: `titles-${points}-blind`,
+      description: `As titles-${points}, with bots that never fight for a title.`,
+      titles,
+      points: { toWin: 10 },
+    },
+  };
+  for (const extra of [1, 2]) {
+    VARIANTS[`titles-${points}-public${4 + extra}`] = {
+      variant: {
+        name: `titles-${points}-public${4 + extra}`,
+        description: `${what}; 10 points to win; ${4 + extra} public missions (the defaults and ${extra} drawn).`,
+        titles,
+        points: { toWin: 10 },
+        extraPublic: () => extra,
+      },
+    };
+  }
+  for (const toWin of [8, 9, 11, 12, 13, 14]) {
+    VARIANTS[`titles-${points}-win${toWin}`] = {
+      variant: {
+        name: `titles-${points}-win${toWin}`,
+        description: `${what}; ${toWin} points to win.`,
+        titles,
+        points: { toWin },
+      },
+    };
+  }
+}

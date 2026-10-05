@@ -64,6 +64,8 @@ export interface BotKnobs {
   topK: number;
   /** Hold 2 tokens back for Lightning Campaign while it's unscored. */
   saveForLightning: boolean;
+  /** Weight on titles won, kept, lost or taken from the opponent in a war (what-ifs with titles only). */
+  titleWeight: number;
 }
 
 export const DEFAULT_KNOBS: BotKnobs = {
@@ -91,6 +93,7 @@ export const DEFAULT_KNOBS: BotKnobs = {
   grudge: 70,
   topK: 6,
   saveForLightning: true,
+  titleWeight: 1,
 };
 
 /** The knobs counted in country value. */

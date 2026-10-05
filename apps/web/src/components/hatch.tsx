@@ -41,6 +41,15 @@ export function HatchTile({ pattern, size, ink = HATCH_INK }: { pattern: HatchPa
   }
 }
 
+/** WCAG relative luminance of a #rrggbb color. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
 export const svgId = (reactId: string) => reactId.replace(/[^a-zA-Z0-9_-]/g, '');
 
 /** A player's color and hatching, as a small square. */
@@ -62,7 +71,16 @@ export function EmpireSwatch({ color, size = 18, className }: { color: number; s
       </defs>
       <rect width={18} height={18} rx={2.5} fill={c.hex} />
       <rect width={18} height={18} rx={2.5} fill={`url(#${id})`} />
-      <rect x={0.5} y={0.5} width={17} height={17} rx={2} fill="none" stroke="rgba(0,0,0,0.35)" />
+      {/* A dark outline, or a pale one where the color itself is near black (Graphite on a dark panel). */}
+      <rect
+        x={0.5}
+        y={0.5}
+        width={17}
+        height={17}
+        rx={2}
+        fill="none"
+        stroke={luminance(c.hex) < 0.04 ? 'rgba(228,226,216,0.35)' : 'rgba(0,0,0,0.35)'}
+      />
     </svg>
   );
 }

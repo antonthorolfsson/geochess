@@ -149,14 +149,17 @@ describe('campaign rules', () => {
 });
 
 describe('empire colors', () => {
-  it('pairs every color with a distinct pattern', () => {
-    expect(new Set(EMPIRE_COLORS.map((c) => c.pattern)).size).toBe(EMPIRE_COLORS.length);
+  it('pairs every patterned color with a distinct pattern', () => {
+    const patterned = EMPIRE_COLORS.filter((c) => c.palette === 'patterned');
+    expect(new Set(patterned.map((c) => c.pattern)).size).toBe(patterned.length);
     expect(EMPIRE_COLORS.every((c, i) => c.index === i)).toBe(true);
   });
 
-  it('hands out the first free color', () => {
+  it('hands out the first free color, patterned ones first', () => {
     expect(firstFreeColor([])).toBe(0);
     expect(firstFreeColor([0, 1, 3])).toBe(2);
+    expect(firstFreeColor([0, 1, 2, 3, 4, 5, 6, 7])).toBe(8);
+    expect(firstFreeColor([8, 9])).toBe(0);
     expect(firstFreeColor(EMPIRE_COLORS.map((c) => c.index))).toBeNull();
   });
 });

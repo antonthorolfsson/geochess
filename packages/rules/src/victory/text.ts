@@ -105,8 +105,11 @@ export function listNames(idx: DatasetIndex, ids: readonly TerritoryId[]): strin
 
 const nameOf = (idx: DatasetIndex, id: TerritoryId) => idx.byId.get(id)?.name ?? id;
 
-/** Named seas and regions: the whole of it, and what "N of the M" counts. */
-const NAMED_SETS: Record<string, { all: string; noun: string }> = {
+/**
+ * Named seas and regions: the whole of it, and what "N of the M" counts (by the countries in the
+ * set, where a version changed them).
+ */
+const NAMED_SETS: Record<string, { all: string; noun: string | ((territories: readonly TerritoryId[]) => string) }> = {
   northern_passage: {
     all: 'Hold the North Atlantic crossing, from Canada to the United Kingdom.',
     noun: 'countries of the North Atlantic crossing, from Canada to the United Kingdom',
@@ -127,7 +130,10 @@ const NAMED_SETS: Record<string, { all: string; noun: string }> = {
   caspian: { all: 'Hold every country around the Caspian Sea.', noun: 'countries around the Caspian Sea' },
   nordic: {
     all: 'Unite Norway, Sweden, Finland and Denmark.',
-    noun: 'Nordic countries: Norway, Sweden, Finland and Denmark',
+    noun: (territories) =>
+      territories.includes('ISL')
+        ? 'Nordic countries: Norway, Sweden, Finland, Denmark and Iceland'
+        : 'Nordic countries: Norway, Sweden, Finland and Denmark',
   },
   horn_of_africa: {
     all: 'Hold Ethiopia, Eritrea, Djibouti and Somalia.',
@@ -229,7 +235,8 @@ export function missionSummary(kind: MissionKind, cfg: MissionRules): string {
       const tpl = cfg.namedSets.find((t) => t.kind === kind);
       const text = NAMED_SETS[kind]!;
       if (!tpl || tpl.need >= tpl.territories.length) return text.all;
-      return `Hold ${words(tpl.need)} of the ${words(tpl.territories.length)} ${text.noun}.`;
+      const noun = typeof text.noun === 'string' ? text.noun : text.noun(tpl.territories);
+      return `Hold ${words(tpl.need)} of the ${words(tpl.territories.length)} ${noun}.`;
     }
     case 'island_empire': {
       const { count, need, newCount } = cfg.islandEmpire;

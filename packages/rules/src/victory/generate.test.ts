@@ -233,8 +233,8 @@ describe('public missions', () => {
     ]);
   });
 
-  it('carry version 4’s numbers, written for values 1 to 20 (version 5 keeps them)', () => {
-    expect(DEFAULT_RULES.victory.version).toBe(5);
+  it('carry version 4’s numbers, written for values 1 to 20 (versions 5 and 6 keep them)', () => {
+    expect(DEFAULT_RULES.victory.version).toBe(6);
     expect(MISSION_RULES_V4.valueScale).toBe(1.29);
     expect(generatePublicMission('expansion', idx, DEFAULT_RULES, Math.random)).toEqual({
       kind: 'expansion',
@@ -408,6 +408,24 @@ describe('secret options', () => {
     });
     expect(kinds(three, DEFAULT_RULES).map((s) => s.kind)).not.toContain('iron_wall');
     expect(kinds(three, v2).map((s) => s.kind)).toContain('iron_wall');
+  });
+
+  it('deal Nemesis from three players from version 6, when the rival it marks isn’t the only one', () => {
+    const kinds = (world: ReturnType<typeof makeWorld>, rules: CampaignRules) =>
+      secretCandidates(world, ANN, rules, seededRandom(1)).map((c) => c.spec.kind);
+    const v5 = parseRules({ victory: { mode: 'objectives', version: 5 } });
+    const two = makeWorld(idx, {
+      ...all(ANN, ...quarter(0, 0), ...quarter(0, 4)),
+      ...all(BO, ...quarter(5, 0), ...quarter(5, 4), 'I0', 'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7'),
+    });
+    expect(kinds(two, DEFAULT_RULES)).not.toContain('nemesis');
+    expect(kinds(two, v5)).toContain('nemesis');
+    const three = makeWorld(idx, {
+      ...all(ANN, ...quarter(0, 0)),
+      ...all(BO, ...quarter(5, 0), ...quarter(5, 4), 'I0', 'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7'),
+      ...all(CY, ...quarter(0, 4)),
+    });
+    expect(kinds(three, DEFAULT_RULES)).toContain('nemesis');
   });
 
   it('mark for Buffer Zone the most valuable drafted country with three to six neighbors', () => {

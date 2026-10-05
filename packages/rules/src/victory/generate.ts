@@ -544,12 +544,13 @@ export function secretCandidates(
   const offers = (kind: SecretMissionKind) => cfg.secretKinds.includes(kind);
   const found: SecretCandidate[] = [];
 
-  // Named sets, where this map has every country and they hang together.
+  // Named sets, where this map has every country and enough of them to finish it hang together
+  // (Nordic's Iceland lies apart, across the North Atlantic).
   for (const tpl of cfg.namedSets) {
     if (!offers(tpl.kind)) continue;
     const targets = [...tpl.territories];
     if (!targets.every((id) => idx.byId.has(id) && claimed(id))) continue;
-    if (components(idx, new Set(targets)).length !== 1) continue;
+    if (!components(idx, new Set(targets)).some((part) => part.length >= tpl.need)) continue;
     if (tpl.need - targets.filter((id) => held.has(id)).length < min || !inReach(targets)) continue;
     const plan = acquisitionPlan(idx, held, targets, tpl.need);
     if (!plan) continue;
@@ -848,7 +849,7 @@ export function secretCandidates(
   }
 
   // Nemesis: the rival with the longest shared front (the most of their countries bordering yours).
-  if (offers('nemesis')) {
+  if (offers('nemesis') && world.players.length >= (cfg.nemesis.minPlayers ?? 0)) {
     const { count, reveal } = cfg.nemesis;
     const fronts = new Map<UserId, TerritoryId[]>();
     for (const id of frontier(idx, owners, held)) {

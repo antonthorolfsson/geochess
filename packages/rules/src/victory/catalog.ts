@@ -735,7 +735,11 @@ export interface MissionRules {
   /** The marked country has this many neighbors (inclusive). */
   bufferZone: { neighbors: readonly [number, number] };
   halfOfHumanity: { sharePct: number };
-  nemesis: { count: number; reveal: number };
+  /**
+   * Dealt only with `minPlayers` or more (at any table if unset): with a lone rival, the mark names
+   * the only player there is to take countries from.
+   */
+  nemesis: { count: number; reveal: number; minPlayers?: number };
   /** Rounds after the one the accord is broken in, and countries to take from the partner (one if unset). */
   backstab: { rounds: number; count?: number };
   /** Dealt only with `minPlayers` or more: a lone rival can deny it by never attacking. */
@@ -1026,16 +1030,31 @@ export const MISSION_RULES_V5: MissionRules = {
   titles: { kinds: TITLE_KINDS, points: 1 },
 };
 
+/**
+ * Version 6 follows playtest reports: Nemesis is dealt only from three players, since with two the
+ * rival it marks is the only one there is, and Nordic counts Iceland, so it takes three of the five
+ * Nordic countries. Everything else is version 5's.
+ */
+export const MISSION_RULES_V6: MissionRules = {
+  ...MISSION_RULES_V5,
+  version: 6,
+  nemesis: { ...MISSION_RULES_V5.nemesis, minPlayers: 3 },
+  namedSets: MISSION_RULES_V5.namedSets.map((t) =>
+    t.kind === 'nordic' ? { ...t, territories: ['NOR', 'SWE', 'FIN', 'DNK', 'ISL'], need: 3, reveal: 3 } : t,
+  ),
+};
+
 const MISSION_RULES: Record<number, MissionRules> = {
   1: MISSION_RULES_V1,
   2: MISSION_RULES_V2,
   3: MISSION_RULES_V3,
   4: MISSION_RULES_V4,
   5: MISSION_RULES_V5,
+  6: MISSION_RULES_V6,
 };
 
 /** The mission rules version new campaigns are created with. */
-export const CURRENT_MISSION_RULES = MISSION_RULES_V5.version;
+export const CURRENT_MISSION_RULES = MISSION_RULES_V6.version;
 
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {

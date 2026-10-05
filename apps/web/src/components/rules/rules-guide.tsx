@@ -1385,7 +1385,9 @@ function tableTag(kind: MissionKind, cfg: MissionRules): string | null {
       ? cfg.ironWall.minPlayers
       : kind === 'protected_expansion'
         ? cfg.protectedExpansion.minPlayers
-        : 0;
+        : kind === 'nemesis'
+          ? (cfg.nemesis.minPlayers ?? 0)
+          : 0;
   return least > 2 ? `${PLAYER_COUNTS[least] ?? least} players or more` : null;
 }
 

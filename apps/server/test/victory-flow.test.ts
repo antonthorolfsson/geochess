@@ -81,7 +81,7 @@ describe('the lobby', () => {
     const c = await view(bo);
     expect(c.rules.victory.mode).toBe('objectives');
     expect(c.victory).toMatchObject({
-      version: 5,
+      version: 6,
       pointsToWin: 10,
       publicPoints: 2,
       secretPoints: 3,

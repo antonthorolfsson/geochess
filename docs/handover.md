@@ -1194,6 +1194,32 @@ Defaults taken (not asked; easy to change): the ending plays once per browser ra
 player across devices (no server state); about 8 seconds before it moves on by itself; a tap
 anywhere moves on; the honors and their names; the stats a results page leads with.
 
+**GitHub issues #37, #41 and #42** (2026-10-05).
+
+- **#37, the war on the map.** The war open beside the map (its details, or the board of a game in
+  it) is called out: the attacker's stake outlined in amber dashes, as a stake being built is, the
+  target and any countries raises put in outlined and filled in grease red, and its arrow drawn
+  strong. On desktop the map frames all of them when the war or its game opens (it used to fly to
+  the target alone), and a link that opens one (a "your move" notification) frames it instead of
+  the player's empire: a zoom asked for before the map is measured is now its first frame
+  (`WorldMap`'s `war` prop, `MapWarFocus`; `mapWarFocus` in the campaign screen).
+- **Mission rules version 6** (new campaigns; version 5 is otherwise unchanged and stored campaigns
+  keep theirs). **#41:** Nemesis is dealt only from three players (`nemesis.minPlayers`): with
+  two, the rival it marks is the only one there is. The rules guide tags it "three players or
+  more". **#42:** Nordic counts Iceland, three of the five (Norway, Sweden, Finland, Denmark and
+  Iceland). Iceland's only lanes run to Greenland and the United Kingdom, so the set no longer
+  hangs together; rather than add a Norway–Iceland lane (a new dataset version, and a new front),
+  named sets are now dealt where enough of their countries to finish them hang together, which
+  changes nothing for the sets of versions 1 to 5 on any dataset.
+- The data test that sampled who is dealt the Northern Passage now checks candidates: it was dealt
+  in 3 of 160 hands under version 5 and 2 under version 6 (Nordic, with Iceland, is dealt more), so
+  eight drafts had only found one by luck.
+- **Checked in the browser** (a production build on a scratch database, against a bot; desktop and
+  phone): a war's game and its details with France and Germany called out and framed, the board's
+  "War details" link, and a fresh load of a game link.
+
+Tests since: rules 319, data 73, web 103, sim 29, server 223 (747 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

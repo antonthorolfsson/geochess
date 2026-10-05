@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MISSION_RULES_V2, MISSION_RULES_V3, type MissionSpec, type SecretMissionSpec } from './catalog';
+import {
+  MISSION_RULES_V2,
+  MISSION_RULES_V3,
+  MISSION_RULES_V6,
+  type MissionSpec,
+  type SecretMissionSpec,
+} from './catalog';
 import {
   effortText,
   kindName,
@@ -105,6 +111,12 @@ describe('mission wording', () => {
     );
     expect(missionSummary('black_sea', MISSION_RULES_V2)).toBe('Hold five of the six countries around the Black Sea.');
     expect(missionSummary('nordic', MISSION_RULES_V2)).toBe('Unite Norway, Sweden, Finland and Denmark.');
+    expect(missionSummary('nordic', MISSION_RULES_V3)).toBe(
+      'Hold two of the four Nordic countries: Norway, Sweden, Finland and Denmark.',
+    );
+    expect(missionSummary('nordic', MISSION_RULES_V6)).toBe(
+      'Hold three of the five Nordic countries: Norway, Sweden, Finland, Denmark and Iceland.',
+    );
     expect(missionSummary('backstab', MISSION_RULES_V2)).toBe(
       'Break an accord, then take a country from that partner within the next two rounds.',
     );

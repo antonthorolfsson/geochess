@@ -69,6 +69,19 @@ describe(`missions on ${index.latest}`, () => {
     }
   });
 
+  it('resolves the current named sets to the map, enough of each hanging together to finish it', () => {
+    for (const set of missionRules(CURRENT_MISSION_RULES).namedSets) {
+      for (const id of set.territories) expect(idx.byId.has(id), `${set.kind}: ${id}`).toBe(true);
+      const parts = components(idx, new Set(set.territories));
+      expect(Math.max(...parts.map((part) => part.length)), set.kind).toBeGreaterThanOrEqual(set.need);
+    }
+    // Iceland lies apart from the rest of the Nordic countries, across the North Atlantic.
+    const nordic = missionRules(CURRENT_MISSION_RULES).namedSets.find((set) => set.kind === 'nordic')!;
+    expect(components(idx, new Set(nordic.territories)).map((part) => [...part].sort())).toEqual(
+      expect.arrayContaining([['DNK', 'FIN', 'NOR', 'SWE'], ['ISL']]),
+    );
+  });
+
   it('resolves every route, strait and fixed public target to the map', () => {
     for (const {
       kind,
@@ -182,14 +195,16 @@ describe(`missions on ${index.latest}`, () => {
     }
   });
 
-  it('deals the Northern Passage only to empires near the North Atlantic', () => {
+  it('offers the Northern Passage only to empires near the North Atlantic', () => {
+    // Candidates, not the options drawn from them: the Northern Passage is a candidate for someone in
+    // every draft here, but drawn only now and then.
     const players = ['ann', 'bo', 'cy', 'di'];
     let dealtTo = 0;
     for (let seed = 1; seed <= 8; seed++) {
       const owners = simulateDraft(players, objectives, seed);
       const world = worldAfterDraft(owners, players);
       for (const p of players) {
-        const dealt = secretOptions(world, p, objectives, seededRandom(seed)).find(
+        const dealt = secretCandidates(world, p, objectives, seededRandom(seed)).find(
           (o) => o.spec.kind === 'northern_passage',
         );
         if (!dealt) continue;

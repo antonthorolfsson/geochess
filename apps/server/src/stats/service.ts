@@ -1,10 +1,18 @@
-import { campaignStats, type CampaignEvent, type CampaignStats, type Resolution } from '@empire/rules';
+import {
+  campaignStats,
+  type CampaignEvent,
+  type CampaignStats,
+  type PointsChange,
+  type Resolution,
+} from '@empire/rules';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { AppContext } from '../context';
 import { accords, campaigns, events, games, holdings, members, wars } from '../db/schema';
 import { notFound } from '../lib/errors';
 
 type ResolvedPayload = Extract<CampaignEvent, { type: 'war.resolved' }>['payload'];
+/** The events that move victory points. */
+type PointsEvent = Extract<CampaignEvent, { type: 'mission.awarded' | 'title.changed' }>;
 
 /** Accord statuses that were signed; proposals that came to nothing stay private. */
 const SIGNED = ['active', 'kept', 'broken', 'renewed'] as const;
@@ -46,6 +54,11 @@ export async function statsView(ctx: AppContext, campaignId: string, viewerId: s
         .from(events)
         .where(and(eq(events.campaignId, campaignId), eq(events.type, 'war.resolved')))
         .orderBy(asc(events.id));
+      const pointsEvents = await tx
+        .select({ round: events.round, type: events.type, payload: events.payload })
+        .from(events)
+        .where(and(eq(events.campaignId, campaignId), inArray(events.type, ['mission.awarded', 'title.changed'])))
+        .orderBy(asc(events.id));
       // By war, which is indexed.
       const gameRows = warRows.length
         ? await tx
@@ -79,7 +92,7 @@ export async function statsView(ctx: AppContext, campaignId: string, viewerId: s
         })
         .from(accords)
         .where(and(eq(accords.campaignId, campaignId), inArray(accords.status, [...SIGNED])));
-      return { campaign, memberRows, holdingRows, warRows, resolvedEvents, gameRows, accordRows };
+      return { campaign, memberRows, holdingRows, warRows, resolvedEvents, pointsEvents, gameRows, accordRows };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
   );
@@ -103,6 +116,15 @@ export async function statsView(ctx: AppContext, campaignId: string, viewerId: s
       },
     ];
   });
+  const pointsChanges = rows.pointsEvents.flatMap(({ round, type, payload }): PointsChange[] => {
+    const e = { type, payload } as PointsEvent;
+    if (e.type === 'mission.awarded') return [{ round, userId: e.payload.userId, points: e.payload.points }];
+    const { from, to, points } = e.payload;
+    return [
+      ...(from ? [{ round, userId: from, points: -points }] : []),
+      ...(to ? [{ round, userId: to, points }] : []),
+    ];
+  });
 
   return campaignStats({
     idx: ctx.datasets.get(campaign.datasetVersion),
@@ -117,6 +139,7 @@ export async function statsView(ctx: AppContext, campaignId: string, viewerId: s
     ),
     round: campaign.round,
     resolutions,
+    pointsChanges,
     wars: warRows,
     accords: rows.accordRows,
     games: rows.gameRows.map((g) => ({

@@ -8,6 +8,7 @@ import {
   resultFor,
   warRecord,
   type GameFacts,
+  type PointsChange,
   type Resolution,
   type WarFacts,
 } from './stats';
@@ -125,7 +126,27 @@ describe('empire history', () => {
   it('is a single point while the draft runs', () => {
     const drafting = new Map([['A', ANN]]);
     expect(empireHistory(idx, members, drafting, 0, []).points).toEqual([
-      { round: 0, value: { ann: 9, bo: 0 }, countries: { ann: 1, bo: 0 } },
+      { round: 0, value: { ann: 9, bo: 0 }, countries: { ann: 1, bo: 0 }, victoryPoints: { ann: 0, bo: 0 } },
+    ]);
+  });
+
+  it('adds up victory points by the end of each round, titles taken away included', () => {
+    const changes: PointsChange[] = [
+      // Round 1 hands out two titles; Bo scores a mission in round 2 and takes a title from Ann.
+      { round: 1, userId: ANN, points: 1 },
+      { round: 1, userId: ANN, points: 1 },
+      { round: 2, userId: BO, points: 2 },
+      { round: 2, userId: ANN, points: -1 },
+      { round: 2, userId: BO, points: 1 },
+      // A player who has since left counts for nobody.
+      { round: 3, userId: 'cy', points: 2 },
+    ];
+    const history = empireHistory(idx, members, holdings, 3, resolutions, changes);
+    expect(history.points.map((p) => [p.round, p.victoryPoints])).toEqual([
+      [0, { ann: 0, bo: 0 }],
+      [1, { ann: 2, bo: 0 }],
+      [2, { ann: 1, bo: 3 }],
+      [3, { ann: 1, bo: 3 }],
     ]);
   });
 });

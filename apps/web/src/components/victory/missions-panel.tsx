@@ -16,6 +16,7 @@ import {
   type VictoryResultView,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
@@ -37,7 +38,7 @@ import {
 import { countryName, playerName, timeLeft } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
 import { PlayerName } from '../campaign/player-name';
-import { useEmpireHref } from '../campaign/room-context';
+import { useEmpireHref, useResultsHref } from '../campaign/room-context';
 import { Notice } from '../ui';
 import { MissionCard, PointsBadge, ProgressParts } from './mission-card';
 import { PointsCounter, ScoredStamp, useFresh, useReorderSlide } from './score-effects';
@@ -636,13 +637,13 @@ function ScoringNote({ model }: { model: CampaignModel }) {
 // ---------------------------------------------------------------------------------------------
 // The end
 
-function FinalResults({ model, result, onSelectCountry }: PanelProps & { result: VictoryResultView }) {
+function FinalResults({ model, result }: PanelProps & { result: VictoryResultView }) {
   const victory = model.campaign.victory!;
+  const resultsHref = useResultsHref(model.campaign.id);
   const names = result.winners.map((id) => playerName(model, id));
   const headline =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)} share the victory` : `${names[0]} wins`;
   const iWon = result.winners.includes(model.me.userId);
-  const [open, setOpen] = useState<string | null>(null);
   const [first] = result.standings;
   const how = result.seasonEnd
     ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${tiebreakClause(result)}. `
@@ -663,6 +664,9 @@ function FinalResults({ model, result, onSelectCountry }: PanelProps & { result:
           {how}
           The map shows the empires as they ended. Every secret mission is now revealed.
         </p>
+        <Link href={resultsHref} className="btn btn-amber btn-sm mt-3">
+          See the results
+        </Link>
       </div>
       <table className="w-full text-[0.95rem]">
         <thead>
@@ -692,56 +696,6 @@ function FinalResults({ model, result, onSelectCountry }: PanelProps & { result:
           ))}
         </tbody>
       </table>
-      <ul className="space-y-2">
-        {result.standings.map((s) => {
-          const expanded = open === s.userId;
-          return (
-            <li key={s.userId} className="rounded-[3px] border border-line">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => setOpen(expanded ? null : s.userId)}
-                className="flex min-h-11 w-full items-center gap-2 px-3 text-left hover:bg-raised"
-              >
-                <span className="min-w-0 flex-1 truncate font-semibold">{playerName(model, s.userId)}’s missions</span>
-                <span className="text-sm text-muted">{plural(s.awards.length, 'scored', 'scored')}</span>
-              </button>
-              {expanded && (
-                <div className="space-y-2 border-t border-line p-3">
-                  {s.awards.length === 0 ? (
-                    <p className="text-sm text-muted">No missions scored.</p>
-                  ) : (
-                    <ul className="space-y-1 text-sm">
-                      {s.awards.map((a) => (
-                        <li key={a.missionKey} className="flex gap-2">
-                          <span className="flex-1">{missionName({ kind: a.kind }, victory.version)}</span>
-                          <span className="tabular-nums">
-                            +{a.points} · round {a.round}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {s.secret ? (
-                    <MissionCard
-                      model={model}
-                      mission={s.secret.mission}
-                      stamp={s.secret.completed && <ScoredStamp />}
-                      onSelectCountry={onSelectCountry}
-                    >
-                      <p className={`text-sm font-semibold ${s.secret.completed ? 'text-amber' : 'text-muted'}`}>
-                        {s.secret.completed ? 'Completed and scored.' : 'Not completed.'}
-                      </p>
-                    </MissionCard>
-                  ) : (
-                    <p className="text-sm text-muted">Played without a secret mission.</p>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }

@@ -70,6 +70,17 @@ export interface GameFacts {
   opening: Opening | null;
 }
 
+/**
+ * Victory points moving, from the `mission.awarded` and `title.changed` events: a mission scored,
+ * or a title changing hands, which is a loss for one player and a gain for another.
+ */
+export interface PointsChange {
+  round: number;
+  userId: UserId;
+  /** Points gained, or lost when negative. */
+  points: number;
+}
+
 export interface StatsInput {
   idx: DatasetIndex;
   memberIds: readonly UserId[];
@@ -81,6 +92,8 @@ export interface StatsInput {
   round: number;
   /** Oldest first. */
   resolutions: readonly Resolution[];
+  /** Oldest first. */
+  pointsChanges: readonly PointsChange[];
   wars: readonly WarFacts[];
   accords: readonly Pick<AccordRecord, 'proposerId' | 'recipientId' | 'status' | 'brokenBy'>[];
   /** Oldest first. */
@@ -89,7 +102,14 @@ export interface StatsInput {
 
 export function campaignStats(input: StatsInput): CampaignStats {
   return {
-    history: empireHistory(input.idx, input.memberIds, input.holdings, input.round, input.resolutions),
+    history: empireHistory(
+      input.idx,
+      input.memberIds,
+      input.holdings,
+      input.round,
+      input.resolutions,
+      input.pointsChanges,
+    ),
     empires: input.memberIds.map((userId) => ({
       userId,
       wars: warRecord(userId, input.wars, input.resolutions),
@@ -104,9 +124,10 @@ export function campaignStats(input: StatsInput): CampaignStats {
 // Territory over time
 
 /**
- * Each player's game value and country count at the end of every round, from round 0 (the end of
- * the draft) to `round`, which is now. Worked backwards from today's holdings by undoing each
- * war's transfers, so the last point always matches the map.
+ * Each player's game value, country count and victory points at the end of every round, from
+ * round 0 (the end of the draft) to `round`, which is now. Territory is worked backwards from
+ * today's holdings by undoing each war's transfers, so the last point always matches the map;
+ * points are added up from the changes of every round so far.
  */
 export function empireHistory(
   idx: DatasetIndex,
@@ -114,18 +135,29 @@ export function empireHistory(
   holdings: ReadonlyMap<TerritoryId, UserId>,
   round: number,
   resolutions: readonly Resolution[],
+  pointsChanges: readonly PointsChange[] = [],
 ): HistoryView {
   const owners = new Map(holdings);
   const snapshot = (at: number): HistoryPoint => {
     const value = new Map(memberIds.map((id) => [id, 0]));
     const countries = new Map(value);
+    const victoryPoints = new Map(value);
     for (const [territoryId, ownerId] of owners) {
       const territory = idx.byId.get(territoryId);
       if (!territory || !value.has(ownerId)) continue;
       value.set(ownerId, value.get(ownerId)! + territory.value);
       countries.set(ownerId, countries.get(ownerId)! + 1);
     }
-    return { round: at, value: Object.fromEntries(value), countries: Object.fromEntries(countries) };
+    for (const change of pointsChanges) {
+      if (change.round > at || !victoryPoints.has(change.userId)) continue;
+      victoryPoints.set(change.userId, victoryPoints.get(change.userId)! + change.points);
+    }
+    return {
+      round: at,
+      value: Object.fromEntries(value),
+      countries: Object.fromEntries(countries),
+      victoryPoints: Object.fromEntries(victoryPoints),
+    };
   };
   const points: HistoryPoint[] = [];
   const undo = [...resolutions].reverse();

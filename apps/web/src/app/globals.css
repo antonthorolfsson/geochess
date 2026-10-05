@@ -367,6 +367,14 @@
   border-width: 5px;
   font-size: 1.45rem;
 }
+/* On the results page's heading. */
+.stamp-hd {
+  --stamp-tilt: -8deg;
+  padding: 0.05em 0.4em 0.02em;
+  border-width: 5px;
+  font-size: clamp(1.5rem, 6vw, 2.35rem);
+  mask-size: 140px 70px;
+}
 @keyframes stamp-slam {
   0% {
     transform: scale(2.8) rotate(calc(var(--stamp-tilt) * 2.2));
@@ -510,6 +518,299 @@
 }
 .token-pop {
   animation: token-pop 700ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+/* The ending: victory or defeat stamped over the whole map room --------------------------------- */
+
+.finale {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  isolation: isolate;
+  outline: none;
+}
+.finale-out {
+  animation: finale-out 450ms ease-in forwards;
+}
+@keyframes finale-out {
+  to {
+    opacity: 0;
+    scale: 1.03;
+  }
+}
+
+/* The room behind: dimmed and warm for a victory, drained of its colors for a defeat, its light
+   failing once or twice before it goes. */
+.finale-veil {
+  position: absolute;
+  inset: 0;
+  animation: finale-fade 600ms ease-out both;
+}
+.finale-victory .finale-veil {
+  background: radial-gradient(ellipse at 50% 42%, rgb(43 50 56 / 0.62), rgb(14 17 19 / 0.94) 72%);
+  backdrop-filter: blur(5px) brightness(0.7);
+}
+.finale-defeat .finale-veil {
+  background: radial-gradient(ellipse at 50% 42%, rgb(31 36 40 / 0.55), rgb(6 7 8 / 0.96) 68%);
+  backdrop-filter: grayscale(1) blur(2px) brightness(0.6);
+  animation:
+    finale-fade 900ms ease-out both,
+    finale-flicker 1500ms steps(1, end) 250ms both;
+}
+@keyframes finale-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes finale-flicker {
+  0% {
+    opacity: 1;
+  }
+  9% {
+    opacity: 0.45;
+  }
+  14% {
+    opacity: 1;
+  }
+  31% {
+    opacity: 0.7;
+  }
+  35% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 0.55;
+  }
+  44%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* A victory's sunburst, turning slowly behind the stamp, and the warm light at its heart. */
+.finale-rays {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 240vmax;
+  height: 240vmax;
+  margin: -120vmax 0 0 -120vmax;
+  background: repeating-conic-gradient(rgb(227 169 43 / 0.12) 0deg 5deg, transparent 5deg 14deg);
+  mask-image: radial-gradient(closest-side, black, rgb(0 0 0 / 0.45) 15%, transparent 34%);
+  animation:
+    finale-rays-in 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    finale-turn 120s linear infinite;
+}
+@keyframes finale-rays-in {
+  from {
+    opacity: 0;
+    scale: 0.5;
+  }
+}
+@keyframes finale-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+.finale-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  aspect-ratio: 2;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: finale-fade 900ms ease-out both;
+}
+.finale-victory .finale-glow {
+  background: radial-gradient(closest-side, rgb(227 169 43 / 0.28), transparent);
+}
+.finale-defeat .finale-glow {
+  background: radial-gradient(closest-side, rgb(200 55 45 / 0.16), transparent);
+}
+
+/* The emblem rising, and a glint crossing it. */
+.finale-emblem {
+  animation: finale-rise 900ms cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+@keyframes finale-rise {
+  from {
+    opacity: 0;
+    translate: 0 36px;
+    scale: 0.55;
+  }
+}
+.finale-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 248 225 / 0.85) 50%, transparent 65%) no-repeat;
+  background-size: 300% 100%;
+  mask: url('/icons/emblem.png') center / contain no-repeat;
+  animation: finale-glint 1100ms ease-in-out both;
+}
+@keyframes finale-glint {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* The stamp, as big as the screen allows, slammed down. */
+.stamp-xl {
+  --stamp-tilt: -7deg;
+  padding: 0.05em 0.42em 0.02em;
+  border-width: 0.085em;
+  border-radius: 0.09em;
+  font-size: clamp(3.1rem, 13.5vw, 8.5rem);
+  letter-spacing: 0.12em;
+  mask-size: 300px 150px;
+}
+.stamp-red {
+  color: #e2483c;
+}
+/* Falling faster and faster until it hits; the thud after is the landing. */
+.finale-stamp {
+  animation: finale-slam 400ms cubic-bezier(0.6, 0, 0.9, 0.45) both;
+}
+@keyframes finale-slam {
+  0% {
+    transform: scale(3.4) rotate(calc(var(--stamp-tilt) * 2.6));
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(var(--stamp-tilt));
+    opacity: 1;
+  }
+}
+.finale-thud {
+  animation: finale-thud 300ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+@keyframes finale-thud {
+  0% {
+    scale: 0.93;
+  }
+  100% {
+    scale: 1;
+  }
+}
+/* The table jolts as it lands, and the ink spreads in a ring. */
+.finale-shake {
+  animation: finale-shake 480ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@keyframes finale-shake {
+  10%,
+  90% {
+    translate: -2px 1px;
+  }
+  20%,
+  80% {
+    translate: 4px -2px;
+  }
+  30%,
+  50%,
+  70% {
+    translate: -7px 3px;
+  }
+  40%,
+  60% {
+    translate: 7px -3px;
+  }
+}
+.finale-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: finale-ring 900ms cubic-bezier(0.1, 0.7, 0.3, 1) both;
+}
+@keyframes finale-ring {
+  from {
+    opacity: 0.75;
+    scale: 0.35;
+  }
+  to {
+    opacity: 0;
+    scale: 1.9;
+  }
+}
+/* Lines of the dispatch coming in under the stamp. */
+.finale-up {
+  animation: finale-up 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes finale-up {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+
+/* The results: a podium rising, bars filling, medals pinned, lines drawn ------------------------- */
+
+.podium-rise {
+  transform-origin: bottom;
+  animation: podium-rise 750ms cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
+}
+@keyframes podium-rise {
+  from {
+    scale: 1 0;
+  }
+}
+.bar-grow {
+  transform-origin: left;
+  animation: bar-grow 850ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes bar-grow {
+  from {
+    scale: 0 1;
+  }
+}
+.medal-pin {
+  animation: medal-pin 650ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+@keyframes medal-pin {
+  from {
+    opacity: 0;
+    translate: 0 -16px;
+    rotate: -14deg;
+    scale: 1.3;
+  }
+}
+.rise-in {
+  animation: finale-up 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.line-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: line-draw 1700ms cubic-bezier(0.35, 0.6, 0.3, 1) 250ms forwards;
+}
+@keyframes line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.line-draw-after {
+  animation: finale-fade 400ms ease-out 1800ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .line-draw {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+  .finale-rays {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

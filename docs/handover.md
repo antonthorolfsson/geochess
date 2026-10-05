@@ -1123,6 +1123,77 @@ reads, so no game can change.
 
 Tests since: data 72, web 88.
 
+**Victory and defeat, and the results page** (2026-10-05, at the user's request: "animations for
+victory and defeat, followed by a post game score screen with victory points and some
+statistics"; the design was left to me).
+
+- **The ending** (`Finale` in `components/victory/finale.tsx`). When a campaign is won, every
+  player sees its ending once, full screen over the map room, then the results page:
+  - **Victory:** the room dims and warms, a sunburst turns behind the emblem, and "Victory" comes
+    down as a huge worn rubber stamp in signal amber. As it lands the table jolts, ink spreads in a
+    ring and ticker tape fires from both bottom corners and rains down, in amber, map-room white,
+    gold and the winners' colors. Then the winners with their points counting up, how it was won,
+    and "See the results".
+  - **Defeat:** the room's colors drain to grey as its light flickers, ash falls and embers rise,
+    and "Defeat" comes down in grease red. The winners are the only color left on screen; under
+    them, how it was won and where the player finished ("You finished joint 2nd with 8 victory
+    points.").
+  - A shared victory says who it's shared with; a season ended on points says so, with the
+    tiebreak if one decided it. Words come from `finaleText` (`lib/results.ts`).
+  - **When.** Once the campaign is over and the player hasn't seen it end in this browser
+    (`finaleSeen`, localStorage, with a memory fallback): live when the `campaign.won` push
+    arrives, or on opening a campaign that ended while they were away. It waits for the award
+    ceremonies of the change that won it (`AwardCeremonies`'s `onBusy`), a live game, and the page
+    being in front of them (`usePageVisible`). It moves on by itself after about 8 seconds on
+    screen (hidden time doesn't count), or at a tap, Escape, "Skip" or "See the results", and goes
+    to the results page. "Watch the ending again" there replays it. The campaign screen is `inert`
+    while it plays; the "Victory" toast is gone.
+  - **Timing.** The stamp's landing (jolt, ink, ticker tape) and the points counting up follow the
+    CSS animations' `animationend`, not timers, so they stay in step however the browser paces
+    frames. Particles are one canvas (`components/victory/particles.ts`), running only while
+    something is in the air.
+  - **Reduced motion:** the whole composition at once, no slam, shake, particles or counting, and
+    it holds for 6 seconds.
+- **The results page** (`/c/[id]/results`, `components/victory/results-screen.tsx`), a page over
+  the map room like the comparison page. Reached from the ending, a "Results" call to action in the
+  campaign header once it's over, "See the results" in the Missions tab, the phone map footer, and
+  the ending's notification (now `/c/:id/results`, `resultsUrl` in `victory/settle.ts`). While the
+  ending is still to play, the page waits behind it, then comes in as it goes:
+  - **Header:** who won and how, where the viewer finished, and a "Victory" or "Defeat" stamp.
+  - **Podium:** the top three on blocks in their colors and hatching, rising third, second, first,
+    the winner under the emblem, points counting up. Players level share a place (`placesOf`: on
+    points, and at a season's end on the tiebreak too).
+  - **Final standings:** everyone with a bar to the points to win, split into public missions,
+    the secret mission and titles held at the end (`breakdownOf`); a row opens to the missions
+    scored (with rounds), titles and the secret mission, revealed.
+  - **The race:** the history chart on its new **Points** measure: every empire's victory points
+    at the end of each round, the points to win marked, the lines drawing themselves in. The
+    measure is on the empire and comparison pages too (where it isn't the default).
+  - **Honors** (`honorsOf`): Conqueror (most countries taken), Warlord (most wars won), Bulwark
+    (most attacks repelled, draws included), Spoils of War (most value taken in one war), Grandmaster
+    (best chess score, two games or more), Swift Strike (fastest checkmate; a quick resignation is
+    more likely a war given up), Marathon (longest game), Warmonger (most wars declared), Diplomat
+    (best reputation, when they differ) and Oathbreaker (most accords broken). Only those someone
+    earned; players level share one. Each is a medal on a ribbon in the holder's color.
+  - **The campaign in numbers** (`campaignTotals`): rounds, wars declared, countries that changed
+    hands, games, checkmates, moves, accords signed and broken, counting up.
+- **Victory points by round.** `HistoryPoint.victoryPoints` (stats endpoint): the stats service
+  now reads `mission.awarded` and `title.changed` events as `PointsChange`s, and `empireHistory`
+  adds them up by round, titles taken away included. Optional in the type, since the web and the
+  server deploy separately: without it the chart doesn't offer Points.
+- **Checked in the browser** (dev server on a scratch database; Chromium, desktop and phone): a
+  season Field Marshal won on titles, one a bot won after six rounds of bot wars (Field Marshal's
+  defeat), the ending arriving live while the map room was open, an injected pair of title
+  ceremonies holding the ending back until both had played, a replay, and reduced motion.
+
+Tests since: rules 318, data 72, web 103 (`lib/results.test.ts`), sim 29, server 223 (745 in all;
+victory points by round in rules' `stats.test.ts` and the server's `stats.test.ts` and
+`victory-flow.test.ts`).
+
+Defaults taken (not asked; easy to change): the ending plays once per browser rather than once per
+player across devices (no server state); about 8 seconds before it moves on by itself; a tap
+anywhere moves on; the honors and their names; the stats a results page leads with.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

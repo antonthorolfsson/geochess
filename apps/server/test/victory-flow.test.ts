@@ -477,6 +477,12 @@ describe('titles', () => {
     expect(after.victory!.players.filter((p) => p.userId !== BO).every((p) => p.points === 0)).toBe(true);
     const moved = after.events.filter((e) => e.type === 'title.changed').slice(4);
     expect(moved.every((e) => e.type === 'title.changed' && e.payload.to === BO)).toBe(true);
+    // The race round by round takes the titles away from their old holders too.
+    const stats = (await bo.get<CampaignStats>(`/api/campaigns/${id}/stats`)).body;
+    expect(stats.history.points.map((p) => p.victoryPoints)).toEqual([
+      { [ANN]: 0, [BO]: 0, [CY]: 0 },
+      { [ANN]: 0, [BO]: 4, [CY]: 0 },
+    ]);
     // Told of each title taken; those who lost one are told too.
     for (const t of titles.filter((t) => t.holderId !== BO)) {
       const name = {
@@ -547,10 +553,19 @@ describe('the season', () => {
     expect(done).toMatchObject({ status: 'finished', round: 3 });
     expect(done.victory!.result).toMatchObject({ winners: [ANN], round: 3, seasonEnd: true });
     expect(done.events.at(-1)).toMatchObject({ type: 'campaign.won', payload: { winners: [ANN], seasonEnd: true } });
+    const stats = (await bo.get<CampaignStats>(`/api/campaigns/${id}/stats`)).body;
+    expect(stats.history.points.map((p) => [p.round, p.victoryPoints![ANN], p.victoryPoints![BO]])).toEqual([
+      [0, 0, 0],
+      [1, 0, 0],
+      [2, 0, 0],
+      [3, 2, 0],
+    ]);
     await tick();
     const ending = server.notices.filter((n) => n.tag === `victory:${id}`);
     expect(ending).toHaveLength(3);
     expect(ending[0]!.body).toMatch(/round 3 was its last/);
+    // The news of the ending opens the results.
+    expect(ending.every((n) => n.url === `/c/${id}/results`)).toBe(true);
     expect((await ann.post(`/api/campaigns/${id}/round/next`)).status).toBe(409);
   });
 

@@ -126,6 +126,8 @@ describe('lobby', () => {
     await bo.post(`/api/invites/${c.inviteCode}/join`);
 
     expect((await bo.patch(`/api/campaigns/${c.id}/me`, { color: 0 })).status).toBe(409);
+    expect((await bo.patch(`/api/campaigns/${c.id}/me`, { color: 16 })).status).toBe(400);
+    expect((await bo.patch(`/api/campaigns/${c.id}/me`, { color: 13 })).status).toBe(200);
     expect((await bo.patch(`/api/campaigns/${c.id}/me`, { color: 5 })).status).toBe(200);
     expect((await bo.post(`/api/campaigns/${c.id}/kick`, { userId: 'dev_ann' })).status).toBe(403);
     expect((await ann.post(`/api/campaigns/${c.id}/leave`)).status).toBe(400);
@@ -150,12 +152,14 @@ describe('lobby', () => {
     expect((await color('dev_bo', { color: 7 })).status).toBe(200);
     expect((await color('dev_bo', { color: 2 })).status).toBe(409);
     expect((await color('dev_cy', { color: 4 }, bo)).status).toBe(403);
-    expect((await color('dev_bo', { color: 8 })).status).toBe(400);
+    expect((await color('dev_bo', { color: 16 })).status).toBe(400);
     expect((await color('dev_zed', { color: 4 })).status).toBe(404);
+    expect((await color('dev_cy', { color: 15 })).status).toBe(200);
+    expect((await color('dev_bo', { color: 15 })).status).toBe(409);
     expect(await colors()).toEqual([
       ['dev_ann', 0],
       ['dev_bo', 7],
-      ['dev_cy', 2],
+      ['dev_cy', 15],
     ]);
 
     expect((await ann.post(`/api/campaigns/${c.id}/draft/start`)).status).toBe(200);

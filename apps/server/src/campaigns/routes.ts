@@ -22,7 +22,8 @@ import { campaignView, invitePreview, listCampaigns } from './views';
 
 const idParams = z.object({ id: z.string().min(1).max(40) });
 const memberParams = z.object({ id: z.string().min(1).max(40), userId: z.string().min(1).max(80) });
-const colorInput = z.object({ color: z.number().int().min(0).lt(EMPIRE_COLORS.length) });
+const colorSchema = z.number().int().min(0).lt(EMPIRE_COLORS.length);
+const colorInput = z.object({ color: colorSchema });
 const codeParams = z.object({ code: z.string().min(1).max(40) });
 /** Partial rules; the service merges them over the current (or default) rules and validates. */
 const rulesInput = z.record(z.string(), z.unknown());
@@ -69,7 +70,7 @@ export function registerCampaignRoutes(app: FastifyInstance, ctx: AppContext): v
     const { id } = parse(idParams, req.params);
     const input = parse(
       z.object({
-        color: z.number().int().min(0).optional(),
+        color: colorSchema.optional(),
         autodraft: z.boolean().optional(),
         autodraftFallback: z.enum(AUTODRAFT_FALLBACKS).optional(),
         rating: ratingSchema.nullable().optional(),

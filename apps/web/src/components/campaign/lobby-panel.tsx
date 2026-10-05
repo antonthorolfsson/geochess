@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  COLOR_PALETTES,
   CORRESPONDENCE_HOURS,
   DEFAULT_BOT_LEVEL,
   EMPIRE_COLORS,
@@ -15,6 +16,7 @@ import {
   RATING_MAX,
   RATING_MIN,
   TURN_WINDOW_TEXT,
+  type ColorPalette,
   type DraftMode,
   type DrawRule,
   type HandicapLevel,
@@ -24,12 +26,13 @@ import {
   type TerritoryId,
   type WarRules,
   botLevelText,
+  empireColor,
   lichessPerfFor,
   withStakeFloor,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
@@ -167,10 +170,10 @@ export function LobbyPanel({
       </section>
 
       <section>
-        <h2 className="label mb-2">Your color</h2>
         <ColorChoices
           model={model}
           member={me}
+          heading={<h2 className="label">Your color</h2>}
           label="Empire color"
           onPick={(color) => run(() => api.updateMembership(campaign.id, { color }))}
         />
@@ -254,42 +257,68 @@ function AddBot({ pending, onAdd }: { pending: boolean; onAdd(level: number): vo
   );
 }
 
-/** The eight empire colors for one player to pick from; colors other players hold are taken. */
+const PALETTE_LABELS: Record<ColorPalette, string> = { patterned: 'Patterned', solid: 'Solid' };
+
+/**
+ * The empire colors for one player to pick from, eight at a time: the patterned set or the solid
+ * one, opening on the set their color is in. Colors other players hold are taken.
+ */
 function ColorChoices({
   model,
   member,
+  heading,
   label,
   onPick,
 }: {
   model: CampaignModel;
   member: MemberView;
+  heading?: ReactNode;
   label: string;
   onPick(color: number): void;
 }) {
+  const [palette, setPalette] = useState<ColorPalette>(() => empireColor(member.color).palette);
   const takenBy = new Map(model.campaign.members.map((m) => [m.color, m]));
   return (
-    <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={label}>
-      {EMPIRE_COLORS.map((c) => {
-        const holder = takenBy.get(c.index);
-        const theirs = holder?.userId === member.userId;
-        return (
-          <button
-            key={c.index}
-            type="button"
-            role="radio"
-            aria-checked={theirs}
-            aria-label={`${c.name}${holder && !theirs ? `, taken by ${holder.name}` : ''}`}
-            disabled={Boolean(holder) && !theirs}
-            onClick={() => onPick(c.index)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-[3px] border text-xs ${
-              theirs ? 'border-paper bg-raised' : 'border-line hover:border-line-strong'
-            } disabled:cursor-not-allowed disabled:opacity-35`}
-          >
-            <EmpireSwatch color={c.index} size={24} />
-            <span className="truncate">{holder && !theirs ? holder.name : c.name}</span>
-          </button>
-        );
-      })}
+    <div className="space-y-2">
+      <div className="flex min-h-9 items-center justify-between gap-2">
+        {heading}
+        <div className="ml-auto flex overflow-hidden rounded-[3px] border border-line" role="group" aria-label="Colors">
+          {COLOR_PALETTES.map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-pressed={palette === p}
+              onClick={() => setPalette(p)}
+              className={`min-h-9 px-3 text-sm font-bold ${palette === p ? 'bg-paper text-gunmetal' : 'text-muted hover:text-paper'}`}
+            >
+              {PALETTE_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={label}>
+        {EMPIRE_COLORS.filter((c) => c.palette === palette).map((c) => {
+          const holder = takenBy.get(c.index);
+          const theirs = holder?.userId === member.userId;
+          return (
+            <button
+              key={c.index}
+              type="button"
+              role="radio"
+              aria-checked={theirs}
+              aria-label={`${c.name}${holder && !theirs ? `, taken by ${holder.name}` : ''}`}
+              disabled={Boolean(holder) && !theirs}
+              onClick={() => onPick(c.index)}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-[3px] border text-xs ${
+                theirs ? 'border-paper bg-raised' : 'border-line hover:border-line-strong'
+              } disabled:cursor-not-allowed disabled:opacity-35`}
+            >
+              <EmpireSwatch color={c.index} size={24} />
+              <span className="truncate">{holder && !theirs ? holder.name : c.name}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

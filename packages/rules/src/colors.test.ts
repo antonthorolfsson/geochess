@@ -16,9 +16,21 @@ const contrast = (a: string, b: string) => {
 };
 
 describe('empire colors', () => {
-  it('pair every color with its own hatching', () => {
-    expect(new Set(EMPIRE_COLORS.map((c) => c.pattern)).size).toBe(EMPIRE_COLORS.length);
-    expect(EMPIRE_COLORS.map((c) => c.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  it('keep their indices: the eight patterned colors first, then the eight solid ones', () => {
+    expect(EMPIRE_COLORS.map((c) => c.index)).toEqual([...Array(16).keys()]);
+    expect(EMPIRE_COLORS.slice(0, 8).every((c) => c.palette === 'patterned')).toBe(true);
+    expect(EMPIRE_COLORS.slice(8).every((c) => c.palette === 'solid')).toBe(true);
+  });
+
+  it('pair every patterned color with its own hatching, and draw solid ones plain', () => {
+    const patterned = EMPIRE_COLORS.filter((c) => c.palette === 'patterned');
+    expect(new Set(patterned.map((c) => c.pattern)).size).toBe(patterned.length);
+    for (const c of EMPIRE_COLORS.filter((c) => c.palette === 'solid')) expect(c.pattern, c.name).toBe('solid');
+  });
+
+  it('have names and fills of their own', () => {
+    expect(new Set(EMPIRE_COLORS.map((c) => c.name)).size).toBe(EMPIRE_COLORS.length);
+    expect(new Set(EMPIRE_COLORS.map((c) => c.hex)).size).toBe(EMPIRE_COLORS.length);
   });
 
   it('have chart lines that stand out on the gunmetal surface', () => {

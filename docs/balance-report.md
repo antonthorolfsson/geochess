@@ -1053,6 +1053,50 @@ figures (here counted as zero, which matters for military spending); and that th
 country value, not for titles, so people who draft the USA or China on purpose will start with
 more of them than here.
 
+### Military might instead of military spending
+
+The USA has 37% of the world's military spending (China 12%), so whoever drafts it starts with
+the military title 92% of the time, almost always with the GDP title too. "Military might" makes
+up a figure from spending and armed forces together (the USA has only 5% of the world's soldiers;
+India has 11%, China 9%): each country's share of the world's spending and its share of the
+world's soldiers, averaged and counted per 1,000 of the world (`engine/titles.ts`). Three ways
+of counting the shares:
+
+- **Blend**: the shares as they are. USA 210, China 104, India 72, Russia 54.
+- **Square root**: shares of the square roots of both figures, which flattens the giants. USA 56,
+  China 41, India 31, Russia 29; it takes 29 countries to make half the world's might.
+- **Mixed**: the square root of spending, soldiers as they are. China, the USA and India about
+  level at 69–71.
+
+One point a title, 10 to win, the other three titles unchanged, the same seeds (150 campaigns per
+table size, 2–8 players). A fair share for the USA's drafter is ×1.00; with no titles at all
+they win ×0.84 (±0.10).
+
+| Military title  | Median win round, 2 → 8 players | Same player starts with GDP and military | Who drafts the USA starts with the military title | USA drafter's titles at the start | USA drafter wins | 4+ players: 3 or 4 players start with a title |
+| --------------- | ------------------------------- | ---------------------------------------- | ------------------------------------------------- | --------------------------------- | ---------------- | --------------------------------------------- |
+| Spending        | 10 / 9 / 11 / 10 / 9 / 9 / 9    | 94%                                      | 92%                                               | 2.3                               | ×1.05            | 43%                                           |
+| Might, blend    | 10 / 9 / 10 / 9 / 9 / 9 / 10    | 63%                                      | 50%                                               | 1.9                               | ×0.88            | 45%                                           |
+| **Might, sqrt** | 10 / 9 / 10 / 9 / 9 / 8 / 9     | 26%                                      | 12%                                               | 1.5                               | ×0.81            | 58%                                           |
+| Might, mixed    | 10 / 9 / 10 / 9 / 9 / 9 / 10    | 22%                                      | 9%                                                | 1.5                               | ×0.73            | 51%                                           |
+
+- **Spending makes the USA the titles' favourite.** It's the only setup where its drafter does
+  better than with no titles at all (×1.05 against ×0.84).
+- **The square-root might spreads the titles best.** The military title goes to whoever drafted
+  China, India or Russia about as often as each other, and to the USA's drafter only one time in
+  eight; at 4 or more players, three or four different players start with a title 58% of the
+  time (43% with spending, 10% with all four apart). The USA's drafter is back where they'd be
+  without titles. Game length doesn't change.
+- **The mixed might overcorrects**: China and India's drafters take it, and the USA's drafter
+  falls to ×0.73, below its no-titles share.
+- **The blend is a half measure**: the USA's drafter still holds the military title half the time.
+
+The square-root might also rewards many middling armies: an empire of a dozen mid-sized countries
+can outrank one superpower, which gives smaller empires a title to fight for. If it's adopted, it
+can be worked out in the rules package from the two figures every dataset already has, so no new
+dataset version is needed; the empire pages would show it next to spending and armed forces.
+
+To rerun: `pnpm sim --scenario whatif:titles-1-might-blend,whatif:titles-1-might-sqrt,whatif:titles-1-might-mixed --players 2-8 --paces live --seeds 150 --out might`, then `pnpm sim:report might titles`.
+
 To rerun: `pnpm sim --scenario baseline,whatif:titles-1,whatif:titles-2,whatif:titles-1-public5,whatif:titles-2-public5 --players 2-8 --paces live --seeds 150 --out titles`
 and `pnpm sim --scenario whatif:titles-1-win9,whatif:titles-1-win11,whatif:titles-1-blind,whatif:titles-2-win12,whatif:titles-2-win14,whatif:titles-2-blind --players 2-8 --paces live --seeds 150 --out titles2`,
 then `pnpm sim:report titles titles2` (the Titles table) or `pnpm sim:report titles --compare baseline`.

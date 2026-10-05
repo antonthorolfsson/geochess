@@ -50,6 +50,8 @@ export interface WorldMapProps {
   onSelectWar?(warId: string): void;
   /** A stake being built: the stake is outlined and a dashed arrow points at the target. */
   preview?: { launchId: TerritoryId; targetId: TerritoryId; stake: readonly TerritoryId[] } | null;
+  /** The war open beside the map: the countries in it called out, and its arrow drawn strong. */
+  war?: MapWarFocus | null;
   /**
    * A victory mission called out: its targets outlined in dashes, the countries that count now
    * filled, and a route (for connection missions) drawn through their label points.
@@ -63,6 +65,13 @@ export interface MissionOverlayProps {
   targets: readonly TerritoryId[];
   held: readonly TerritoryId[];
   path: readonly TerritoryId[] | null;
+}
+
+/** The countries in a war: the attacker's stake, and the target with any countries raises put in. */
+export interface MapWarFocus {
+  id: string;
+  attacker: readonly TerritoryId[];
+  defender: readonly TerritoryId[];
 }
 
 export interface MapWar {
@@ -116,6 +125,7 @@ export function WorldMap(props: WorldMapProps) {
     fortified = [],
     wars = [],
     preview = null,
+    war = null,
     mission = null,
     fit = null,
     fullscreen,
@@ -250,6 +260,14 @@ export function WorldMap(props: WorldMapProps) {
     const behavior = zoomRef.current;
     if (framedRef.current || !svg || !behavior || size.width === 0) return;
     framedRef.current = true;
+    // A zoom asked for before the map was measured (a war opened by a link) comes first.
+    const asked = framingRef.current;
+    if (asked) {
+      asked.box = visibleBox().join();
+      asked.at = Date.now();
+      select(svg).call(behavior.transform, clamp(frame(asked.bounds, visibleBox(), asked.maxK)));
+      return;
+    }
     const target = union(
       (initialFrame ?? []).map((id) => geo.byId.get(id)?.bounds).filter((b): b is Bounds => b !== undefined),
     );
@@ -264,7 +282,7 @@ export function WorldMap(props: WorldMapProps) {
         .scale(fillK);
     }
     select(svg).call(behavior.transform, clamp(transform));
-  }, [size, vb, geo, initialFrame, clamp]);
+  }, [size, vb, geo, initialFrame, clamp, visibleBox]);
 
   /** Zooms to fit `bounds` in the part of the map that nothing covers. */
   const frameTo = useCallback(
@@ -282,7 +300,8 @@ export function WorldMap(props: WorldMapProps) {
   const requestFrame = (bounds: Bounds | null, maxK: number) => {
     if (!bounds) return;
     framingRef.current = { bounds, maxK, box: visibleBox().join(), at: Date.now() };
-    frameTo(bounds, maxK);
+    // Before the map is first framed, that framing does it.
+    if (framedRef.current) frameTo(bounds, maxK);
   };
 
   useEffect(() => {
@@ -301,6 +320,7 @@ export function WorldMap(props: WorldMapProps) {
   // that opens, slides into view.
   useEffect(() => {
     const framing = framingRef.current;
+    if (!framedRef.current) return;
     if (framing && Date.now() - framing.at < SETTLE_MS) {
       const box = visibleBox().join();
       if (framing.box !== box) {
@@ -390,6 +410,12 @@ export function WorldMap(props: WorldMapProps) {
     () => (preview ? preview.stake.map((id) => geo.byId.get(id)?.d ?? '').join('') : ''),
     [preview, geo],
   );
+
+  const warPaths = useMemo(() => {
+    if (!war) return null;
+    const shapes = (ids: readonly TerritoryId[]) => ids.map((id) => geo.byId.get(id)?.d ?? '').join('');
+    return { attacker: shapes(war.attacker), defender: shapes(war.defender) };
+  }, [war, geo]);
 
   const missionPaths = useMemo(() => {
     if (!mission) return null;
@@ -508,6 +534,19 @@ export function WorldMap(props: WorldMapProps) {
             highlighted={highlighted}
             onSelect={select_}
           />
+          {warPaths && (
+            <g pointerEvents="none" aria-hidden="true">
+              <path
+                d={warPaths.attacker}
+                className="nss"
+                fill="rgba(227,169,43,0.18)"
+                stroke={AMBER}
+                strokeWidth={1.8}
+                strokeDasharray="5 3"
+              />
+              <path d={warPaths.defender} className="nss" fill="rgba(200,55,45,0.2)" stroke={GREASE} strokeWidth={2} />
+            </g>
+          )}
           {stakePath && (
             <path
               d={stakePath}
@@ -575,7 +614,7 @@ export function WorldMap(props: WorldMapProps) {
               ))}
             </g>
           )}
-          <WarArrows byId={geo.byId} wars={wars} preview={preview} onSelect={selectWar} />
+          <WarArrows byId={geo.byId} wars={wars} preview={preview} openId={war?.id ?? null} onSelect={selectWar} />
           <Labels shapes={geo.shapes} scale={labelScale} showValues={showValues} />
           <DraftListMarkers byId={geo.byId} listed={listed} />
           <FortifiedMarkers byId={geo.byId} fortified={fortified} />
@@ -860,11 +899,14 @@ function WarArrows({
   byId,
   wars,
   preview,
+  openId,
   onSelect,
 }: {
   byId: Geometry['byId'];
   wars: readonly MapWar[];
   preview: WorldMapProps['preview'];
+  /** The war open beside the map, drawn strong whoever fights it. */
+  openId: string | null;
   onSelect(id: string): void;
 }) {
   const arrows = wars.flatMap((w) => {
@@ -876,7 +918,14 @@ function WarArrows({
   return (
     <g aria-hidden="true">
       {arrows.map((w) => (
-        <Arrow key={w.id} a={w.a} b={w.b} threat={w.threat} strong={w.mine} onClick={() => onSelect(w.id)} />
+        <Arrow
+          key={w.id}
+          a={w.a}
+          b={w.b}
+          threat={w.threat}
+          strong={w.mine || w.id === openId}
+          onClick={() => onSelect(w.id)}
+        />
       ))}
       {draft && preview && (
         <Arrow a={byId.get(preview.launchId)!.anchor} b={byId.get(preview.targetId)!.anchor} threat strong preview />

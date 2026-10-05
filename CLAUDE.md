@@ -57,7 +57,7 @@ when starting new work.**
   rows and `packages/rules/src/stats.ts` works out history, war records and chess profiles.
 - Victory missions: the catalog, versioned numbers (`MISSION_RULES`), evaluators, target
   generation and claim blockers are in `packages/rules/src/victory/`; the server side is in
-  `apps/server/src/victory/`. Tuning means a new version (version 5 since 2026-10-05); stored
+  `apps/server/src/victory/`. Tuning means a new version (version 6 since 2026-10-05); stored
   campaigns keep theirs. Numbers counted in country value are written for one dataset value scale
   (`MissionRules.valueScale`, `DATASET_VALUE_SCALES`): values run 1 to 20 from dataset 2026.2 and 1
   to 10 before, so new campaigns pair the latest dataset with the current version, and the bots'

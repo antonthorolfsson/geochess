@@ -14,10 +14,10 @@ import { useFullscreen } from '@/lib/use-fullscreen';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
 import { findMission, missionOverlay, progressOf, rivalClaims, titleOf } from '@/lib/victory';
-import { countryName, outcomeText, playerName } from '@/lib/wars';
+import { countryName, outcomeText, playerName, stakedByRaises } from '@/lib/wars';
 import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
-import { WorldMap, type MapWar } from '../map/world-map';
+import { WorldMap, type MapWar, type MapWarFocus } from '../map/world-map';
 import { Notice, SegmentTabs, Spinner } from '../ui';
 import { StandInBanner } from './stand-in';
 import { AwardCeremonies } from '../victory/award-ceremony';
@@ -537,17 +537,27 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (panels.gameId) panels.set('game', null);
     panels.set('war', warId);
   };
-  // Desktop: the map follows the war that opens, however it was opened (here, a link, the back button).
+  // The war open beside the map, or the one the open game is fought for: its countries called out.
+  const gameWar = panels.gameId ? campaign.wars.find((w) => w.games.some((g) => g.id === panels.gameId)) : undefined;
+  const warOnMap = openWar ?? gameWar;
+  const mapWarFocus: MapWarFocus | null = useMemo(
+    () =>
+      warOnMap
+        ? { id: warOnMap.id, attacker: warOnMap.stake, defender: [warOnMap.targetId, ...stakedByRaises(warOnMap)] }
+        : null,
+    [warOnMap],
+  );
+  // Desktop: the map frames the war that opens, however it was opened (here, a link, the back button, its game).
   const shownWar = useRef<string | null>(null);
   useEffect(() => {
-    if (!openWar) {
+    if (!mapWarFocus) {
       shownWar.current = null;
       return;
     }
-    if (shownWar.current === openWar.id) return;
-    shownWar.current = openWar.id;
-    if (isDesktop) setFocus({ id: openWar.targetId, nonce: Date.now() });
-  }, [openWar, isDesktop]);
+    if (!isDesktop || shownWar.current === mapWarFocus.id) return;
+    shownWar.current = mapWarFocus.id;
+    setFit({ ids: [...mapWarFocus.attacker, ...mapWarFocus.defender], nonce: Date.now() });
+  }, [mapWarFocus, isDesktop]);
   const closeWar = () => panels.set('war', null);
   const closeGame = () => panels.set('game', null);
   const openChat = (userId: string) => panels.set('chat', userId);
@@ -763,6 +773,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             wars={mapWars}
             onSelectWar={showWar}
             preview={preview}
+            war={mapWarFocus}
             mission={missionMap?.overlay ?? null}
             fit={fit}
             fullscreen={{

@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "turns_ended_round" integer;

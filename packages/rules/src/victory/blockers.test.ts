@@ -6,8 +6,10 @@ import type { MissionSpec } from './catalog';
 import {
   claimEligibleRound,
   claimTimeServed,
+  claimTurnsServed,
   compareSeason,
   holdMs,
+  holdsByTurns,
   seasonDecider,
   seasonMeasures,
   seasonWinners,
@@ -247,6 +249,24 @@ describe('claim timing', () => {
     expect(claimTimeServed(timed, 4, 20_000)).toBe(false);
     expect(claimTimeServed(timed, 5, 9_999)).toBe(false);
     expect(claimTimeServed(timed, 5, 10_000)).toBe(true);
+  });
+
+  it('held by turns, scores from the round after next once declaring has ended in a later round', () => {
+    // Declaring hasn't ended since the claim started in round 3.
+    expect(claimTurnsServed(3, 5, null)).toBe(false);
+    expect(claimTurnsServed(3, 5, 3)).toBe(false);
+    // Round 4's declaring ran to its end: round 5 scores it, round 4 doesn't.
+    expect(claimTurnsServed(3, 4, 4)).toBe(false);
+    expect(claimTurnsServed(3, 5, 4)).toBe(true);
+    // The host started round 5 before round 4's declaring was over: it waits for round 5's.
+    expect(claimTurnsServed(3, 5, 3)).toBe(false);
+    expect(claimTurnsServed(3, 5, 5)).toBe(true);
+  });
+
+  it('holds by turns only where players declare in turns', () => {
+    expect(holdsByTurns(DEFAULT_RULES)).toBe(true);
+    expect(holdsByTurns({ ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, turns: false } })).toBe(false);
+    expect(holdsByTurns({ ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, hold: 'time' } })).toBe(false);
   });
 
   it('holds for 10 minutes live and 24 hours by correspondence unless the host set otherwise', () => {

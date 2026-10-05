@@ -122,6 +122,11 @@ export const campaigns = pgTable('campaigns', {
   turnPassed: jsonb('turn_passed').$type<string[]>().notNull().default([]),
   turnUserId: text('turn_user_id'),
   turnDeadline: timestamp('turn_deadline', { withTimezone: true }),
+  /**
+   * The last round whose declaring ran to its end (everyone passed or had nothing to do), or null
+   * if none has: claims held by turns wait for a round after theirs to get here.
+   */
+  turnsEndedRound: integer('turns_ended_round'),
   /** Who holds each title (mission rules version 5 on), from round 1; `settleVictory` keeps it current. */
   titles: jsonb('titles').$type<TitleHolders>().notNull().default({}),
 });

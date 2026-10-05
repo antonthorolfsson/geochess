@@ -51,6 +51,7 @@ describe('campaign rules', () => {
         mode: 'objectives',
         version: 5,
         publicMissions: [],
+        hold: 'turns',
         holdMinutes: null,
         selectionMinutes: null,
         lastRound: 25,
@@ -61,9 +62,14 @@ describe('campaign rules', () => {
       parseRules({
         draft: {},
         war: REVISED_WAR_RULES,
-        victory: { mode: 'objectives', version: 5, lastRound: 25, tiebreak: 'realWorld' },
+        victory: { mode: 'objectives', version: 5, lastRound: 25, tiebreak: 'realWorld', hold: 'turns' },
       }),
     ).toEqual(DEFAULT_RULES);
+  });
+
+  it('holds claims by time in campaigns stored before claims were held through turns', () => {
+    const stored = { war: REVISED_WAR_RULES, victory: { mode: 'objectives', version: 5, publicMissions: [] } };
+    expect(parseRules(stored).victory.hold).toBe('time');
   });
 
   it('gives campaigns stored before seasons no last round', () => {
@@ -117,6 +123,7 @@ describe('campaign rules', () => {
       mode: 'open',
       version: 3,
       publicMissions: [],
+      hold: 'time',
       holdMinutes: null,
       selectionMinutes: null,
       lastRound: null,

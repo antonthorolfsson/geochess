@@ -467,8 +467,10 @@ function Claims({ model, claims, onOpenWar, onShowOnMap }: PanelProps & { claims
         Claims waiting to score
       </h2>
       <p className="text-sm text-muted">
-        A claim scores once it has been held through the next full round and the holding time, if no war could still
-        break it then. Break the position first and it doesn’t score.
+        {model.campaign.victory?.hold === 'turns'
+          ? 'A claim scores once the round after next has started and everyone has had their turns to declare war in a round since it began, if no war could still break it then.'
+          : 'A claim scores once it has been held through the next full round and the holding time, if no war could still break it then.'}{' '}
+        Break the position first and it doesn’t score.
       </p>
       <ul className="space-y-2">
         {sorted.map((claim) => {
@@ -488,7 +490,7 @@ function Claims({ model, claims, onOpenWar, onShowOnMap }: PanelProps & { claims
                   </div>
                   {played && <p className="mt-1 text-sm text-muted">{requirementText(model, played.mission.spec)}</p>}
                   <p className="mt-1 text-sm">
-                    {timing.round} {timing.time ?? 'The holding time has passed.'}
+                    {timing.round} {timing.hold ?? timing.held}
                   </p>
                   {timing.blockers.length > 0 && (
                     <p className="mt-1 text-sm text-[#ef7b72]">
@@ -620,9 +622,10 @@ function ScoringNote({ model }: { model: CampaignModel }) {
         {v.titles.length > 0
           ? `. Each of the ${v.titles.length} titles is worth ${plural(v.titlePoints, 'point')} while you hold it: they're the only points that can be taken away.`
           : ' (two public missions and the secret, or all four public ones). Points are never taken away.'}{' '}
-        A position scores only after it has been held through the next full round and at least {durationText(v.holdMs)}{' '}
-        after that round starts. Players who cross the line together are ranked by points; equal points share the
-        victory.
+        {v.hold === 'turns'
+          ? 'A position scores only once the round after next has started and every player has had their turns to declare war in a round since it was completed.'
+          : `A position scores only after it has been held through the next full round and at least ${durationText(v.holdMs)} after that round starts.`}{' '}
+        Players who cross the line together are ranked by points; equal points share the victory.
         {v.lastRound !== null &&
           ` If nobody has ${v.pointsToWin} when round ${v.lastRound} ends, the most points win, then ${tiebreakText(v.tiebreak)}.`}
       </p>

@@ -7,7 +7,7 @@ import type { AutodraftFallback } from './draft';
 import type { PlayerRating } from './handicap';
 import type { Opening } from './openings';
 import type { ResultReport } from './over-the-board';
-import type { MissionSpec, SeasonTiebreak, SecretMissionSpec } from './victory/catalog';
+import type { ClaimHold, MissionSpec, SeasonTiebreak, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
 import type { TitleKind } from './victory/titles';
@@ -345,8 +345,9 @@ export interface MissionView {
 
 /**
  * A claim on a territorial mission: from the moment it's complete until it scores or the position
- * is lost. It can score from `eligibleRound` on, once `eligibleAt` has passed and no war could
- * still break it.
+ * is lost. It can score from `eligibleRound` on, once it has been held through a round's turns
+ * (`turnsHeld`) or `eligibleAt` has passed (as the campaign's `VictoryView.hold` says), and no war
+ * could still break it.
  */
 export interface ClaimView {
   id: number;
@@ -358,6 +359,8 @@ export interface ClaimView {
   eligibleRound: number;
   /** When the minimum holding time is up; set when the round after the claim's starts. */
   eligibleAt: string | null;
+  /** Whether declaring has run to its end in a round after the claim's (claims held by turns). */
+  turnsHeld: boolean;
   /** Unresolved wars (by id) that could still break the position. */
   blockedBy: string[];
 }
@@ -440,7 +443,12 @@ export interface VictoryView {
   pointsToWin: number;
   publicPoints: number;
   secretPoints: number;
-  /** The least time a claim is held after the next round starts. */
+  /**
+   * What claims are held through before they score: a round's turns, or the time (`holdMs`) after
+   * the next round starts. `turns` only where players declare in turns (`holdsByTurns`).
+   */
+  hold: ClaimHold;
+  /** The least time a claim is held after the next round starts, where claims are held by time. */
   holdMs: number;
   /** The season's last round, after which the most points win; null if the campaign plays on. */
   lastRound: number | null;

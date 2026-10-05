@@ -130,6 +130,7 @@ async function replay(s: SimState, label: string) {
         await checkTurnsBegin();
         break;
       case 'round':
+        // The holding time, where claims are held by time (the original answers declare without turns).
         server.clock.advance(25 * HOUR);
         ok(await host.post(`/api/campaigns/${campaignId}/round/next`), 'next round');
         await checkTurnsBegin();

@@ -2,9 +2,11 @@ import {
   claimBlockers,
   claimEligibleRound,
   claimTimeServed,
+  claimTurnsServed,
   durationText,
   evaluateMission,
   holdMs,
+  holdsByTurns,
   missionInfo,
   missionName,
   missionRequirement,
@@ -169,8 +171,8 @@ interface Award {
  * missions the moment they're complete. All the awards of one change go in together; then, if
  * anyone has reached the points to win, the campaign ends.
  *
- * Runs inside every campaign mutation (see `mutate()`), and the scheduler triggers one when a
- * claim's holding time runs out.
+ * Runs inside every campaign mutation (see `mutate()`), the one that ends a round's declaring
+ * included, and the scheduler triggers one when a claim's holding time runs out.
  */
 export async function settleVictory(ctx: AppContext, scope: MutationScope): Promise<void> {
   const { tx } = scope;
@@ -192,6 +194,7 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
   const idx = world.idx;
   const now = ctx.now();
   const round = campaign.round;
+  const byTurns = holdsByTurns(campaign.rules);
   const hold = holdMs(campaign.rules);
   const due: Award[] = [];
   // Titles first, from the map as it is now; the simulator settles them in the same order.
@@ -263,7 +266,9 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
             userId: m.userId,
             title: own ? `Claim started: ${missionName(mission.spec)}` : `${name} claims ${missionName(mission.spec)}`,
             body: own
-              ? `Hold it until round ${claim.eligibleRound} starts, and for ${durationText(hold)} after round ${round + 1} starts.`
+              ? byTurns
+                ? `Hold it until round ${claim.eligibleRound} starts, and until everyone has had their turns in round ${round + 1} or later.`
+                : `Hold it until round ${claim.eligibleRound} starts, and for ${durationText(hold)} after round ${round + 1} starts.`
               : `It can score ${mission.points} points in round ${claim.eligibleRound} at the earliest, if the position still holds then. ${missionRequirement(mission.spec, idx, { players: memberIds.length, playerName: (id) => names.get(id) ?? 'a rival' })}`,
             url: missionsUrl(campaign.id),
             tag: `claim:${claim.id}`,
@@ -272,17 +277,23 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
       }
 
       const set: Partial<ClaimRow> = {};
-      // The holding time runs from the start of the round after the claim's.
-      if (!claim.eligibleAt && round > claim.startedRound) {
-        set.eligibleAt = new Date((campaign.roundStartedAt ?? now).getTime() + hold);
+      let served: boolean;
+      if (byTurns) {
+        // Held through a round's turns: no time to wait out, so the scheduler never looks.
+        served = claimTurnsServed(claim.startedRound, round, campaign.turnsEndedRound);
+      } else {
+        // The holding time runs from the start of the round after the claim's.
+        if (!claim.eligibleAt && round > claim.startedRound) {
+          set.eligibleAt = new Date((campaign.roundStartedAt ?? now).getTime() + hold);
+        }
+        const eligibleAt = set.eligibleAt ?? claim.eligibleAt;
+        served = claimTimeServed(
+          { startedRound: claim.startedRound, eligibleAt: eligibleAt?.getTime() ?? null },
+          round,
+          now.getTime(),
+        );
+        if (eligibleAt && now >= eligibleAt && !claim.timeReached) set.timeReached = true;
       }
-      const eligibleAt = set.eligibleAt ?? claim.eligibleAt;
-      const served = claimTimeServed(
-        { startedRound: claim.startedRound, eligibleAt: eligibleAt?.getTime() ?? null },
-        round,
-        now.getTime(),
-      );
-      if (eligibleAt && now >= eligibleAt && !claim.timeReached) set.timeReached = true;
       const blockers = board ? claimBlockers(world, board, userId, mission.spec, openWars) : [];
       if (blockers.join(',') !== claim.blockedBy.join(',')) set.blockedBy = blockers;
       if (Object.keys(set).length > 0) {

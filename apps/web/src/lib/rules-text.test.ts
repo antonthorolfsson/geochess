@@ -48,7 +48,7 @@ describe('rules in words', () => {
       Victory: 'First to 10 points, with titles',
       'Last round': 'Round 25, then the most points win',
       'Level on points': 'The largest population, then the most land, then the largest GDP',
-      'Claims are held': '24 hours after the next round starts',
+      'Claims are held': 'Until everyone has had their turns in a later round',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
       Declaring: 'In turns, 24 hours each',
@@ -69,6 +69,13 @@ describe('rules in words', () => {
     // Rules stored without a victory setting are an open-ended campaign.
     expect(liveSettings.Victory).toBe('Open-ended');
     expect(liveSettings['Claims are held']).toBeUndefined();
+    // Claims held by time: campaigns stored before turns held them, and campaigns without turns.
+    const timed = { ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, hold: 'time' as const } };
+    const noTurns = { ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, turns: false } };
+    for (const rules of [timed, noTurns]) {
+      const listed = Object.fromEntries(settingsList(rules).map((s) => [s.label, s.value]));
+      expect(listed['Claims are held']).toBe('24 hours after the next round starts');
+    }
     expect(liveSettings['Last round']).toBeUndefined();
     expect(liveSettings['Level on points']).toBeUndefined();
     // Campaigns stored before the real-world tiebreak keep the one they started with.

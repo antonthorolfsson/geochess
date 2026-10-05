@@ -92,8 +92,8 @@ export async function turnTaken(ctx: AppContext, scope: MutationScope, userId: s
 
 /**
  * The turn goes to the next player with something to do; a player in a live game goes after
- * everyone else. With nobody left, declaring is over for the round, and live games held back for
- * it begin.
+ * everyone else. With nobody left, declaring is over for the round (which claims held by turns wait
+ * for), and live games held back for it begin.
  */
 async function giveNextTurn(ctx: AppContext, scope: MutationScope, after: string | null): Promise<void> {
   const state = turnState(scope.campaign)!;
@@ -112,7 +112,11 @@ async function giveNextTurn(ctx: AppContext, scope: MutationScope, after: string
     (id) => busy.has(id),
   );
   const deadline = current ? new Date(ctx.now().getTime() + TURN_WINDOW_MS[pace]) : null;
-  await saveTurns(scope, { turnUserId: current, turnDeadline: deadline });
+  await saveTurns(scope, {
+    turnUserId: current,
+    turnDeadline: deadline,
+    ...(current ? {} : { turnsEndedRound: scope.campaign.round }),
+  });
   if (!current) {
     await scope.log.add({ type: 'turns.ended', payload: { round: scope.campaign.round } }, null, scope.campaign.round);
     await startQueuedGames(ctx, scope);

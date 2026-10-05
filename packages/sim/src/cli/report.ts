@@ -20,7 +20,7 @@ import {
   winnerMix,
 } from '../report/aggregate';
 import { compareMissions, compareToBase } from '../report/compare';
-import { attackerValue, draftComplete, earlyDraftPoints, secretPooled, skill } from '../report/extra';
+import { attackerValue, draftComplete, earlyDraftPoints, secretPooled, skill, titles } from '../report/extra';
 import { parseArgs } from './args';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -56,6 +56,7 @@ const sections = [
   base && `## Against ${base}, seed for seed\n\n${compareToBase(recs, base)}`,
   base && args.has('missions') && `## Missions against ${base}, seed for seed\n\n${compareMissions(recs, base)}`,
   normal.length && `## Game length\n\n${overview(normal)}`,
+  normal.some((r) => r.titleMoves !== undefined) && `## Titles\n\n${titles(normal)}`,
   normal.length && `## How winners scored\n\n${winnerMix(normal)}`,
   normal.length && `## Draft seats\n\n${seats(normal)}`,
   normal.length && `## Leaders and snowballing\n\n${leaders(normal)}`,

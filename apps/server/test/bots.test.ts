@@ -444,9 +444,12 @@ describe('bots standing in for players', () => {
     expect((await standIn(4)).body).toMatchObject({ error: { code: 'stood-in' } });
     const v = await view();
     expect(v.members.find((m) => m.userId === BO)?.bot).toEqual({ level: 4, standIn: true });
-    expect(v.events.at(-1)).toMatchObject({ type: 'standin.began', actorId: ANN, payload: { userId: BO, level: 4 } });
+    // Found by type: the bot may already have acted (titles give it a war worth declaring).
+    const began = v.events.find((e) => e.type === 'standin.began');
+    expect(began).toMatchObject({ actorId: ANN, payload: { userId: BO, level: 4 } });
     await tick();
-    expect(server.notices.at(-1)).toMatchObject({ userId: BO, title: 'A bot is playing your empire', url: `/c/${id}` });
+    const told = server.notices.find((n) => n.title === 'A bot is playing your empire');
+    expect(told).toMatchObject({ userId: BO, url: `/c/${id}` });
 
     const lobby = await ann.post<{ id: string }>('/api/campaigns', { name: 'Not yet' });
     const { inviteCode } = (await ann.get<CampaignView>(`/api/campaigns/${lobby.body.id}`)).body;

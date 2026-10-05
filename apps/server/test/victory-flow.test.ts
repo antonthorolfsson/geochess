@@ -37,12 +37,21 @@ const CY = 'dev_cy';
 const HOUR = 3_600_000;
 const MED = ['ESP', 'FRA', 'ITA', 'TUN'];
 
-async function table() {
+/**
+ * Three players in a new campaign's lobby. Mission rules version 4 unless asked otherwise, so the
+ * missions' points are all there is; `version: null` keeps what new campaigns get.
+ */
+async function table({ version = 4 }: { version?: number | null } = {}) {
   const ann = await signIn(server.app, 'Ann');
   const bo = await signIn(server.app, 'Bo');
   const cy = await signIn(server.app, 'Cy');
   const { body } = await ann.post<{ id: string }>('/api/campaigns', { name: 'Grand Strategy' });
   const id = body.id;
+  if (version !== null) {
+    const [row] = await server.app.ctx.db.select().from(campaigns).where(eq(campaigns.id, id));
+    const rules = { ...row!.rules, victory: { ...row!.rules.victory, version } };
+    await server.app.ctx.db.update(campaigns).set({ rules }).where(eq(campaigns.id, id));
+  }
   const view = async (c: Client = ann) => (await c.get<CampaignView>(`/api/campaigns/${id}`)).body;
   const { inviteCode } = await view();
   await bo.post(`/api/invites/${inviteCode}/join`);
@@ -61,14 +70,15 @@ async function table() {
 
 describe('the lobby', () => {
   it('gives new campaigns four public missions, visible to everyone before the draft', async () => {
-    const { bo, view } = await table();
+    const { bo, view } = await table({ version: null });
     const c = await view(bo);
     expect(c.rules.victory.mode).toBe('objectives');
     expect(c.victory).toMatchObject({
-      version: 4,
-      pointsToWin: 7,
+      version: 5,
+      pointsToWin: 10,
       publicPoints: 2,
       secretPoints: 3,
+      titlePoints: 1,
       holdMs: 24 * HOUR,
       lastRound: 25,
     });
@@ -409,6 +419,63 @@ describe('an Objectives campaign from start to finish', () => {
     server.clock.advance(48 * HOUR);
     await server.runDue();
     expect((await view()).events).toHaveLength(eventCount);
+  });
+});
+
+describe('titles', () => {
+  it('go to the leaders when round 1 starts, count as points, and move with the lead', async () => {
+    const { ann, bo, id, view, give } = await table({ version: null });
+    expect((await ann.post(`/api/campaigns/${id}/draft/start`)).status).toBe(200);
+    expect((await ann.post(`/api/campaigns/${id}/draft/end`)).status).toBe(200);
+    expect((await view()).victory!.titles.every((t) => t.holderId === null)).toBe(true);
+    server.clock.advance(24 * HOUR + 1);
+    await server.runDue();
+    await tick();
+
+    const started = await view(bo);
+    expect(started).toMatchObject({ status: 'active', round: 1 });
+    const titles = started.victory!.titles;
+    expect(titles.map((t) => t.kind)).toEqual(['population', 'land', 'economy', 'military']);
+    for (const t of titles) {
+      // Whoever holds it leads, and every player's figure is there.
+      const totals = Object.values(t.totals);
+      expect(totals).toHaveLength(3);
+      expect(t.holderId).not.toBeNull();
+      expect(t.totals[t.holderId!]).toBe(Math.max(...totals));
+    }
+    const changed = started.events.filter((e) => e.type === 'title.changed');
+    expect(changed).toHaveLength(4);
+    for (const p of started.victory!.players) {
+      const held = titles.filter((t) => t.holderId === p.userId).map((t) => t.kind);
+      expect(p.titles).toEqual(held);
+      expect(p.points).toBe(held.length);
+    }
+
+    // Everything but one country each goes to Bo, who then leads on every figure.
+    const owners = Object.entries(started.holdings);
+    const keep = new Set([ANN, CY].map((u) => owners.find(([, o]) => o === u)![0]));
+    await give(
+      owners.filter(([t, o]) => o !== BO && !keep.has(t)).map(([t]) => t),
+      BO,
+    );
+    await tick();
+    const after = await view(bo);
+    expect(after.victory!.titles.map((t) => t.holderId)).toEqual([BO, BO, BO, BO]);
+    expect(after.victory!.players.find((p) => p.userId === BO)).toMatchObject({ points: 4 });
+    expect(after.victory!.players.filter((p) => p.userId !== BO).every((p) => p.points === 0)).toBe(true);
+    const moved = after.events.filter((e) => e.type === 'title.changed').slice(4);
+    expect(moved.every((e) => e.type === 'title.changed' && e.payload.to === BO)).toBe(true);
+    // Told of each title taken; those who lost one are told too.
+    for (const t of titles.filter((t) => t.holderId !== BO)) {
+      const name = {
+        population: 'Largest Population',
+        land: 'Largest Territory',
+        economy: 'Largest Economy',
+        military: 'Greatest Military Might',
+      }[t.kind];
+      expect(server.notices.some((n) => n.userId === BO && n.title === `+1 victory point: ${name}`)).toBe(true);
+      expect(server.notices.some((n) => n.userId === t.holderId && n.title === `${name} lost`)).toBe(true);
+    }
   });
 });
 

@@ -49,7 +49,7 @@ describe('campaign rules', () => {
       },
       victory: {
         mode: 'objectives',
-        version: 4,
+        version: 5,
         publicMissions: [],
         holdMinutes: null,
         selectionMinutes: null,
@@ -61,7 +61,7 @@ describe('campaign rules', () => {
       parseRules({
         draft: {},
         war: REVISED_WAR_RULES,
-        victory: { mode: 'objectives', version: 4, lastRound: 25, tiebreak: 'realWorld' },
+        victory: { mode: 'objectives', version: 5, lastRound: 25, tiebreak: 'realWorld' },
       }),
     ).toEqual(DEFAULT_RULES);
   });

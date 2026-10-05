@@ -990,6 +990,122 @@ plays fortifying at 150%; the others at 125%.
 To rerun: `pnpm sim --scenario baseline,whatif:original-stakes,whatif:stake-100,whatif:stake-120 --players 2-8 --paces live --seeds 200 --out stakes`,
 then `pnpm sim:report stakes --compare baseline`.
 
+## Titles
+
+_Adopted the same day as mission rules version 5: one point a title, 10 to win, with the
+square-root military might (below) for the military title. The simulator's baseline plays it now;
+`whatif:no-titles` plays version 4's scoring. The tables below were run on version 4 with titles as
+a what-if._
+
+_Added 5 October 2026, a what-if, not in the game. The idea under test: on top of the missions, a
+point or two for each of **the most population, the most land, the largest GDP and the largest
+military spending**, held by whoever leads the table on that figure from the moment the draft ends
+and lost to whoever passes them, with 10 points to win instead of 7._
+
+How the simulator plays it (`engine/titles.ts`, `Variant.titles`): titles are worked out when
+round 1 starts and after every change of hands. A title moves when someone's total passes the
+holder's; a holder who is only matched keeps it, and a lead shared by players who don't hold it
+goes to nobody. Title points count toward the points to win at once (no holding time, unlike a
+claim) and go with the title. The bots weigh the titles a war would win, keep or lose, and the
+opponent's they'd take, at the value of a point; `-blind` variants play bots that ignore titles.
+
+The same seeds, mission rules version 4, dataset 2026.3, a last round of 25, live, 150 campaigns
+per table size from 2 to 8. "Starting with the most titles" compares the win rate of whoever
+holds the most titles when round 1 starts with a fair share (×1.00 is fair).
+
+| Variant                        | Median win round, 2 / 3 / 4 / 5 / 6 / 7 / 8 players | Reached the points to win | Winners' points: missions + titles | Starting with the most titles | Titles changing hands per campaign |
+| ------------------------------ | --------------------------------------------------- | ------------------------- | ---------------------------------- | ----------------------------- | ---------------------------------- |
+| Today: no titles, 7 to win     | 12 / 11 / 10 / 9 / 9 / 8 / 8                        | 92%                       | 7.3 + 0                            | –                             | –                                  |
+| 1 point a title, 9 to win      | 9 / 9 / 9 / 9 / 8 / 8 / 8                           | 99%                       | 6.6 + 3.0                          | ×1.05                         | 12                                 |
+| **1 point a title, 10 to win** | 10 / 9 / 11 / 10 / 9 / 9 / 9                        | 97%                       | 7.2 + 3.2                          | ×1.09                         | 14                                 |
+| 1 point a title, 11 to win     | 14 / 14 / 15 / 14 / 13 / 14 / 13                    | 82%                       | 8.0 + 3.1                          | ×1.02                         | 18                                 |
+| 1 point, 10 to win, 5 publics  | 9 / 9 / 9 / 9 / 8 / 8 / 8                           | 100%                      | 7.6 + 3.0                          | ×1.16                         | 12                                 |
+| 1 point, 10 to win, blind bots | 11 / 11 / 12 / 11 / 10 / 9 / 10                     | 94%                       | 7.2 + 3.1                          | ×1.16                         | 12                                 |
+| 2 points a title, 10 to win    | 6 / 6 / 6 / 6 / 6 / 6 / 6                           | 100%                      | 4.4 + 6.3                          | ×1.31                         | 9                                  |
+| 2 points a title, 12 to win    | 8 / 7 / 9 / 9 / 8 / 9 / 8                           | 100%                      | 6.0 + 6.7                          | ×1.24                         | 13                                 |
+| 2 points a title, 14 to win    | 11 / 11 / 13 / 11 / 12 / 12 / 12                    | 94%                       | 7.4 + 7.1                          | ×1.09                         | 17                                 |
+| 2 points, 10 to win, 5 publics | 5 / 5 / 5 / 6 / 5 / 5 / 5                           | 100%                      | 4.6 + 6.1                          | ×1.46                         | 8                                  |
+
+- **The draft hands out most titles to one player.** Whoever starts with the most holds 2.8 of
+  the 4 at 2–4 players and 2.2 at 8. The USA alone brings GDP and military spending (2.1 titles on
+  average), with Canada land too; China and India together bring population and often GDP. Even
+  so, titles change hands 12–18 times a campaign, and starting with the most is worth little at
+  one point a title (×1.05–1.09, as fair as the draft seat itself).
+- **Two points a title with 10 to win ends campaigns by round 6** at every table size. Titles make
+  up two thirds of a winner's points: a strong draft plus one mission wins. Raising the target to
+  14 restores today's length, but half of every winner's points are then titles, and a single war
+  over China or the USA can swing four points.
+- **One point a title with 10 to win plays about as long as today and leaves the missions in
+  charge.** Winners make 7.2 points from missions (7.3 today) and hold 3 of the 4 titles at the
+  end. 11 to win stretches campaigns to rounds 13–15, but one in five is then decided on points
+  when round 25 ends.
+- **No more public missions are needed.** With 4 publics (8 points), a secret (3) and 4 titles (4),
+  15 points are on offer and 97% of campaigns reach 10. A fifth public only shortens campaigns by
+  a round and makes the starting titles count more (×1.16). It would be worth a look only with 11
+  or more to win, where a fifth of campaigns run out of rounds.
+- **The points to win don't need to depend on the table size.** Today small tables are slow
+  (median round 12 at 2 players) and big ones fast (8 at 7–8 players). Titles even this out: at
+  10 to win every size has its median win in rounds 9–11, and 2- and 3-player campaigns finish
+  more often (4% decided on points at the last round at 2 players, against 18% today). Scaling the
+  target by the table would bring back the spread titles remove.
+- **Fighting for titles shortens campaigns by one or two rounds.** Bots that ignore titles take
+  1–2 rounds longer at 10 to win. People will sit somewhere between the two.
+
+Things to settle before building it: whether title points should count toward the win at once
+(here a single war can take a player over the line with no response window, unlike a mission
+claim) or only after a round held; ties (here a matched holder keeps the title); unknown
+figures (here counted as zero, which matters for military spending); and that the bots draft for
+country value, not for titles, so people who draft the USA or China on purpose will start with
+more of them than here.
+
+### Military might instead of military spending
+
+The USA has 37% of the world's military spending (China 12%), so whoever drafts it starts with
+the military title 92% of the time, almost always with the GDP title too. "Military might" makes
+up a figure from spending and armed forces together (the USA has only 5% of the world's soldiers;
+India has 11%, China 9%): each country's share of the world's spending and its share of the
+world's soldiers, averaged and counted per 1,000 of the world (`engine/titles.ts`). Three ways
+of counting the shares:
+
+- **Blend**: the shares as they are. USA 210, China 104, India 72, Russia 54.
+- **Square root**: shares of the square roots of both figures, which flattens the giants. USA 56,
+  China 41, India 31, Russia 29; it takes 29 countries to make half the world's might.
+- **Mixed**: the square root of spending, soldiers as they are. China, the USA and India about
+  level at 69–71.
+
+One point a title, 10 to win, the other three titles unchanged, the same seeds (150 campaigns per
+table size, 2–8 players). A fair share for the USA's drafter is ×1.00; with no titles at all
+they win ×0.84 (±0.10).
+
+| Military title  | Median win round, 2 → 8 players | Same player starts with GDP and military | Who drafts the USA starts with the military title | USA drafter's titles at the start | USA drafter wins | 4+ players: 3 or 4 players start with a title |
+| --------------- | ------------------------------- | ---------------------------------------- | ------------------------------------------------- | --------------------------------- | ---------------- | --------------------------------------------- |
+| Spending        | 10 / 9 / 11 / 10 / 9 / 9 / 9    | 94%                                      | 92%                                               | 2.3                               | ×1.05            | 43%                                           |
+| Might, blend    | 10 / 9 / 10 / 9 / 9 / 9 / 10    | 63%                                      | 50%                                               | 1.9                               | ×0.88            | 45%                                           |
+| **Might, sqrt** | 10 / 9 / 10 / 9 / 9 / 8 / 9     | 26%                                      | 12%                                               | 1.5                               | ×0.81            | 58%                                           |
+| Might, mixed    | 10 / 9 / 10 / 9 / 9 / 9 / 10    | 22%                                      | 9%                                                | 1.5                               | ×0.73            | 51%                                           |
+
+- **Spending makes the USA the titles' favourite.** It's the only setup where its drafter does
+  better than with no titles at all (×1.05 against ×0.84).
+- **The square-root might spreads the titles best.** The military title goes to whoever drafted
+  China, India or Russia about as often as each other, and to the USA's drafter only one time in
+  eight; at 4 or more players, three or four different players start with a title 58% of the
+  time (43% with spending, 10% with all four apart). The USA's drafter is back where they'd be
+  without titles. Game length doesn't change.
+- **The mixed might overcorrects**: China and India's drafters take it, and the USA's drafter
+  falls to ×0.73, below its no-titles share.
+- **The blend is a half measure**: the USA's drafter still holds the military title half the time.
+
+The square-root might also rewards many middling armies: an empire of a dozen mid-sized countries
+can outrank one superpower, which gives smaller empires a title to fight for. If it's adopted, it
+can be worked out in the rules package from the two figures every dataset already has, so no new
+dataset version is needed; the empire pages would show it next to spending and armed forces.
+
+To rerun: `pnpm sim --scenario whatif:titles-1-might-blend,whatif:titles-1-might-sqrt,whatif:titles-1-might-mixed --players 2-8 --paces live --seeds 150 --out might`, then `pnpm sim:report might titles`.
+
+To rerun: `pnpm sim --scenario baseline,whatif:titles-1,whatif:titles-2,whatif:titles-1-public5,whatif:titles-2-public5 --players 2-8 --paces live --seeds 150 --out titles`
+and `pnpm sim --scenario whatif:titles-1-win9,whatif:titles-1-win11,whatif:titles-1-blind,whatif:titles-2-win12,whatif:titles-2-win14,whatif:titles-2-blind --players 2-8 --paces live --seeds 150 --out titles2`,
+then `pnpm sim:report titles titles2` (the Titles table) or `pnpm sim:report titles --compare baseline`.
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,

@@ -35,7 +35,8 @@ export const ORIGINAL_ANSWERS = {
 
 /**
  * A campaign on the real map set up by hand: an auto-draft for the given number of players, then
- * countries moved as asked (counted as drafted), these public missions and secrets, at round 1.
+ * countries moved as asked (counted as drafted), these public missions and secrets, at round 1, on
+ * mission rules version 4 unless the config says otherwise.
  * Players declare whenever the test likes, unless its config asks for turns.
  */
 export function scripted(opts: {
@@ -48,6 +49,8 @@ export function scripted(opts: {
   const cfg: SimConfig = baseConfig({
     players: opts.players,
     debug: true,
+    // Missions alone: version 4, the last without titles (the titles tests ask for 5).
+    missionVersion: 4,
     ...opts.config,
     war: { turns: false, ...opts.config?.war },
   });

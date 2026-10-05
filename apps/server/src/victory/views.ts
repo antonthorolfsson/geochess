@@ -4,6 +4,8 @@ import {
   missionRules,
   SECRET_MISSION_KEY,
   evaluateMission,
+  titleTotals,
+  titlesHeldBy,
   type AwardView,
   type ClaimView,
   type Evaluation,
@@ -82,7 +84,9 @@ export async function victoryViews(
   const [result] = await db.select().from(campaignResults).where(eq(campaignResults.campaignId, campaign.id));
   const atWar = campaign.status === 'active' || campaign.status === 'finished';
   const world = atWar && players.length > 0 ? await loadWorld(ctx, db, campaign, memberIds, players) : null;
-  const points = pointsOf(awards, memberIds);
+  const points = pointsOf(awards, memberIds, campaign);
+  const titleCfg = cfg.titles;
+  const totals = world && titleCfg ? titleTotals(world.idx, world.owners, memberIds, titleCfg.kinds) : null;
   const byUser = new Map(players.map((p) => [p.userId, p]));
 
   const victory: VictoryView = {
@@ -94,6 +98,12 @@ export async function victoryViews(
     lastRound: lastRoundOf(campaign.rules),
     tiebreak: campaign.rules.victory.tiebreak,
     publicMissions,
+    titles: (titleCfg?.kinds ?? []).map((kind) => ({
+      kind,
+      holderId: campaign.titles[kind] ?? null,
+      totals: Object.fromEntries(totals?.get(kind) ?? []),
+    })),
+    titlePoints: titleCfg?.points ?? 0,
     players: memberIds.map((userId) => {
       const player = byUser.get(userId);
       const progress: Record<string, Evaluation> = {};
@@ -103,6 +113,7 @@ export async function victoryViews(
       return {
         userId,
         points: points.get(userId) ?? 0,
+        titles: titleCfg ? titlesHeldBy(campaign.titles, userId) : [],
         awards: awards.filter((a) => a.userId === userId).map(toAwardView),
         ready: player ? player.secret !== null || player.noSecret : false,
         secret:

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { Pace } from '../config';
 import type { Continent, TerritoryId } from '../dataset';
 import type { UserId } from '../draft';
+import { TITLE_KINDS, type TitleKind } from './titles';
 
 /**
  * - `objectives`: public and secret missions score victory points; the first to 7 wins.
@@ -635,6 +636,11 @@ export interface MissionRules {
   /** The dataset value scale its numbers counted in value are written for (`valueScale`). */
   valueScale: number;
   points: { public: number; secret: number; toWin: number };
+  /**
+   * Titles (from version 5): `points` each for leading the table on these figures, held from round
+   * 1 by whoever leads and lost with the lead (`titles.ts`). Null: no titles.
+   */
+  titles: { kinds: readonly TitleKind[]; points: number } | null;
   /** The public missions this version offers the host. */
   publicKinds: readonly PublicMissionKind[];
   /** The secret missions this version deals (Measured Expansion only ever as the fallback). */
@@ -774,6 +780,7 @@ export const MISSION_RULES_V1: MissionRules = {
   version: 1,
   valueScale: 1,
   points: { public: 2, secret: 3, toWin: 7 },
+  titles: null,
   publicKinds: [
     'expansion',
     'regional_power',
@@ -996,15 +1003,29 @@ export const MISSION_RULES_V4: MissionRules = {
   fit: { ...MISSION_RULES_V3.fit, value: 0.062, freeValue: 21 },
 };
 
+/**
+ * Version 5 adds titles: a point each for the largest population, territory, economy and military
+ * might at the table, held by whoever leads from round 1 and lost with the lead, with 10 points to
+ * win. Missions are version 4's. In the simulator this plays as long as version 4 did, with winners
+ * making about 7 points from missions and 3 from titles (docs/balance-report.md, "Titles").
+ */
+export const MISSION_RULES_V5: MissionRules = {
+  ...MISSION_RULES_V4,
+  version: 5,
+  points: { public: 2, secret: 3, toWin: 10 },
+  titles: { kinds: TITLE_KINDS, points: 1 },
+};
+
 const MISSION_RULES: Record<number, MissionRules> = {
   1: MISSION_RULES_V1,
   2: MISSION_RULES_V2,
   3: MISSION_RULES_V3,
   4: MISSION_RULES_V4,
+  5: MISSION_RULES_V5,
 };
 
 /** The mission rules version new campaigns are created with. */
-export const CURRENT_MISSION_RULES = MISSION_RULES_V4.version;
+export const CURRENT_MISSION_RULES = MISSION_RULES_V5.version;
 
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {

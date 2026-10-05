@@ -22,6 +22,7 @@ import {
 import { openWarViews, warBoard } from './board';
 import { nextSeq, note, pointsToWin, publicPoints, secretPoints } from './state';
 import type { Award, Claim, MissionSlot, SimPlayer, SimState } from './types';
+import { settleTitles } from './titles';
 import { missionWorld } from './world';
 
 /** Everything a player can score: the public missions, then their secret one. */
@@ -91,6 +92,8 @@ interface Due {
  */
 export function settle(s: SimState, only?: ReadonlySet<UserId>): void {
   if (s.status !== 'active') return;
+  // Titles follow the whole table's holdings, whoever the change touched.
+  const moved = settleTitles(s);
   const world = missionWorld(s);
   const open = openWarViews(s);
   const board = open.length > 0 ? warBoard(s) : null;
@@ -143,7 +146,7 @@ export function settle(s: SimState, only?: ReadonlySet<UserId>): void {
       if (served && claim.blockedBy.length === 0) due.push({ player, slot, claim });
     }
   }
-  if (due.length === 0) return;
+  if (due.length === 0 && !moved) return;
 
   for (const { player, slot, claim } of due) {
     const seq = nextSeq(s);

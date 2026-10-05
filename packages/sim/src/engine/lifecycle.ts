@@ -28,6 +28,7 @@ import {
 } from '@empire/rules';
 import { startRoundForAccords } from './diplomacy';
 import { heldBy, nextSeq, note, valueOfPlayer } from './state';
+import { titleRules, titlesOf } from './titles';
 import { beginTurns } from './turns';
 import type { SimPlayer, SimState } from './types';
 import { settle, slotsFor } from './victory';
@@ -101,6 +102,7 @@ export function setupPublicMissions(s: SimState): void {
     specs = result.missions;
   }
   if (!specs || specs.length !== s.mr.publicCount) throw new Error('No playable set of public missions');
+  specs = [...specs, ...extraPublic(s, specs, random)];
   const patch = s.cfg.variant?.patchPublic;
   s.publicSpecs = patch
     ? specs.map((spec, i) => {
@@ -109,6 +111,35 @@ export function setupPublicMissions(s: SimState): void {
       })
     : specs;
   s.rules = { ...s.rules, victory: { ...s.rules.victory, publicMissions: s.publicSpecs } };
+}
+
+/** A variant's public missions on top of the campaign's (`Variant.extraPublic`), clear of their targets. */
+function extraPublic(s: SimState, specs: readonly PublicMissionSpec[], random: Random): PublicMissionSpec[] {
+  const extra = s.cfg.variant?.extraPublic;
+  if (!extra) return [];
+  const players = s.cfg.players;
+  const inPlay = new Set(specs.map((spec) => spec.kind));
+  const playable = (kind: PublicMissionKind) =>
+    !inPlay.has(kind) &&
+    s.mr.publicKinds.includes(kind) &&
+    !excludedPublic(s, kind) &&
+    publicMissionIssue(kind, s.idx, s.rules, players) === null;
+  const kinds =
+    typeof extra === 'function'
+      ? shuffled(
+          s.mr.publicKinds.filter((kind) => playable(kind) && !s.mr.long.includes(kind)),
+          random,
+        ).slice(0, extra(players))
+      : extra.filter(playable);
+  const taken = new Set(specs.flatMap((spec) => publicTargets(spec)));
+  const out: PublicMissionSpec[] = [];
+  for (const kind of kinds) {
+    const spec = generatePublicMission(kind, s.idx, s.rules, random, taken);
+    if (!spec) continue;
+    out.push(spec);
+    for (const id of publicTargets(spec)) taken.add(id);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -220,6 +251,9 @@ export function openCampaign(s: SimState): void {
   s.status = 'active';
   startRound(s, 1);
   settle(s);
+  if (titleRules(s)) {
+    s.titlesAtStart = Object.fromEntries(s.players.map((p) => [p.id, titlesOf(s, p.id)]));
+  }
 }
 
 /** The host starts the next round. */

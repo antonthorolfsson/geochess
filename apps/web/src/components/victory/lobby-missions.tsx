@@ -110,9 +110,12 @@ export function LobbyMissions({
           <>
             <p className="text-[0.95rem]">
               Public missions are worth {cfg.points.public} points each, and everyone can score every one. After the
-              draft each player privately picks a secret mission worth {cfg.points.secret}. Points are never lost; the
-              first to {cfg.points.toWin} wins. A completed position scores once it has been held through the next full
-              round and {durationText(holdMs(rules))} after that round starts.{' '}
+              draft each player privately picks a secret mission worth {cfg.points.secret}.{' '}
+              {cfg.titles
+                ? `Four titles worth ${cfg.titles.points} each go to whoever leads on population, land, GDP and military might, and move with the lead; mission points are never lost. The first to ${cfg.points.toWin} wins.`
+                : `Points are never lost; the first to ${cfg.points.toWin} wins.`}{' '}
+              A completed position scores once it has been held through the next full round and{' '}
+              {durationText(holdMs(rules))} after that round starts.{' '}
               {lastRound !== null
                 ? `If nobody has ${cfg.points.toWin} when round ${lastRound} ends, the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`
                 : 'There is no last round: the campaign goes on until someone reaches it.'}

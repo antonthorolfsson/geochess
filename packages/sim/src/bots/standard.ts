@@ -63,6 +63,7 @@ import { accordInForce, answer, propose, renounce } from '../engine/diplomacy';
 import type { DraftPicker } from '../engine/lifecycle';
 import { heldBy, pointsToWin } from '../engine/state';
 import type { SimAccord, SimPeaceOffer, SimPlayer, SimState, SimWar } from '../engine/types';
+import { titleHoldersFor, titlePointsOf, titleRules } from '../engine/titles';
 import { hasScored, isComplete } from '../engine/victory';
 import type { Declaration, Reply, Response } from '../engine/wars';
 import { missionWorld } from '../engine/world';
@@ -246,6 +247,22 @@ function rivalSwing(ctx: Ctx, rivalId: UserId, after: MissionWorld): number {
   return sum;
 }
 
+/**
+ * Titles an outcome moves (`Variant.titles`), from our side: + for winning or keeping ours and taking
+ * the opponent's, − for the reverse; more when the points would win (or lose) the campaign.
+ */
+function titleSwing(ctx: Ctx, opponentId: UserId, owners: ReadonlyMap<TerritoryId, UserId>): number {
+  const { s } = ctx;
+  if (!titleRules(s) || ctx.knobs.titleWeight === 0) return 0;
+  const next = titleHoldersFor(s, owners);
+  const mine = titlePointsOf(s, next, ctx.me) - titlePointsOf(s, s.titles, ctx.me);
+  const theirs = titlePointsOf(s, next, opponentId) - titlePointsOf(s, s.titles, opponentId);
+  const toWin = pointsToWin(s);
+  const deciding = (id: UserId, delta: number) => (delta > 0 && (s.points.get(id) ?? 0) + delta >= toWin ? 2.5 : 1);
+  const v = ctx.knobs.vpValue * ctx.knobs.titleWeight;
+  return v * mine * deciding(ctx.me, mine) - ctx.knobs.blockWeight * 0.5 * v * theirs * deciding(opponentId, theirs);
+}
+
 interface WarPlan {
   targetId: TerritoryId;
   defenderId: UserId;
@@ -344,11 +361,11 @@ function attackValue(ctx: Ctx, plan: WarPlan, models: readonly MissionModel[] = 
   if (artist && isComplete(s, winMate, me, artist.slot.spec)) {
     win += winEvent.mateChance * worth(ctx, artist) * (1 - ctx.knobs.progressWeight);
   }
-  win += rivalSwing(ctx, defenderId, winWorld);
+  win += rivalSwing(ctx, defenderId, winWorld) + titleSwing(ctx, defenderId, winWorld.owners);
 
   let loss = valueOf(s.idx, stake) + progressLoss(ctx, models, stake);
   loss -= exactSwing(ctx, me, models, lossWorld);
-  loss -= rivalSwing(ctx, defenderId, lossWorld);
+  loss -= rivalSwing(ctx, defenderId, lossWorld) + titleSwing(ctx, defenderId, lossWorld.owners);
 
   return o.attacker * win - o.defender * loss + leaderBonus(ctx, defenderId);
 }
@@ -441,8 +458,10 @@ function preScore(ctx: Ctx, targetId: TerritoryId): number {
   let block = 0;
   for (const m of rivalModels(ctx, defenderId))
     if (m.complete && m.critical.has(targetId)) block += rivalStake(ctx, defenderId, m);
+  // Titles the target alone would move, where the campaign has them.
+  const titles = titleRules(s) ? titleSwing(ctx, defenderId, new Map(ctx.world.owners).set(targetId, ctx.me)) : 0;
   return (
-    o.attacker * (t.value + progressGain(ctx, ctx.mine, [targetId], e) + block) -
+    o.attacker * (t.value + progressGain(ctx, ctx.mine, [targetId], e) + block + titles) -
     o.defender * stakeFloor(s.rules, t.value) +
     leaderBonus(ctx, defenderId)
   );
@@ -528,10 +547,10 @@ function defendValue(
     takes: true,
   };
   let win = valueOf(s.idx, stake) + progressGain(ctx, ctx.mine, stake, e) + exactSwing(ctx, me, ctx.mine, winWorld);
-  win += rivalSwing(ctx, war.attackerId, winWorld);
+  win += rivalSwing(ctx, war.attackerId, winWorld) + titleSwing(ctx, war.attackerId, winWorld.owners);
   let loss = valueOf(s.idx, atRisk) + progressLoss(ctx, ctx.mine, atRisk);
   loss -= exactSwing(ctx, me, ctx.mine, lossWorld);
-  loss -= rivalSwing(ctx, war.attackerId, lossWorld);
+  loss -= rivalSwing(ctx, war.attackerId, lossWorld) + titleSwing(ctx, war.attackerId, lossWorld.owners);
   return o.defender * win - o.attacker * loss;
 }
 

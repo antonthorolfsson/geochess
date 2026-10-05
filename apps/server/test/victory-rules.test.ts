@@ -118,6 +118,8 @@ async function objectives(opts: {
         ...rules,
         victory: {
           ...rules.victory,
+          // Missions alone: version 4, the last without titles.
+          version: 4,
           publicMissions: opts.missions,
           holdMinutes: opts.holdMinutes ?? rules.victory.holdMinutes,
         },

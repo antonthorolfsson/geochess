@@ -26,6 +26,7 @@ import type {
 import type { BotKnobs } from '../bots/knobs';
 import type { Streams } from '../random';
 import type { Variant } from '../variants';
+import type { TitleStat } from './titles';
 import type { Reply, Response } from './wars';
 
 /** How chess games are decided: the model standing in for the players at the board. */
@@ -268,7 +269,13 @@ export interface SimState {
   claims: Map<string, Claim>;
   claimLog: Claim[];
   awards: Award[];
+  /** Mission points and title points (`Variant.titles`) together. */
   points: Map<UserId, number>;
+  /** Who holds each title (`Variant.titles`), and how often one changed hands after round 1 began. */
+  titles: Map<TitleStat, UserId | null>;
+  titleMoves: number;
+  /** The titles each player held when round 1 began. */
+  titlesAtStart: Record<UserId, TitleStat[]> | null;
   winners: UserId[];
   finishedRound: number | null;
   /** Public missions each player had complete when the draft ended. */

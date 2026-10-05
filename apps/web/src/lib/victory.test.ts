@@ -85,10 +85,20 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       lastRound: null,
       tiebreak: 'realWorld',
       publicMissions: [positions],
+      titles: [],
+      titlePoints: 0,
       players: [
-        { userId: 'ann', points: 4, awards: [], ready: true, secret: null, progress: { p0: evaluation(2) } },
-        { userId: 'bo', points: 4, awards: [], ready: true, secret: null, progress: { p0: evaluation(1) } },
-        { userId: 'cy', points: 6, awards: [], ready: true, secret: null, progress: { p0: evaluation(0) } },
+        {
+          userId: 'ann',
+          points: 4,
+          titles: [],
+          awards: [],
+          ready: true,
+          secret: null,
+          progress: { p0: evaluation(2) },
+        },
+        { userId: 'bo', points: 4, titles: [], awards: [], ready: true, secret: null, progress: { p0: evaluation(1) } },
+        { userId: 'cy', points: 6, titles: [], awards: [], ready: true, secret: null, progress: { p0: evaluation(0) } },
       ],
       claims: [],
       selection: null,
@@ -121,10 +131,11 @@ describe('seeing missions', () => {
 
     const revealed = view({
       players: [
-        { userId: 'ann', points: 0, awards: [], ready: true, secret: null, progress: {} },
+        { userId: 'ann', points: 0, titles: [], awards: [], ready: true, secret: null, progress: {} },
         {
           userId: 'bo',
           points: 0,
+          titles: [],
           awards: [],
           ready: true,
           secret: { mission: bosSecret, revealedRound: 3, revealedAt: '2026-01-02T00:00:00.000Z', reason: 'near' },

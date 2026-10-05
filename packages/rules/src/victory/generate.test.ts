@@ -233,8 +233,8 @@ describe('public missions', () => {
     ]);
   });
 
-  it('carry version 4’s numbers, written for values 1 to 20', () => {
-    expect(DEFAULT_RULES.victory.version).toBe(4);
+  it('carry version 4’s numbers, written for values 1 to 20 (version 5 keeps them)', () => {
+    expect(DEFAULT_RULES.victory.version).toBe(5);
     expect(MISSION_RULES_V4.valueScale).toBe(1.29);
     expect(generatePublicMission('expansion', idx, DEFAULT_RULES, Math.random)).toEqual({
       kind: 'expansion',

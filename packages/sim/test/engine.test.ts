@@ -197,6 +197,50 @@ describe('winning', () => {
   });
 });
 
+describe('titles (version 5)', () => {
+  const titled = (toWin?: number) =>
+    scripted({
+      players: 3,
+      publics: () => [EUROPE],
+      config: {
+        missionVersion: 5,
+        ...(toWin && { variant: { name: 'win', description: '', points: { toWin } } }),
+      },
+    });
+  /** Everything p2 and p3 hold but one country each goes to p1, who then leads on everything. */
+  const sweep = (s: ReturnType<typeof titled>) => {
+    const keep = new Set(['p2', 'p3'].map((id) => [...heldBy(s, id)].sort()[0]!));
+    give(
+      s,
+      [...s.holdings].filter(([id, h]) => h.ownerId !== 'p1' && !keep.has(id)).map(([id]) => id),
+      'p1',
+    );
+  };
+
+  it('go to the leaders when round 1 starts, and move, points and all, when the lead changes', () => {
+    const s = titled();
+    expect([...s.titles.keys()]).toEqual(['population', 'land', 'economy', 'military']);
+    expect([...s.titles.values()].every((holder) => holder !== null)).toBe(true);
+    sweep(s);
+    expect([...s.titles.values()]).toEqual(['p1', 'p1', 'p1', 'p1']);
+    expect(pointsOf(s, 'p1')).toBe(4);
+    expect(pointsOf(s, 'p2') + pointsOf(s, 'p3')).toBe(0);
+    expect(s.history.awards.reduce((n, a) => n + a.points, 0)).toBe(4);
+  });
+
+  it('count toward the points to win alongside missions', () => {
+    const s = titled(6);
+    sweep(s);
+    expect(s.status).toBe('active');
+    // Strategic Positions, claimed from the draft, scores when round 3 starts: 4 + 2.
+    nextRound(s);
+    nextRound(s);
+    expect(s.status).toBe('finished');
+    expect(s.winners).toEqual(['p1']);
+    expect(pointsOf(s, 'p1')).toBe(6);
+  });
+});
+
 describe('accords', () => {
   it('count whole rounds for Protected Expansion in the round-start order the server uses', () => {
     const s = scripted({ players: 3, publics: () => [] });

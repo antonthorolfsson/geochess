@@ -66,6 +66,10 @@ export const SCENARIOS: Record<string, Scenario> = {
     description: 'Contiguous draft, the default public missions, mission-seeking bots, equal players.',
     config: {},
   },
+  'titles-blind': {
+    description: 'The baseline with bots that never fight for a title (for the titles what-ifs).',
+    config: { bots: { titleWeight: 0 } },
+  },
   random: {
     description: 'Contiguous draft with the public missions drawn at random, played to a win.',
     config: { publics: 'random' },

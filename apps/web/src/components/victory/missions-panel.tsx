@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  TITLES,
   durationText,
   effortText,
   missionName,
@@ -28,6 +29,7 @@ import {
   progressOf,
   requirementText,
   tiebreakClause,
+  titleFigureText,
   titleOf,
   victoryPlayer,
 } from '@/lib/victory';
@@ -37,6 +39,7 @@ import { PlayerName } from '../campaign/player-name';
 import { useEmpireHref } from '../campaign/room-context';
 import { Notice } from '../ui';
 import { MissionCard, PointsBadge, ProgressParts } from './mission-card';
+import { TitleToken } from './title-tokens';
 
 /** What the map is asked to call out: a mission someone plays, or a secret option being weighed. */
 export type MissionFocus =
@@ -68,6 +71,7 @@ export function MissionsPanel(props: PanelProps) {
       {campaign.status === 'finished' && victory.result && <FinalResults {...props} result={victory.result} />}
       {campaign.status === 'selection' && <SecretSelection {...props} />}
       {atWar && <PointsRace model={model} />}
+      {victory.titles.length > 0 && <Titles model={model} atWar={atWar} />}
       {atWar && <MySecret {...props} />}
       {atWar && victory.claims.length > 0 && <Claims {...props} claims={victory.claims} />}
       <PublicMissions {...props} />
@@ -84,6 +88,8 @@ export function PointsRace({ model }: { model: CampaignModel }) {
   const victory = model.campaign.victory!;
   const empireHref = useEmpireHref(model.campaign.id);
   const winners = new Set(victory.result?.winners ?? []);
+  // Ten or more points to win leave less room for names (and their title tokens): thinner marks.
+  const narrow = victory.pointsToWin > 8;
   return (
     <section aria-labelledby="race-heading">
       <h2 id="race-heading" className="label mb-2">
@@ -94,19 +100,19 @@ export function PointsRace({ model }: { model: CampaignModel }) {
         {pointsRace(model).map(({ userId, points }) => {
           const member = model.membersById.get(userId);
           return (
-            <li key={userId} className="flex items-center gap-3">
+            <li key={userId} className="flex items-center gap-2">
               <span className="min-w-0 flex-1">
                 <PlayerName member={member} you={userId === model.me.userId} size="sm" href={empireHref(userId)} />
               </span>
               <span
-                className="flex gap-1"
+                className={`flex shrink-0 ${narrow ? 'gap-0.5' : 'gap-1'}`}
                 role="img"
                 aria-label={`${member?.name ?? 'Player'}: ${points} of ${victory.pointsToWin} points`}
               >
                 {Array.from({ length: Math.max(victory.pointsToWin, points) }, (_, i) => (
                   <span
                     key={i}
-                    className={`h-3.5 w-2.5 rounded-[1px] border ${
+                    className={`h-3.5 ${narrow ? 'w-2' : 'w-2.5'} rounded-[1px] border ${
                       i < points ? 'border-amber bg-amber' : 'border-line-strong'
                     }`}
                   />
@@ -120,6 +126,66 @@ export function PointsRace({ model }: { model: CampaignModel }) {
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Titles
+
+/**
+ * The four titles: who holds each, their figure, and the viewer's own, with how far behind they
+ * are. Before the war, what each title counts and that it comes when round 1 starts.
+ */
+function Titles({ model, atWar }: { model: CampaignModel; atWar: boolean }) {
+  const victory = model.campaign.victory!;
+  const me = model.me.userId;
+  const empireHref = useEmpireHref(model.campaign.id);
+  const pts = plural(victory.titlePoints, 'point');
+  return (
+    <section aria-labelledby="titles-heading">
+      <h2 id="titles-heading" className="label mb-1">
+        Titles · {pts} each
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        {atWar
+          ? `Held by whoever leads the table, and lost the moment someone passes them.`
+          : `Handed to whoever leads the table when round 1 starts, and lost the moment someone passes them.`}
+      </p>
+      <ul className="space-y-3">
+        {victory.titles.map((t) => {
+          const holder = t.holderId;
+          const top = holder ? (t.totals[holder] ?? 0) : null;
+          const mine = t.totals[me];
+          return (
+            <li key={t.kind} className="flex items-start gap-3">
+              <TitleToken kind={t.kind} size={36} label={false} />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{TITLES[t.kind].name}</div>
+                {!atWar ? (
+                  <div className="text-sm text-muted">The most {TITLES[t.kind].measure}.</div>
+                ) : holder ? (
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm">
+                    <PlayerName
+                      member={model.membersById.get(holder)}
+                      you={holder === me}
+                      size="sm"
+                      href={empireHref(holder)}
+                      showTitles={false}
+                    />
+                    <span className="text-muted tabular-nums">{titleFigureText(t.kind, top!)}</span>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">Nobody: the lead is shared.</div>
+                )}
+                {atWar && holder !== me && mine !== undefined && (
+                  <div className="text-sm text-muted tabular-nums">You: {titleFigureText(t.kind, mine)}</div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -504,7 +570,10 @@ function ScoringNote({ model }: { model: CampaignModel }) {
       <h2 className="label mb-1">How points work</h2>
       <p>
         Public missions are worth {v.publicPoints} points each and your secret mission {v.secretPoints}; the first to{' '}
-        {v.pointsToWin} wins (two public missions and the secret, or all four public ones). Points are never taken away.
+        {v.pointsToWin} wins
+        {v.titles.length > 0
+          ? `. Each of the ${v.titles.length} titles is worth ${plural(v.titlePoints, 'point')} while you hold it: they're the only points that can be taken away.`
+          : ' (two public missions and the secret, or all four public ones). Points are never taken away.'}{' '}
         A position scores only after it has been held through the next full round and at least {durationText(v.holdMs)}{' '}
         after that round starts. Players who cross the line together are ranked by points; equal points share the
         victory.

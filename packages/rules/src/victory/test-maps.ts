@@ -18,6 +18,9 @@ export interface Place {
   people?: number;
   area?: number;
   gdp?: number;
+  /** Military spending in US dollars and armed forces, for military might. */
+  spend?: number;
+  forces?: number;
 }
 
 /** A dataset from a list of places; borders are made symmetric. */
@@ -48,7 +51,13 @@ export function buildMap(places: Record<string, Place>): DatasetIndex {
         terrain: p.terrain ?? [],
         micro: p.micro ?? false,
         anchor: p.at ?? [0, 0],
-        stats: { ...t.stats, areaKm2: p.area ?? null, gdpNominalUsd: p.gdp ?? null },
+        stats: {
+          ...t.stats,
+          areaKm2: p.area ?? null,
+          gdpNominalUsd: p.gdp ?? null,
+          militarySpendingUsd: p.spend ?? null,
+          armedForces: p.forces ?? null,
+        },
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : 1));

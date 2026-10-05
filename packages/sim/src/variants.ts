@@ -17,6 +17,7 @@ import type {
   UserId,
   WarRules,
 } from '@empire/rules';
+import type { TitleStat } from './engine/titles';
 
 export interface VariantContext {
   players: number;
@@ -44,6 +45,18 @@ export interface Variant {
   /** A condition on completion on top of the rules' own (claim blockers don't know about it). */
   requires?(world: MissionWorld, userId: UserId, spec: MissionSpec): boolean;
   points?: Partial<{ public: number; secret: number; toWin: number }>;
+  /** The points to win by table size, over `points.toWin`. */
+  toWinFor?(players: number): number;
+  /**
+   * Titles: `points` each, held by whoever leads the table on each figure from the moment the draft
+   * ends, and lost with the lead (`engine/titles.ts`), in place of the version's own; null: none.
+   */
+  titles?: { stats: readonly TitleStat[]; points: number } | null;
+  /**
+   * Public missions added to the campaign's (each worth the public points): these kinds, or this
+   * many drawn from the playable kinds not in play that don't make for a long campaign.
+   */
+  extraPublic?: readonly PublicMissionKind[] | ((players: number) => number);
   /** Points for a secret mission of this kind, when they differ by kind. */
   secretPoints?(kind: SecretMissionKind): number | undefined;
   /** The season's last round instead of the configured one (null: none), after which the most points win. */

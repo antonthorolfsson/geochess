@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { CURRENT_MISSION_RULES, SEASON_TIEBREAKS, VICTORY_MODES, publicMissionSpecSchema } from './victory/catalog';
+import {
+  CLAIM_HOLDS,
+  CURRENT_MISSION_RULES,
+  SEASON_TIEBREAKS,
+  VICTORY_MODES,
+  publicMissionSpecSchema,
+} from './victory/catalog';
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
@@ -177,7 +183,15 @@ export const victoryRulesSchema = z.object({
   version: z.number().int().min(1).default(3),
   /** The public missions and their targets, generated in the lobby and locked when the draft starts. */
   publicMissions: z.array(publicMissionSpecSchema).max(8).default([]),
-  /** Least time a claim is held after the next round starts, in minutes; null for the pace's default. */
+  /**
+   * What a claim is held through before it scores (`CLAIM_HOLDS`). Rules stored before 2026-10-05
+   * read as `time`, what those campaigns started with; new campaigns hold through a round's turns.
+   */
+  hold: z.enum(CLAIM_HOLDS).default('time'),
+  /**
+   * Least time a claim is held after the next round starts, in minutes; null for the pace's default.
+   * Only where the time applies (`holdsByTurns`).
+   */
   holdMinutes: z
     .number()
     .int()
@@ -242,11 +256,18 @@ export function parseRules(input: unknown): CampaignRules {
 
 /**
  * The settings a new campaign starts with: the revised war answers, Objectives, its public
- * missions generated on creation, and a last round settled on points, then real-world size.
+ * missions generated on creation, a last round settled on points, then real-world size, and claims
+ * held through a round's turns.
  */
 export const DEFAULT_RULES: CampaignRules = parseRules({
   war: REVISED_WAR_RULES,
-  victory: { mode: 'objectives', version: CURRENT_MISSION_RULES, lastRound: DEFAULT_LAST_ROUND, tiebreak: 'realWorld' },
+  victory: {
+    mode: 'objectives',
+    version: CURRENT_MISSION_RULES,
+    lastRound: DEFAULT_LAST_ROUND,
+    tiebreak: 'realWorld',
+    hold: 'turns',
+  },
 });
 
 /** The round after which an Objectives campaign ends on points, or null if it plays on. */

@@ -24,6 +24,16 @@ export type VictoryMode = (typeof VICTORY_MODES)[number];
 export const SEASON_TIEBREAKS = ['value', 'realWorld'] as const;
 export type SeasonTiebreak = (typeof SEASON_TIEBREAKS)[number];
 
+/**
+ * What a claim is held through before it scores, besides the round after next starting (see
+ * `claims.ts`): `time`, a minimum holding time from the start of the next round (as campaigns
+ * created before 2026-10-05 play), or `turns`, a round after the claim's whose declaring ran to
+ * its end, so every rival had a turn to answer it. `turns` needs declaring in turns
+ * (`rules.war.turns`); without it, the time applies.
+ */
+export const CLAIM_HOLDS = ['time', 'turns'] as const;
+export type ClaimHold = (typeof CLAIM_HOLDS)[number];
+
 export const PUBLIC_MISSION_KINDS = [
   'expansion',
   'regional_power',

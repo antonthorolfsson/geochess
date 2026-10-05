@@ -65,7 +65,14 @@ async function table({ version = 4 }: { version?: number | null } = {}) {
     await mutate(server.app.ctx, id, async (scope) => scope.notifyOnly([]));
   };
   const nextRound = async () => expect((await ann.post(`/api/campaigns/${id}/round/next`)).status).toBe(200);
-  return { ann, bo, cy, id, view, give, nextRound };
+  const players: Record<string, Client> = { [ANN]: ann, [BO]: bo, [CY]: cy };
+  /** Everyone passes their turn to declare, in order, until declaring is over for the round. */
+  const passAll = async () => {
+    for (let turn = (await view()).turns?.current; turn; turn = (await view()).turns?.current) {
+      expect((await players[turn]!.post(`/api/campaigns/${id}/turn/pass`, { userId: turn })).status).toBe(200);
+    }
+  };
+  return { ann, bo, cy, id, view, give, nextRound, passAll };
 }
 
 describe('the lobby', () => {
@@ -182,7 +189,7 @@ describe('the lobby', () => {
 
 describe('an Objectives campaign from start to finish', () => {
   it('deals secrets privately, reveals, claims through the response window, scores and ends', async () => {
-    const { ann, bo, cy, id, view, give, nextRound } = await table();
+    const { ann, bo, cy, id, view, give, nextRound, passAll } = await table();
     // Missions that can't be completed by accident while countries are moved about below.
     const kinds = ['expansion', 'strategic_positions', 'campaign_veteran', 'across_the_seas'];
     expect((await ann.put(`/api/campaigns/${id}/victory/missions`, { kinds })).status).toBe(200);
@@ -319,19 +326,25 @@ describe('an Objectives campaign from start to finish', () => {
     });
     expect(progress.p1!.evidence.territories.length).toBe(progress.p1!.parts[0]!.have);
 
+    // New campaigns hold claims through a round's turns, not for a time.
+    expect(claimed.victory!.hold).toBe('turns');
     await nextRound();
     const r2 = await view();
-    expect(r2.victory!.claims.every((c) => c.eligibleAt !== null)).toBe(true);
+    expect(r2.victory!.claims.every((c) => c.eligibleAt === null && !c.turnsHeld)).toBe(true);
     expect(r2.victory!.players.find((p) => p.userId === ANN)!.points).toBe(0);
-    // The host moves on at once: round 3 has come, but the holding time hasn't passed.
+    // The host moves on at once: round 3 has come, but nobody has had a turn since the claims began.
     await nextRound();
     expect((await view()).victory!.players.find((p) => p.userId === ANN)!.points).toBe(0);
-    server.clock.advance(24 * HOUR - 60_000);
-    await server.runDue();
-    expect((await view()).victory!.players.find((p) => p.userId === ANN)!.points).toBe(0);
-    server.clock.advance(60_000);
-    await server.runDue();
+    // Turns that run out pass on their own; the last one ends declaring, and the claims score.
+    const turns = (await view()).turns!;
+    expect(turns.current).not.toBeNull();
+    for (let i = 0; i < turns.order.length && (await view()).turns?.current; i++) {
+      expect((await view()).victory!.players.find((p) => p.userId === ANN)!.points).toBe(0);
+      server.clock.advance(24 * HOUR);
+      await server.runDue();
+    }
     const scored = await view(bo);
+    expect(scored.turns!.current).toBeNull();
     expect(scored.victory!.players.find((p) => p.userId === ANN)).toMatchObject({ points: 4 });
     expect(scored.events.filter((e) => e.type === 'mission.awarded').map((e) => e.payload)).toEqual([
       expect.objectContaining({ userId: ANN, missionKey: 'p0', points: 2, total: 2 }),
@@ -381,11 +394,10 @@ describe('an Objectives campaign from start to finish', () => {
     const secretClaim = (await view(bo)).victory!.claims.find((c) => c.userId === ANN && c.missionKey === 'secret');
     expect(secretClaim).toMatchObject({ startedRound: 3, eligibleRound: 5 });
 
-    // --- Round 5, after the holding time: 2 + 2 + 3 = 7 ----------------------------------------
+    // --- Round 5, once everyone has had their turns in round 4: 2 + 2 + 3 = 7 -------------------
     await nextRound();
+    await passAll();
     await nextRound();
-    server.clock.advance(24 * HOUR);
-    await server.runDue();
     const done = await view(bo);
     expect(done.status).toBe('finished');
     expect(done.victory!.result).toMatchObject({ winners: [ANN], round: 5 });
@@ -481,7 +493,7 @@ describe('titles', () => {
 
 describe('the season', () => {
   it('ends after the last round the host set: the most points win, and the campaign is over', async () => {
-    const { ann, bo, cy, id, view, give, nextRound } = await table();
+    const { ann, bo, cy, id, view, give, nextRound, passAll } = await table();
     // Records that need wars, and Expansion: nothing below completes by accident but Expansion.
     const kinds = ['expansion', 'campaign_veteran', 'across_the_seas', 'lightning_campaign'];
     expect((await ann.put(`/api/campaigns/${id}/victory/missions`, { kinds })).status).toBe(200);
@@ -522,9 +534,8 @@ describe('the season', () => {
       expect.objectContaining({ userId: ANN, missionKey: 'p0', eligibleRound: 3 }),
     );
 
-    server.clock.advance(25 * HOUR);
     await nextRound();
-    server.clock.advance(25 * HOUR);
+    await passAll();
     await nextRound();
     const last = await view(bo);
     expect(last).toMatchObject({ status: 'active', round: 3 });

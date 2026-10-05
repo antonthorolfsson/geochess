@@ -115,11 +115,13 @@ export const hasMapView = (spec: MissionSpec, progress: Evaluation | null | unde
 export interface ClaimTiming {
   /** "Can score in round 5" / "Round 5 has come". */
   round: string;
-  /** The holding time, in words; null once it has passed. */
-  time: string | null;
+  /** What it still has to be held through (a round's turns, or the holding time), in words; null once it has been. */
+  hold: string | null;
+  /** That it has been, in words. */
+  held: string;
   /** Unresolved wars that could still break the position. */
   blockers: WarView[];
-  /** Everything else is met: only the holding time or a war stands in the way. */
+  /** Everything else is met: only the turns, the holding time or a war stands in the way. */
   roundDue: boolean;
 }
 
@@ -128,25 +130,32 @@ export interface ClaimTiming {
  * war may threaten it when the time comes.
  */
 export function claimTiming(model: CampaignModel, claim: ClaimView, now: number): ClaimTiming {
-  const { round } = model.campaign;
-  const hold = model.campaign.victory?.holdMs ?? 0;
+  const { round, victory } = model.campaign;
   const roundDue = round >= claim.eligibleRound;
+  const blockers = claim.blockedBy.flatMap((id) => model.campaign.wars.find((w) => w.id === id) ?? []);
+  const when = roundDue
+    ? `Round ${claim.eligibleRound} has come.`
+    : `Can score in round ${claim.eligibleRound} at the earliest.`;
+  if (victory?.hold === 'turns') {
+    // Declaring has to run to its end in a round after the claim's: the next one, unless the host
+    // moved on before it did.
+    const turnsRound = Math.max(round, claim.startedRound + 1);
+    return {
+      round: when,
+      hold: claim.turnsHeld ? null : `It waits for everyone’s turns to declare war in round ${turnsRound}.`,
+      held: 'Everyone has had their turns to declare war since.',
+      blockers,
+      roundDue,
+    };
+  }
   const eligibleAt = claim.eligibleAt ? Date.parse(claim.eligibleAt) : null;
-  const time =
+  const hold =
     eligibleAt === null
-      ? `The ${durationText(hold)} holding time starts with round ${claim.startedRound + 1}.`
+      ? `The ${durationText(victory?.holdMs ?? 0)} holding time starts with round ${claim.startedRound + 1}.`
       : now < eligibleAt
         ? `At least ${timeLeft(eligibleAt - now)} more to hold.`
         : null;
-  const blockers = claim.blockedBy.flatMap((id) => model.campaign.wars.find((w) => w.id === id) ?? []);
-  return {
-    round: roundDue
-      ? `Round ${claim.eligibleRound} has come.`
-      : `Can score in round ${claim.eligibleRound} at the earliest.`,
-    time,
-    blockers,
-    roundDue,
-  };
+  return { round: when, hold, held: 'The holding time has passed.', blockers, roundDue };
 }
 
 /** Claims by other players: positions the viewer has until the claim scores to break. */

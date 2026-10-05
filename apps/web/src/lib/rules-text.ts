@@ -5,6 +5,7 @@ import {
   TURN_WINDOW_TEXT,
   durationText,
   holdMs,
+  holdsByTurns,
   missionRules,
   raiseFloor,
   selectionMs,
@@ -101,7 +102,12 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
           ...(victory.lastRound === null
             ? []
             : [{ label: 'Level on points', value: sentenceCase(tiebreakText(victory.tiebreak)) }]),
-          { label: 'Claims are held', value: `${durationText(holdMs(rules))} after the next round starts` },
+          {
+            label: 'Claims are held',
+            value: holdsByTurns(rules)
+              ? 'Until everyone has had their turns in a later round'
+              : `${durationText(holdMs(rules))} after the next round starts`,
+          },
           { label: 'Time to choose a secret', value: durationText(selectionMs(rules)) },
         ]
       : []),

@@ -1,5 +1,7 @@
 import {
+  claimTurnsHeld,
   holdMs,
+  holdsByTurns,
   lastRoundOf,
   missionRules,
   SECRET_MISSION_KEY,
@@ -42,7 +44,7 @@ export function toAwardView(row: AwardRow): AwardView {
   };
 }
 
-export function toClaimView(row: ClaimRow): ClaimView {
+export function toClaimView(row: ClaimRow, campaign: Pick<CampaignRow, 'turnsEndedRound'>): ClaimView {
   return {
     id: row.id,
     userId: row.userId,
@@ -52,6 +54,7 @@ export function toClaimView(row: ClaimRow): ClaimView {
     startedAt: row.startedAt.toISOString(),
     eligibleRound: row.eligibleRound,
     eligibleAt: row.eligibleAt?.toISOString() ?? null,
+    turnsHeld: claimTurnsHeld(row.startedRound, campaign.turnsEndedRound),
     blockedBy: row.blockedBy,
   };
 }
@@ -94,6 +97,7 @@ export async function victoryViews(
     pointsToWin: cfg.points.toWin,
     publicPoints: cfg.points.public,
     secretPoints: cfg.points.secret,
+    hold: holdsByTurns(campaign.rules) ? 'turns' : 'time',
     holdMs: holdMs(campaign.rules),
     lastRound: lastRoundOf(campaign.rules),
     tiebreak: campaign.rules.victory.tiebreak,
@@ -129,7 +133,7 @@ export async function victoryViews(
       };
     }),
     // A claim on an unrevealed secret mission can't exist: completing it reveals it first.
-    claims: claims.map(toClaimView),
+    claims: claims.map((c) => toClaimView(c, campaign)),
     selection:
       campaign.status === 'selection'
         ? {

@@ -1,8 +1,10 @@
 /**
  * The response window and the finish line. A claim first achieved in round R can't score before
- * round R+2 starts, nor before the minimum holding time has passed since round R+1 started, and
- * never while a war could still break it. Points never go away; the first to reach the target
- * wins, and players who cross it together are ranked by their totals (equal totals share it).
+ * round R+2 starts, nor before every rival has had their turns to answer it: declaring has run to
+ * its end in a round after R (`rules.victory.hold` of `turns`), or, in campaigns that hold by
+ * time, the minimum holding time has passed since round R+1 started. It never scores while a war
+ * could still break it. Points never go away; the first to reach the target wins, and players who
+ * cross it together are ranked by their totals (equal totals share it).
  */
 import type { CampaignRules } from '../config';
 import type { TerritoryId } from '../dataset';
@@ -14,6 +16,13 @@ import { statOfSet, valueOfSet } from './world';
 
 /** The first round a claim started in round `startedRound` can score in. */
 export const claimEligibleRound = (startedRound: number) => startedRound + 2;
+
+/**
+ * Whether claims are held through a round's turns rather than for a time: where the host chose it
+ * and players declare in turns. Without turns there's no end of declaring to wait for, so the time
+ * applies.
+ */
+export const holdsByTurns = (rules: CampaignRules): boolean => rules.victory.hold === 'turns' && rules.war.turns;
 
 /** The least time a claim is held after the round after it starts, in milliseconds. */
 export function holdMs(rules: CampaignRules): number {
@@ -49,6 +58,23 @@ export interface ClaimTiming {
 /** Whether a claim has waited long enough: the round after next has started and the time is up. */
 export function claimTimeServed(claim: ClaimTiming, round: number, now: number): boolean {
   return round >= claimEligibleRound(claim.startedRound) && claim.eligibleAt !== null && now >= claim.eligibleAt;
+}
+
+/**
+ * Whether every rival has had their turns since a claim started in `startedRound`: declaring has
+ * run to its end in a later round (`turnsEndedRound`, the last round whose declaring did; null if
+ * none has). A host who starts a round before its declaring is over doesn't cut this short: the
+ * claim waits for a round whose declaring finishes.
+ */
+export const claimTurnsHeld = (startedRound: number, turnsEndedRound: number | null): boolean =>
+  turnsEndedRound !== null && turnsEndedRound > startedRound;
+
+/**
+ * Whether a claim held by turns has waited long enough: the round after next has started and
+ * declaring has run to its end in a round after the claim's.
+ */
+export function claimTurnsServed(startedRound: number, round: number, turnsEndedRound: number | null): boolean {
+  return round >= claimEligibleRound(startedRound) && claimTurnsHeld(startedRound, turnsEndedRound);
 }
 
 /** An empire's measures for the season's tiebreak, in the order they count (see `seasonMeasures`). */

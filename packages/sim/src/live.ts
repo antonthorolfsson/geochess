@@ -61,6 +61,8 @@ export interface LiveCampaign {
   awards: Award[];
   /** Declaring in turns this round, or null where anyone declares whenever they like. */
   turns: TurnState | null;
+  /** The last round whose declaring ran to its end, or null if none has. */
+  turnsEndedRound?: number | null;
   /** Who holds each title (mission rules version 5 on). */
   titles?: TitleHolders;
 }
@@ -140,6 +142,7 @@ export function liveState(c: LiveCampaign): SimState {
     log: [],
     actions: [],
     turns: c.turns,
+    turnsEndedRound: c.turnsEndedRound ?? null,
   };
 }
 

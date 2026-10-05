@@ -248,6 +248,7 @@ export function botState(ctx: AppContext, snap: Snapshot, botId: string, seed: n
     claims,
     awards,
     turns: turnState(campaign),
+    turnsEndedRound: campaign.turnsEndedRound,
     titles: campaign.titles,
   });
 }

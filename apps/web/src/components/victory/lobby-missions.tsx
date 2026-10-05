@@ -6,6 +6,7 @@ import {
   SELECTION_MINUTE_OPTIONS,
   durationText,
   holdMs,
+  holdsByTurns,
   isLongMission,
   kindName,
   missionRules,
@@ -114,8 +115,9 @@ export function LobbyMissions({
               {cfg.titles
                 ? `Four titles worth ${cfg.titles.points} each go to whoever leads on population, land, GDP and military might, and move with the lead; mission points are never lost. The first to ${cfg.points.toWin} wins.`
                 : `Points are never lost; the first to ${cfg.points.toWin} wins.`}{' '}
-              A completed position scores once it has been held through the next full round and{' '}
-              {durationText(holdMs(rules))} after that round starts.{' '}
+              {holdsByTurns(rules)
+                ? 'A completed position scores once the round after next has started, if everyone has had their turns to declare war in a round since.'
+                : `A completed position scores once it has been held through the next full round and ${durationText(holdMs(rules))} after that round starts.`}{' '}
               {lastRound !== null
                 ? `If nobody has ${cfg.points.toWin} when round ${lastRound} ends, the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`
                 : 'There is no last round: the campaign goes on until someone reaches it.'}
@@ -255,24 +257,40 @@ export function LobbyMissions({
                   <option value="">No last round</option>
                 </select>
               </label>
-              <label className="flex min-h-11 items-center justify-between gap-3">
-                <span className="text-[0.95rem]">Holding time before a claim scores</span>
-                <select
-                  className="input w-36"
-                  value={rules.victory.holdMinutes ?? ''}
-                  disabled={!isHost}
-                  onChange={(e) =>
-                    onSaveRules({ victory: { holdMinutes: e.target.value ? Number(e.target.value) : null } })
-                  }
-                >
-                  <option value="">Default ({durationText(cfg.holdMinutes[pace] * 60_000)})</option>
-                  {withCurrent(HOLD_MINUTE_OPTIONS[pace], rules.victory.holdMinutes).map((m) => (
-                    <option key={m} value={m}>
-                      {durationText(m * 60_000)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {rules.war.turns && (
+                <label className="flex min-h-11 items-center justify-between gap-3">
+                  <span className="text-[0.95rem]">Before a claim scores, hold it through</span>
+                  <select
+                    className="input w-36"
+                    value={rules.victory.hold}
+                    disabled={!isHost}
+                    onChange={(e) => onSaveRules({ victory: { hold: e.target.value === 'turns' ? 'turns' : 'time' } })}
+                  >
+                    <option value="turns">A round of turns</option>
+                    <option value="time">A holding time</option>
+                  </select>
+                </label>
+              )}
+              {!holdsByTurns(rules) && (
+                <label className="flex min-h-11 items-center justify-between gap-3">
+                  <span className="text-[0.95rem]">Holding time before a claim scores</span>
+                  <select
+                    className="input w-36"
+                    value={rules.victory.holdMinutes ?? ''}
+                    disabled={!isHost}
+                    onChange={(e) =>
+                      onSaveRules({ victory: { holdMinutes: e.target.value ? Number(e.target.value) : null } })
+                    }
+                  >
+                    <option value="">Default ({durationText(cfg.holdMinutes[pace] * 60_000)})</option>
+                    {withCurrent(HOLD_MINUTE_OPTIONS[pace], rules.victory.holdMinutes).map((m) => (
+                      <option key={m} value={m}>
+                        {durationText(m * 60_000)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="flex min-h-11 items-center justify-between gap-3">
                 <span className="text-[0.95rem]">Time to choose a secret mission</span>
                 <select
@@ -292,9 +310,20 @@ export function LobbyMissions({
                 </select>
               </label>
               <p className="text-xs text-muted">
-                Now: claims hold for {durationText(holdMs(rules))} after the next round starts (the default is also the
-                least); secret missions are chosen within {durationText(selectionMs(rules))} of the draft ending.
-                Changing the pace puts both back to its defaults.
+                {holdsByTurns(rules) ? (
+                  <>
+                    Now: claims hold until everyone has had their turns to declare war in a round after the claim’s, so
+                    starting rounds early never cuts the answer short (players with nothing to declare are passed over);
+                    secret missions are chosen within {durationText(selectionMs(rules))} of the draft ending. Changing
+                    the pace puts the choosing time back to its default.
+                  </>
+                ) : (
+                  <>
+                    Now: claims hold for {durationText(holdMs(rules))} after the next round starts (the default is also
+                    the least); secret missions are chosen within {durationText(selectionMs(rules))} of the draft
+                    ending. Changing the pace puts both back to its defaults.
+                  </>
+                )}
               </p>
             </div>
           </>

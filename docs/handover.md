@@ -1068,6 +1068,30 @@ the two involved; a tap dismisses; ceremonies wait out live games; on a public m
 stamp marks the viewer's own score. One thing noticed and left alone: in the desktop column, a
 player with "you", a bot tag and four tokens has no room left for their name in the race.
 
+**Claims held through a round's turns** (2026-10-05, at the user's request: "rounds instead of a
+clock", making sure everyone has had a chance to pass). New campaigns hold claims by turns instead
+of a holding time: a claim from round R scores from round R+2, once declaring has run to its end
+in a round after R (everyone passed, ran out of time, or had nothing to do: `nextTurn` already
+passes over players without tokens or targets). A host who starts the next round before declaring
+is over doesn't cut the answer short: the claim waits for a round whose turns run their course,
+and scores in the change that ends them.
+
+- **Rules.** `rules.victory.hold` (`CLAIM_HOLDS`: `time` | `turns`), absent meaning `time`, so
+  stored campaigns (production's included) keep their clock; `DEFAULT_RULES` has `turns`.
+  `holdsByTurns(rules)` is true only with `rules.war.turns` too: without turns there's no end of
+  declaring to wait for, so the time applies. `claimTurnsServed` / `claimTurnsHeld` in
+  `victory/claims.ts`.
+- **Server.** `campaigns.turns_ended_round` (migration `0014_turns_ended_round`), set by
+  `giveNextTurn` when declaring ends. `settleVictory` uses it in place of `eligibleAt`, which stays
+  null (so the claim scheduler never looks). `ClaimView.turnsHeld` and `VictoryView.hold` tell the
+  client.
+- **Simulator.** Mirrors it (`SimState.turnsEndedRound`) and now plays `hold: 'turns'`. It always
+  plays every turn before the next round, so awards land in the same rounds as before; the parity
+  test passes unchanged and the balance report still holds.
+- **Web.** The lobby offers "A round of turns" or "A holding time" when turns are on, and the
+  holding-time picker only where the time applies; claim cards say whose turns they wait for; the
+  rules guide, scoring notes and settings list describe whichever rule the campaign plays.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

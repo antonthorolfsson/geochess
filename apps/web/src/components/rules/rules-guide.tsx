@@ -31,6 +31,7 @@ import {
   TURN_WINDOW_TEXT,
   durationText,
   holdMs,
+  holdsByTurns,
   isLongMission,
   joinWords,
   kindName,
@@ -1292,11 +1293,20 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             the round after next has started: a claim made in round 3 can score from round 5, never sooner, so every
             rival gets a whole round to respond;
           </li>
-          <li>
-            at least {hold}
-            {holdOther} have passed since the next round started, so a host can't rush the rounds (the host can make
-            this time longer in the lobby, never shorter);
-          </li>
+          {holdsByTurns(rules) ? (
+            <li>
+              every player has had their turns to declare war in a round since: declaring is over for that round,
+              everyone having passed or run out of things to declare with (whoever has no war tokens and nothing to do
+              is passed over). A host who starts the next round early can't cut this short: the claim waits for a round
+              whose turns run their course;
+            </li>
+          ) : (
+            <li>
+              at least {hold}
+              {holdOther} have passed since the next round started, so a host can't rush the rounds (the host can make
+              this time longer in the lobby, never shorter);
+            </li>
+          )}
           <li>you have held it the whole time; and</li>
           <li>no war you're in could still break it. A war that can't touch it doesn't matter.</li>
         </Bullets>

@@ -81,6 +81,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
       pointsToWin: 7,
       publicPoints: 2,
       secretPoints: 3,
+      hold: 'time',
       holdMs: 24 * 3_600_000,
       lastRound: null,
       tiebreak: 'realWorld',
@@ -192,6 +193,7 @@ describe('claims', () => {
     startedAt: '2026-01-01T00:00:00.000Z',
     eligibleRound: 5,
     eligibleAt: null,
+    turnsHeld: false,
     blockedBy: [],
   };
 
@@ -201,14 +203,31 @@ describe('claims', () => {
     const early = claimTiming(model, claim, Date.parse('2026-01-01T00:00:00.000Z'));
     expect(early).toMatchObject({
       round: 'Can score in round 5 at the earliest.',
-      time: 'The 24 hours holding time starts with round 4.',
+      hold: 'The 24 hours holding time starts with round 4.',
       roundDue: false,
     });
     const timed = { ...claim, eligibleAt: '2026-01-03T00:00:00.000Z' };
-    expect(claimTiming(model, timed, Date.parse('2026-01-02T12:00:00.000Z')).time).toBe(
+    expect(claimTiming(model, timed, Date.parse('2026-01-02T12:00:00.000Z')).hold).toBe(
       'At least 12h 0m more to hold.',
     );
-    expect(claimTiming(model, timed, Date.parse('2026-01-03T00:00:00.000Z')).time).toBeNull();
+    expect(claimTiming(model, timed, Date.parse('2026-01-03T00:00:00.000Z')).hold).toBeNull();
+  });
+
+  it('held by turns, wait for everyone’s turns in a round after the claim’s, however long it takes', () => {
+    const model = (round: number) => buildModel(view({ claims: [claim], hold: 'turns' }, { round }), user('ann'), idx)!;
+    expect(claimTiming(model(3), claim, 0)).toMatchObject({
+      hold: 'It waits for everyone’s turns to declare war in round 4.',
+      roundDue: false,
+    });
+    // The host moved on to round 5 before round 4's turns were over: round 5's count instead.
+    expect(claimTiming(model(5), claim, 0)).toMatchObject({
+      hold: 'It waits for everyone’s turns to declare war in round 5.',
+      roundDue: true,
+    });
+    expect(claimTiming(model(5), { ...claim, turnsHeld: true }, 0)).toMatchObject({
+      hold: null,
+      held: 'Everyone has had their turns to declare war since.',
+    });
   });
 
   it('name the wars that hold a claim back', () => {

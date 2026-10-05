@@ -23,7 +23,10 @@ function giveNextTurn(s: SimState, after: UserId | null): void {
   const turns = s.turns!;
   const board = warBoard(s);
   turns.current = nextTurn(turns, after, (id) => canTakeTurn(board, id, s.byId.get(id)!.tokens));
-  if (!turns.current) note(s, 'declaring is over for the round');
+  if (!turns.current) {
+    s.turnsEndedRound = s.round;
+    note(s, 'declaring is over for the round');
+  }
 }
 
 /** Why a player can't declare war or fortify now, as far as turns go, or null if they can. */

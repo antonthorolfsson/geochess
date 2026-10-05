@@ -100,7 +100,8 @@ async function objectives(opts: {
     rules: {
       ...opts.rules,
       war: { ...ORIGINAL_STAKES, ...opts.rules?.war },
-      victory: { ...opts.rules?.victory, mode: 'objectives' },
+      // Claims held by time unless a test asks for turns: these tests time them.
+      victory: { hold: 'time', ...opts.rules?.victory, mode: 'objectives' },
     },
   });
   const id = created.body.id;
@@ -184,6 +185,12 @@ async function objectives(opts: {
     }
   };
   const points = async (userId: string) => (await view()).victory!.players.find((p) => p.userId === userId)!.points;
+  /** Passes whoever's turn it is to declare, on their behalf, until declaring is over for the round. */
+  const passAll = async () => {
+    for (let turn = (await view()).turns?.current; turn; turn = (await view()).turns?.current) {
+      expect((await byId[turn]!.post(`/api/campaigns/${id}/turn/pass`, { userId: turn })).status).toBe(200);
+    }
+  };
   const claims = async () => (await view()).victory!.claims;
   // Round 1 has begun: drafted positions are checked, as when the war begins.
   await settle();
@@ -204,6 +211,7 @@ async function objectives(opts: {
     play,
     points,
     claims,
+    passAll,
   };
 }
 
@@ -243,6 +251,65 @@ describe('claims', () => {
     await server.runDue();
     expect(await s.points(ANN)).toBe(0);
     await s.next();
+    expect(await s.points(ANN)).toBe(2);
+  });
+
+  it('held by turns, score once the round after next has started and everyone has had their turns', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'strategic_positions', territories: ['A1', 'B1'], need: 2 }],
+      rules: { victory: { hold: 'turns' } },
+    });
+    expect((await s.view()).victory!.hold).toBe('turns');
+    await s.give(['B1'], ANN);
+    await s.next();
+    expect(await s.claims()).toEqual([
+      expect.objectContaining({ startedRound: 1, eligibleRound: 3, eligibleAt: null, turnsHeld: false }),
+    ]);
+    expect((await s.view()).turns?.current).not.toBeNull();
+    await s.passAll();
+    // Everyone has had their turns in round 2, but round 3 hasn't started.
+    expect(await s.claims()).toEqual([expect.objectContaining({ turnsHeld: true, eligibleAt: null })]);
+    expect(await s.points(ANN)).toBe(0);
+    // No time to wait out: round 3 scores it the moment it starts.
+    await s.next();
+    expect(await s.points(ANN)).toBe(2);
+    expect(await s.claims()).toEqual([]);
+  });
+
+  it('held by turns, wait for a round whose declaring runs to its end when the host rushes on', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'strategic_positions', territories: ['A1', 'B1'], need: 2 }],
+      rules: { victory: { hold: 'turns' } },
+    });
+    await s.give(['B1'], ANN);
+    await s.next();
+    // Round 3 starts before anyone has had a turn in round 2.
+    await s.next();
+    server.clock.advance(72 * HOUR);
+    await server.runDue();
+    expect(await s.points(ANN)).toBe(0);
+    expect(await s.claims()).toEqual([expect.objectContaining({ turnsHeld: false })]);
+    // A turn that runs out passes on its own: once every turn of round 3 has, the claim scores.
+    for (let i = 0; i < 4 && (await s.view()).turns?.current; i++) {
+      server.clock.advance(24 * HOUR);
+      await server.runDue();
+    }
+    expect((await s.view()).turns?.current).toBeNull();
+    expect(await s.points(ANN)).toBe(2);
+  });
+
+  it('hold by time where players declare whenever they like, whatever the host chose', async () => {
+    const s = await objectives({
+      missions: [{ kind: 'strategic_positions', territories: ['A1', 'B1'], need: 2 }],
+      rules: { war: { turns: false }, victory: { hold: 'turns' } },
+    });
+    expect((await s.view()).victory!.hold).toBe('time');
+    await s.give(['B1'], ANN);
+    await s.next();
+    await s.next();
+    expect(await s.points(ANN)).toBe(0);
+    server.clock.advance(24 * HOUR);
+    await server.runDue();
     expect(await s.points(ANN)).toBe(2);
   });
 

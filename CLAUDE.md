@@ -59,7 +59,10 @@ when starting new work.**
   value knobs are scaled to each campaign's dataset (`knobsFor`). From version 5, titles
   (`victory/titles.ts`) give a point each for leading the table on population, land, GDP and
   military might, kept on the campaign row (`campaigns.titles`) and moving with the lead: the only
-  points that can be lost. `settleVictory()` runs inside every `mutate()` (titles, reveals, claims, awards,
+  points that can be lost. Claims score from the round after next, once declaring has run to its
+  end in a round after the claim's (`rules.victory.hold` of `turns`, `holdsByTurns`,
+  `campaigns.turns_ended_round`); stored campaigns and campaigns without turns hold for a time
+  instead. `settleVictory()` runs inside every `mutate()` (titles, reveals, claims, awards,
   the finish). A campaign's last round (`rules.victory.lastRound`) ends it on points when the host
   moves on from it (`endSeason`). A player's secret mission and options are private until
   `mission.revealed`: never put them in events, pushes, notices or another player's view before

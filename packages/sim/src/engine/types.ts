@@ -255,6 +255,8 @@ export interface SimState {
   holdings: Map<TerritoryId, Holding>;
   /** Declaring in turns this round, where the rules have it (the server's campaign row keeps it). */
   turns: TurnState | null;
+  /** The last round whose declaring ran to its end, or null if none has (claims held by turns wait for it). */
+  turnsEndedRound: number | null;
   wars: SimWar[];
   peaceOffers: SimPeaceOffer[];
   accords: SimAccord[];

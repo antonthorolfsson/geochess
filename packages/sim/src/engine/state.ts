@@ -46,8 +46,9 @@ export function emptyStats(): WarStats {
 }
 
 /**
- * The campaign's rules: Objectives at the configured mission rules version and last round, the
- * scenario's draft mode and war settings (over a new campaign's answers), the variant's too.
+ * The campaign's rules: Objectives at the configured mission rules version and last round, claims
+ * held through a round's turns as new campaigns hold them, the scenario's draft mode and war
+ * settings (over a new campaign's answers), the variant's too.
  */
 export function simRules(cfg: SimConfig): CampaignRules {
   const lastRound = cfg.variant?.lastRound !== undefined ? cfg.variant.lastRound : cfg.lastRound;
@@ -55,7 +56,7 @@ export function simRules(cfg: SimConfig): CampaignRules {
     maxPlayers: 8,
     draft: { mode: cfg.draftMode },
     war: { ...REVISED_WAR_RULES, pace: cfg.pace, ...cfg.war, ...cfg.variant?.war },
-    victory: { mode: 'objectives', version: cfg.missionVersion, lastRound },
+    victory: { mode: 'objectives', version: cfg.missionVersion, lastRound, hold: 'turns' },
   });
 }
 
@@ -107,6 +108,7 @@ export function createState(cfg: SimConfig, idx: DatasetIndex, seed: number): Si
     status: 'lobby',
     holdings: new Map(),
     turns: null,
+    turnsEndedRound: null,
     wars: [],
     peaceOffers: [],
     accords: [],

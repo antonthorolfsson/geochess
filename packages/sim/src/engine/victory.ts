@@ -2,12 +2,16 @@
  * Scoring, as the server's `settleVictory` does it (apps/server/src/victory/settle.ts): reveals
  * first, then claims start, carry on or break, then every award of the pass goes in together and
  * the finish line is checked. Time is counted in rounds: a claim from round R scores from R+2,
- * the host being assumed to wait out the holding time before starting R+2.
+ * the host being assumed to wait out the holding time before starting R+2 where claims are held by
+ * time; held by turns, it also waits for a round after R whose declaring ran to its end.
  */
 import {
   SECRET_MISSION_KEY,
   claimBlockers,
+  claimEligibleRound,
+  claimTurnsServed,
   evaluateMission,
+  holdsByTurns,
   missionComplete,
   missionInfo,
   missionName,
@@ -141,7 +145,9 @@ export function settle(s: SimState, only?: ReadonlySet<UserId>): void {
         s.claimLog.push(claim);
         note(s, () => `${player.id} claims ${missionName(slot.spec)} (scores from round ${s.round + 2})`);
       }
-      const served = s.round >= claim.startedRound + 2;
+      const served = holdsByTurns(s.rules)
+        ? claimTurnsServed(claim.startedRound, s.round, s.turnsEndedRound)
+        : s.round >= claimEligibleRound(claim.startedRound);
       claim.blockedBy = board ? claimBlockers(world, board, player.id, slot.spec, open) : [];
       if (served && claim.blockedBy.length === 0) due.push({ player, slot, claim });
     }

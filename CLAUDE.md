@@ -63,7 +63,9 @@ when starting new work.**
   the finish). A campaign's last round (`rules.victory.lastRound`) ends it on points when the host
   moves on from it (`endSeason`). A player's secret mission and options are private until
   `mission.revealed`: never put them in events, pushes, notices or another player's view before
-  that.
+  that. Every player sees points move as an award ceremony, built from the pushed `title.changed`
+  and `mission.awarded` events (`apps/web/src/lib/ceremony.ts`, played by `award-ceremony.tsx` in
+  `components/victory/`): anything new that moves points needs an event they understand.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and

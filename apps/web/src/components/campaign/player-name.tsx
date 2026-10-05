@@ -38,7 +38,7 @@ export function PlayerName({
       </span>
       {you && <span className="shrink-0 text-xs font-bold tracking-widest text-muted uppercase">you</span>}
       {member.bot && <BotTag level={member.bot.level} standIn={member.bot.standIn} />}
-      <TitleTokens titles={titles} size={{ sm: 16, md: 18, lg: 24 }[size]} />
+      <TitleTokens titles={titles} size={{ sm: 16, md: 18, lg: 24 }[size]} holder={member.userId} />
     </>
   );
   const box = 'inline-flex max-w-full min-w-0 items-center gap-2';

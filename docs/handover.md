@@ -1009,6 +1009,65 @@ version, so production's campaigns have no titles.
   dispatches and toasts say when a title moves; the rules guide has a Titles part; the race uses
   thinner marks for 10 points so names fit.
 
+**Award ceremonies** (2026-10-05, at the user's request: points from a mission or a title "should
+be very clear with some form of animation": a title's token going from its holder to the new
+holder, and for missions the mission card and the points increasing on the leaderboard; the design
+was left to me).
+
+- **The ceremony.** Whenever points move, everyone in the campaign sees a card under the intel
+  toasts, top centre of the map room (`AwardCeremonies` in `components/victory/award-ceremony.tsx`,
+  in the same stack as the toast). It holds a leaderboard of every player (points, and the titles
+  they hold in fixed slots) and plays the change out on it:
+  - **Titles.** The token lifts off its old holder's row, turns over twice along an arc and lands
+    on the new holder's row in a ring of sparks; both totals change as it lands (amber +1, grease
+    red −1), then the rows re-sort. A title coming from nobody (round 1, or after a shared lead)
+    starts from its emblem in the card's heading, and one going to nobody flies back to it and
+    fades. The titles of one change move together, staggered ("Titles awarded" at round 1).
+  - **Missions.** The mission card is dealt onto the table, a "Scored" rubber stamp comes down on
+    it, and its points fly off its badge as a chip into the player's row, which counts up.
+  - About 4½ seconds each (more for several titles); a tap or ✕ dismisses it. It replaces the
+    toasts for points ("+2 victory points", "Largest Population: +1", "… lost"). Screen readers
+    hear one sentence per ceremony.
+- **From events.** `lib/ceremony.ts` (pure, with tests) turns each `campaign.events` push into
+  ceremonies: the titles of one change together (the server settles titles first), then each
+  `mission.awarded`, with everyone's standing before and after, from the events' own totals.
+  Pushes can outrun the refetch of the change before, so the queue keeps the standings the events
+  lead to until the campaign view catches up (by event id). A secret completed in the same change
+  is shown from its `mission.revealed`; otherwise only missions the viewer may already see
+  (`findMission`), so nothing private shows early. Anything new that moves points must log an event
+  the ceremonies understand.
+- **Waiting.** One at a time, at most four waiting (older ones give way). They wait while the viewer
+  has a live game underway, since the clock may be running, and while the page is hidden; then they
+  play. Events missed while disconnected aren't replayed.
+- **The leaderboards themselves** (`components/victory/score-effects.tsx`). `PointsCounter` counts
+  a total to its new value a point at a time, popping, with the change floating up beside it: in the
+  war room's standings, the race and the ceremony. The race's marks fill in one after another, or
+  drain red for a lost title. The standings and the race slide rows into their new places when
+  someone overtakes (`useReorderSlide`). These react as soon as the campaign view refetches, a
+  moment before the ceremony's points land.
+- **Afterwards.** Scored missions in the Missions tab carry a "Scored" stamp (`ScoredStamp`, through
+  `MissionCard`'s `stamp`): the viewer's public missions and secret, revealed secrets that scored,
+  completed secrets in the results. A token beside a player's name pops in with a glint when they
+  have just won it. Both make their entrance once, from marks the ceremony sets as it queues
+  (`markFresh`: 3 minutes for a stamp, 20 seconds for a token), not every time they're drawn.
+- **Reduced motion.** The card shows the outcome at once (rows tinted, the change beside each
+  total), nothing flies, and it goes after 4½ seconds; the global rule cuts the CSS animations.
+- **Checked in the browser** (dev server; Chromium at desktop and phone sizes, driven by scripts):
+  Ann and four bots, where round 1's titles were handed out and titles moved as the bots fought, and
+  mission ceremonies were injected into the page's WebSocket; and a campaign hosted by Field
+  Marshal with Ann's empire handed to a level 7 bot, where Ann saw "You take it from …" three times
+  and a real award, "You scored Campaign Veteran", stamped on her card in the Missions tab.
+  Reduced motion and a title lost to a shared lead were checked by injection.
+
+Tests since: web 83 (`lib/ceremony.test.ts`). On a 4-core cloud container, one data test and two
+simulator tests take just over vitest's 5-second limit and time out; with `--testTimeout=30000`
+everything passes (rules 314, data 68, web 83, sim 29, server 220).
+
+Defaults taken (not asked; easy to change): the timings; every player sees every ceremony, not only
+the two involved; a tap dismisses; ceremonies wait out live games; on a public mission's card the
+stamp marks the viewer's own score. One thing noticed and left alone: in the desktop column, a
+player with "you", a bot tag and four tokens has no room left for their name in the race.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

@@ -5,7 +5,8 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Geo Chess',
     short_name: 'Geo Chess',
     description: 'Claim countries, declare wars, and settle them over the board.',
-    start_url: '/',
+    // The installed app opens on the player's campaigns, as it did when they lived at /.
+    start_url: '/campaigns',
     display: 'standalone',
     background_color: '#1f2428',
     theme_color: '#1f2428',

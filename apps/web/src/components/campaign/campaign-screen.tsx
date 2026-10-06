@@ -125,7 +125,7 @@ function CampaignScreenInner({ id, children }: { id: string; children?: ReactNod
         <Notice tone={gone ? 'info' : 'error'}>
           {gone ? 'This campaign does not exist, or you are not part of it.' : errorMessage(error)}
         </Notice>
-        <Link href="/" className="btn btn-ghost mt-4">
+        <Link href="/campaigns" className="btn btn-ghost mt-4">
           All campaigns
         </Link>
       </CenteredMessage>
@@ -721,7 +721,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         back={
           overPage
             ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
-            : { href: '/', label: 'All campaigns' }
+            : { href: '/campaigns', label: 'All campaigns' }
         }
         rules={{
           // Like links to empire pages, this keeps the query, so a panel open underneath stays as it was.

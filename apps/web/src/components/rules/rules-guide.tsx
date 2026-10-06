@@ -48,7 +48,7 @@ import {
   type CampaignRules,
 } from '@empire/rules';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import {
   forRounds,
   hoursText,
@@ -60,7 +60,6 @@ import {
   stakeTable,
   warTokens,
 } from '@/lib/rules-text';
-import { useScrollToHash } from '@/lib/use-scroll-to-hash';
 
 /** "a, b or c". */
 const orWords = (items: readonly string[]) =>
@@ -140,6 +139,14 @@ export function RulesGuide(props: RulesGuideProps) {
       {standard && settings}
     </div>
   );
+}
+
+/** Pages that render once their data arrives miss the browser's own jump to the address's #section. */
+function useScrollToHash() {
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, []);
 }
 
 /** How long a player has to answer, and in the standard rules, how long in the other pace. */

@@ -1309,6 +1309,28 @@ balance or stored campaign changed.
 
 Tests since: rules 319, data 73, web 131, sim 29, server 223 (775 in all).
 
+**Pictures in the rules guide** (2026-10-06, at the user's request: the three the rules most needed).
+`components/rules/rules-art.tsx`, drawn like the landing page's step pictures, whose pieces
+`landing/step-art.tsx` now exports (`Sheet` takes a size; the grease-pencil arrow is `WarArrow`;
+the landing page's own pictures render exactly as before). Every number comes from the page's
+rules, so a campaign's page draws its own stake, points and holding rule:
+
+- **What changes hands** (Quick start, step 5): one war on five countries, declared, then each
+  ending: the attacker takes the target, the defender the whole stake and nothing else, a draw
+  (Armageddon where the campaign plays it). The stake is the least the campaign allows against a
+  target worth 6, as in "Declaring war".
+- **Points and claims** (`#points`): a race to `points.toWin`, slot by slot: mission points scored,
+  a title held (version 5 on), a claim waiting, the rest to go.
+- **When a claim scores** (`#claims`): rounds 3 to `claimEligibleRound(3)`, the position completed,
+  held (through everyone's turns, or for the campaign's holding time) and scoring, beside a record
+  or title that counts at once.
+
+The map drawings are hidden from screen readers (their captions say it); the other two are text.
+Tests in `rules-guide.test.ts` check each picture's numbers for current, version 4, Armageddon and
+open-ended rules. Checked in Chromium at 390 and 1280 pixels.
+
+Tests since: rules 319, data 73, web 137, sim 29, server 223 (781 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

@@ -185,3 +185,53 @@ describe('the rules guide', () => {
     expect(render(campaign(DEFAULT_RULES)).text).not.toContain('mission rules version');
   });
 });
+
+describe('the rules guide’s pictures', () => {
+  it('shows what changes hands, with the least stake the rules allow', () => {
+    expect(standard.text).toContain('Declared A stake of 7 against a target worth 6.');
+    expect(standard.text).toContain('Attacker wins The attacker takes the target, and any country a raise put in.');
+    expect(standard.text).toContain('Defender wins The defender takes the whole stake, and nothing else.');
+    expect(standard.text).toContain('Draw Nothing changes hands.');
+    // The drawings only illustrate the captions beside them.
+    expect(standard.html).toMatch(/<div aria-hidden="true" class="aspect-\[8\/5\][^"]*"><svg/);
+  });
+
+  it('shows the three kinds of points in a race to the target', () => {
+    expect(standard.text).toContain('6 of 10 points count');
+    expect(standard.text).toContain('Mission points, 5: a public mission and the secret, scored and yours for good.');
+    expect(standard.text).toContain('A title, 1: counted while you lead');
+    expect(standard.text).toContain('A claim, 2: a position completed but not yet held long enough');
+  });
+
+  it('shows when a claim scores, beside what counts at once', () => {
+    expect(standard.text).toContain('Round 3: Completed: the claim starts');
+    expect(standard.text).toContain('Round 4: Held while every player takes their turns to declare war');
+    expect(standard.text).toContain('Round 5: Scores 2 points, at the earliest');
+    expect(standard.text).toContain('A record, or a title Round 3: Counts at once');
+  });
+
+  it('draws a campaign stored before titles with its own numbers', () => {
+    const rules = parseRules({ victory: { mode: 'objectives', version: 4, publicMissions: MISSIONS, lastRound: 20 } });
+    const { text } = render(campaign(rules, '2026.2'));
+    // Stakes of 80% and a free raise, as stored rules read.
+    expect(text).toContain('A stake of 5 against a target worth 6.');
+    expect(text).toContain('Attacker wins The attacker takes the target. ');
+    // No titles: a public mission scored, and a claim waiting, short of 7.
+    expect(text).toContain('2 of 7 points count');
+    expect(text).not.toContain('A title, 1');
+    // Claims held for a time.
+    expect(text).toContain('Round 4: Held for at least 24 hours after round 4 starts');
+    expect(text).toContain('A record Round 3: Scores at once');
+  });
+
+  it('follows the campaign’s draw rule', () => {
+    const rules = { ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, draws: 'armageddon' as const } };
+    expect(render(campaign(rules)).text).toContain('Draw One more game, an Armageddon, decides it.');
+  });
+
+  it('draws no points or claims for an open-ended campaign', () => {
+    const { text } = render(campaign(parseRules({}), '2026.1'));
+    expect(text).toContain('A stake of 5 against a target worth 6.');
+    expect(text).not.toMatch(/points count|the claim starts/);
+  });
+});

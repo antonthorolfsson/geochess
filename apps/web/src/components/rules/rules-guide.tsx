@@ -44,6 +44,7 @@ import {
 } from '@empire/rules';
 import Link from 'next/link';
 import { useEffect, type ReactNode } from 'react';
+import { ClaimTimelineArt, PointsArt, WarOutcomesArt } from './rules-art';
 import {
   answerTimeText,
   backAndForth,
@@ -247,7 +248,7 @@ function QuickStart({ rules, standard, top }: { rules: CampaignRules; standard: 
   const objectives = victory.mode === 'objectives';
   const last = lastRoundOf(rules);
   const finish = war.turns ? ' once everyone has finished declaring' : '';
-  const steps: { title: string; text: ReactNode }[] = [
+  const steps: { title: string; text: ReactNode; art?: ReactNode }[] = [
     {
       title: 'How to win',
       text: objectives ? (
@@ -324,6 +325,7 @@ function QuickStart({ rules, standard, top }: { rules: CampaignRules; standard: 
             ` Countries changing hands are what complete missions${titles ? ' and move titles' : ''}: the Missions tab shows where you stand.`}
         </>
       ),
+      art: <WarOutcomesArt rules={rules} />,
     },
   ];
   return (
@@ -333,7 +335,7 @@ function QuickStart({ rules, standard, top }: { rules: CampaignRules; standard: 
         have the rest: every answer to a war, diplomacy, each mission and every deadline.
       </p>
       <ol role="list" className="divide-y divide-line rounded-[3px] border border-line">
-        {steps.map(({ title, text }, i) => (
+        {steps.map(({ title, text, art }, i) => (
           <li key={title} className="flex gap-3 px-4 py-3">
             <span aria-hidden="true" className="w-5 shrink-0 pt-0.5 text-lg font-bold tabular-nums">
               {i + 1}
@@ -341,6 +343,7 @@ function QuickStart({ rules, standard, top }: { rules: CampaignRules; standard: 
             <div className="min-w-0">
               <SubHeading className="font-bold">{title}</SubHeading>
               <p className="mt-0.5">{text}</p>
+              {art && <div className="mt-3">{art}</div>}
             </div>
           </li>
         ))}
@@ -1384,6 +1387,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           Your total is your mission points{titles ? ', plus the titles you hold right now' : ''}. A claim waiting to
           score isn&apos;t a point yet.
         </p>
+        <PointsArt rules={rules} />
         <dl className="divide-y divide-line rounded-[3px] border border-line">
           <PointKind term="Mission points" tag="Permanent">
             A mission scores once: {points.public} points for a public mission, {points.secret} for your secret. Scored
@@ -1503,6 +1507,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           <li>you have held it the whole time; and</li>
           <li>no war you&apos;re in could still break it. A war that can&apos;t touch it doesn&apos;t matter.</li>
         </Bullets>
+        <ClaimTimelineArt rules={rules} standard={standard} />
         <p>
           Lose the position and the claim ends, with nothing scored; complete it again and a new claim starts. Swapping
           which targets you hold doesn&apos;t end a claim, as long as the mission never stops being complete. Records

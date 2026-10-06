@@ -9,42 +9,59 @@ import { TitleToken } from '../victory/title-tokens';
 /*
  * Pictures for the landing page's three steps, in the map room's own marks: countries in empire
  * colors and hatching over olive land and deep sea, grease pencil for war, amber for your move.
- * They only illustrate the text beside them, so screen readers skip them.
+ * They only illustrate the text beside them, so screen readers skip them. The rules guide draws its
+ * pictures with the same pieces (`components/rules/rules-art.tsx`).
  */
 
 const INK = '#161b1e';
 const PAPER = '#e4e2d8';
-const AMBER = '#e3a92b';
-const GREASE = '#c8372d';
+export const AMBER = '#e3a92b';
+export const GREASE = '#c8372d';
 const OLIVE = '#4b5320';
 
-type Point = readonly [number, number];
+export type Point = readonly [number, number];
 
 /** Corners written as "x,y x,y …". */
-const polygon = (corners: string): Point[] =>
+export const polygon = (corners: string): Point[] =>
   corners.split(' ').map((corner) => {
     const [x, y] = corner.split(',').map(Number);
     return [x!, y!];
   });
 
-const path = (points: readonly Point[]) => `M${points.map(([x, y]) => `${x},${y}`).join('L')}Z`;
+export const path = (points: readonly Point[]) => `M${points.map(([x, y]) => `${x},${y}`).join('L')}Z`;
 
-const centroid = (points: readonly Point[]): Point => [
+export const centroid = (points: readonly Point[]): Point => [
   points.reduce((sum, [x]) => sum + x, 0) / points.length,
   points.reduce((sum, [, y]) => sum + y, 0) / points.length,
 ];
 
+/** Faint grid lines across a sheet, every 48 units across and 32 down. */
+const gridLines = (width: number, height: number) => {
+  const across = Array.from({ length: Math.ceil(height / 32) - 1 }, (_, i) => `M0,${(i + 1) * 32}H${width}`);
+  const down = Array.from({ length: Math.ceil(width / 48) - 1 }, (_, i) => `M${(i + 1) * 48},0V${height}`);
+  return [...across, ...down].join('');
+};
+
 /** An SVG with a hatch pattern for each empire color it uses, as the map draws empires. */
-function Sheet({
+export function Sheet({
   colors,
+  width = 240,
+  height = 128,
   children,
 }: {
   colors: readonly number[];
+  width?: number;
+  height?: number;
   children(fill: (color: number) => string): ReactNode;
 }) {
   const prefix = svgId(useId());
   return (
-    <svg viewBox="0 0 240 128" className="size-full" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="size-full"
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
       <defs>
         {colors.map((c) => (
           <pattern
@@ -59,18 +76,14 @@ function Sheet({
           </pattern>
         ))}
       </defs>
-      <path
-        d="M0,32H240M0,64H240M0,96H240M48,0V128M96,0V128M144,0V128M192,0V128"
-        stroke="rgba(228,226,216,0.07)"
-        fill="none"
-      />
+      <path d={gridLines(width, height)} stroke="rgba(228,226,216,0.07)" fill="none" />
       {children((c) => `url(#${prefix}-${c})`)}
     </svg>
   );
 }
 
 /** A country: its empire's color and hatching (or olive land), and its value. */
-function Country({
+export function Country({
   points,
   color,
   hatch,
@@ -176,11 +189,6 @@ export function BattleArt() {
   const stakeValue = SAMPLE_BATTLE.stake.reduce((sum, s) => sum + s.value, 0);
   const [ax, ay] = centroid(STAKE);
   const [bx, by] = centroid(TARGET);
-  // Bowed like the map's arrows: a fifth of its length to the left of its direction.
-  const cx = (ax + bx) / 2 - (by - ay) * 0.2;
-  const cy = (ay + by) / 2 + (bx - ax) * 0.2 - 18;
-  const angle = (Math.atan2(by - cy, bx - cx) * 180) / Math.PI;
-  const d = `M${ax},${ay - 6} Q${cx},${cy} ${bx},${by - 6}`;
   return (
     <Sheet colors={[attacker, defender]}>
       {(fill) => (
@@ -197,21 +205,39 @@ export function BattleArt() {
           <ValueLabel x={bx} y={by + 18} size={12}>
             {`Target ${SAMPLE_BATTLE.target.value}`}
           </ValueLabel>
-          <path d={d} fill="none" stroke="rgba(12,15,17,0.55)" strokeWidth={6} strokeLinecap="round" />
-          <path d={d} fill="none" stroke={GREASE} strokeWidth={3.4} strokeLinecap="round" />
-          <g transform={`translate(${bx},${by - 6}) rotate(${angle})`}>
-            <path
-              d="M1,0 L-13,-7.5 L-9.5,0 L-13,7.5 Z"
-              fill={GREASE}
-              stroke="rgba(12,15,17,0.7)"
-              strokeWidth={1.4}
-              strokeLinejoin="round"
-            />
-          </g>
+          <WarArrow from={[ax, ay]} to={[bx, by]} />
           <MiniBoard x={188} y={62} />
         </>
       )}
     </Sheet>
+  );
+}
+
+/**
+ * A war's grease-pencil arrow between two countries' middles, raised a little off them, bowed like
+ * the map's arrows: a fifth of its length to the left of its direction, and `bow` higher.
+ */
+export function WarArrow({ from, to, bow = 18 }: { from: Point; to: Point; bow?: number }) {
+  const [ax, ay] = from;
+  const [bx, by] = to;
+  const cx = (ax + bx) / 2 - (by - ay) * 0.2;
+  const cy = (ay + by) / 2 + (bx - ax) * 0.2 - bow;
+  const angle = (Math.atan2(by - cy, bx - cx) * 180) / Math.PI;
+  const d = `M${ax},${ay - 6} Q${cx},${cy} ${bx},${by - 6}`;
+  return (
+    <>
+      <path d={d} fill="none" stroke="rgba(12,15,17,0.55)" strokeWidth={6} strokeLinecap="round" />
+      <path d={d} fill="none" stroke={GREASE} strokeWidth={3.4} strokeLinecap="round" />
+      <g transform={`translate(${bx},${by - 6}) rotate(${angle})`}>
+        <path
+          d="M1,0 L-13,-7.5 L-9.5,0 L-13,7.5 Z"
+          fill={GREASE}
+          stroke="rgba(12,15,17,0.7)"
+          strokeWidth={1.4}
+          strokeLinejoin="round"
+        />
+      </g>
+    </>
   );
 }
 

@@ -59,6 +59,11 @@ export interface WorldMapProps {
   mission?: MissionOverlayProps | null;
   /** A button with the zoom controls that makes the map fill the screen, and back. */
   fullscreen?: { on: boolean; toggle(): void };
+  /**
+   * A picture of a campaign rather than one to play on, like the landing page's sample: no
+   * controls, and nothing to click, drag, zoom or focus, so the page scrolls over it.
+   */
+  still?: boolean;
 }
 
 export interface MissionOverlayProps {
@@ -129,6 +134,7 @@ export function WorldMap(props: WorldMapProps) {
     mission = null,
     fit = null,
     fullscreen,
+    still = false,
   } = props;
   const geo = useMemo(() => buildGeometry(topo, dataset), [topo, dataset]);
   const patternPrefix = svgId(useId());
@@ -449,7 +455,11 @@ export function WorldMap(props: WorldMapProps) {
   }, [geo, selectedId]);
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full overflow-hidden bg-gunmetal">
+    <div
+      ref={wrapperRef}
+      className={`relative h-full w-full overflow-hidden bg-gunmetal ${still ? 'map-still' : ''}`}
+      inert={still}
+    >
       <svg
         ref={svgRef}
         className="map-svg"
@@ -614,37 +624,45 @@ export function WorldMap(props: WorldMapProps) {
               ))}
             </g>
           )}
-          <WarArrows byId={geo.byId} wars={wars} preview={preview} openId={war?.id ?? null} onSelect={selectWar} />
+          <WarArrows
+            byId={geo.byId}
+            wars={wars}
+            preview={preview}
+            openId={war?.id ?? null}
+            onSelect={still ? undefined : selectWar}
+          />
           <Labels shapes={geo.shapes} scale={labelScale} showValues={showValues} />
           <DraftListMarkers byId={geo.byId} listed={listed} />
           <FortifiedMarkers byId={geo.byId} fortified={fortified} />
         </g>
       </svg>
 
-      <div className="absolute top-3 right-3 flex flex-col overflow-hidden rounded-[3px] border border-line-strong bg-panel/90 shadow-lg backdrop-blur">
-        <MapButton label="Zoom in" onClick={() => zoomBy(1.8)}>
-          +
-        </MapButton>
-        <MapButton label="Zoom out" onClick={() => zoomBy(1 / 1.8)}>
-          −
-        </MapButton>
-        {fullscreen && (
-          <MapButton label={fullscreen.on ? 'Exit full screen' : 'Full screen'} onClick={fullscreen.toggle}>
-            <FullscreenIcon on={fullscreen.on} />
+      {!still && (
+        <div className="absolute top-3 right-3 flex flex-col overflow-hidden rounded-[3px] border border-line-strong bg-panel/90 shadow-lg backdrop-blur">
+          <MapButton label="Zoom in" onClick={() => zoomBy(1.8)}>
+            +
           </MapButton>
-        )}
-        <MapButton label="Show the whole world" onClick={reset}>
-          <svg viewBox="0 0 20 20" className="size-4" aria-hidden="true">
-            <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path
-              d="M3 10h14M10 3c-3 3.5-3 10.5 0 14M10 3c3 3.5 3 10.5 0 14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.3"
-            />
-          </svg>
-        </MapButton>
-      </div>
+          <MapButton label="Zoom out" onClick={() => zoomBy(1 / 1.8)}>
+            −
+          </MapButton>
+          {fullscreen && (
+            <MapButton label={fullscreen.on ? 'Exit full screen' : 'Full screen'} onClick={fullscreen.toggle}>
+              <FullscreenIcon on={fullscreen.on} />
+            </MapButton>
+          )}
+          <MapButton label="Show the whole world" onClick={reset}>
+            <svg viewBox="0 0 20 20" className="size-4" aria-hidden="true">
+              <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="M3 10h14M10 3c-3 3.5-3 10.5 0 14M10 3c3 3.5 3 10.5 0 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+            </svg>
+          </MapButton>
+        </div>
+      )}
     </div>
   );
 }
@@ -907,7 +925,8 @@ function WarArrows({
   preview: WorldMapProps['preview'];
   /** The war open beside the map, drawn strong whoever fights it. */
   openId: string | null;
-  onSelect(id: string): void;
+  /** Absent, the arrows are only to look at. */
+  onSelect?(id: string): void;
 }) {
   const arrows = wars.flatMap((w) => {
     const from = byId.get(w.from);
@@ -924,7 +943,7 @@ function WarArrows({
           b={w.b}
           threat={w.threat}
           strong={w.mine || w.id === openId}
-          onClick={() => onSelect(w.id)}
+          onClick={onSelect && (() => onSelect(w.id))}
         />
       ))}
       {draft && preview && (

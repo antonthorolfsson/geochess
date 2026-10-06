@@ -48,7 +48,7 @@ import {
   type CampaignRules,
 } from '@empire/rules';
 import Link from 'next/link';
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   forRounds,
   hoursText,
@@ -60,29 +60,25 @@ import {
   stakeTable,
   warTokens,
 } from '@/lib/rules-text';
+import { useScrollToHash } from '@/lib/use-scroll-to-hash';
 
 /** "a, b or c". */
 const orWords = (items: readonly string[]) =>
   items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} or ${items.at(-1)}`;
 
 /**
- * - `standard`: the game with the standard settings (the landing page and /rules). Where the two
- *   paces differ, both are described, and the host's settings come last.
+ * - `standard`: the game with the standard settings (/rules). Where the two paces differ, both are
+ *   described, and the host's settings come last.
  * - `campaign`: one campaign's rules, with its own settings first.
  */
-export type RulesGuideProps = { level?: 2 | 3 } & (
-  { variant: 'standard' } | { variant: 'campaign'; rules: CampaignRules; datasetVersion: string; settingsNote: string }
-);
-
-/** The heading level of the guide's sections; their parts are one below. */
-const Level = createContext<2 | 3>(2);
+export type RulesGuideProps =
+  { variant: 'standard' } | { variant: 'campaign'; rules: CampaignRules; datasetVersion: string; settingsNote: string };
 
 /**
  * How to play, for new players and for reference mid-campaign: each round step by step, then every
  * rule in detail. The numbers come from the rules, so a campaign's page quotes its own settings.
  */
 export function RulesGuide(props: RulesGuideProps) {
-  const { level = 2 } = props;
   const standard = props.variant === 'standard';
   const rules = props.variant === 'campaign' ? props.rules : DEFAULT_RULES;
   // Campaigns keep the values of the map they started on; new ones run 1 to 20.
@@ -114,46 +110,36 @@ export function RulesGuide(props: RulesGuideProps) {
     ...(standard ? [{ id: 'settings', label: 'Settings' }] : []),
   ];
   return (
-    <Level value={level}>
-      <div className="space-y-10 leading-relaxed">
-        <nav aria-label="Rules contents">
-          <ul role="list" className="flex flex-wrap gap-1.5">
-            {contents.map((item) => (
-              <li key={item.id}>
-                <Link
-                  href={`#${item.id}`}
-                  className="inline-flex min-h-9 items-center rounded-[3px] border border-line px-2.5 text-[0.95rem] hover:border-line-strong hover:bg-raised"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        {!standard && settings}
-        <Idea rules={rules} top={top} />
-        <StartToFinish rules={rules} />
-        <EachRound rules={rules} standard={standard} />
-        <DeclaringWar rules={rules} standard={standard} top={top} />
-        <Answers rules={rules} standard={standard} />
-        <Battle rules={rules} standard={standard} />
-        <AfterWar rules={rules} standard={standard} />
-        <Diplomacy rules={rules} standard={standard} />
-        <Bots />
-        <Deadlines rules={rules} standard={standard} />
-        <Victory rules={rules} standard={standard} />
-        {standard && settings}
-      </div>
-    </Level>
+    <div className="readable space-y-10 leading-relaxed">
+      <nav aria-label="Rules contents">
+        <ul role="list" className="flex flex-wrap gap-1.5">
+          {contents.map((item) => (
+            <li key={item.id}>
+              <Link
+                href={`#${item.id}`}
+                className="inline-flex min-h-9 items-center rounded-[3px] border border-line px-2.5 text-[0.95rem] hover:border-line-strong hover:bg-raised"
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      {!standard && settings}
+      <Idea rules={rules} top={top} />
+      <StartToFinish rules={rules} />
+      <EachRound rules={rules} standard={standard} />
+      <DeclaringWar rules={rules} standard={standard} top={top} />
+      <Answers rules={rules} standard={standard} />
+      <Battle rules={rules} standard={standard} />
+      <AfterWar rules={rules} standard={standard} />
+      <Diplomacy rules={rules} standard={standard} />
+      <Bots />
+      <Deadlines rules={rules} standard={standard} />
+      <Victory rules={rules} standard={standard} />
+      {standard && settings}
+    </div>
   );
-}
-
-/** Pages that render once their data arrives miss the browser's own jump to the address's #section. */
-function useScrollToHash() {
-  useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
-    if (id) document.getElementById(id)?.scrollIntoView();
-  }, []);
 }
 
 /** How long a player has to answer, and in the standard rules, how long in the other pace. */
@@ -173,12 +159,11 @@ function turnTime(rules: CampaignRules, standard: boolean): string {
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  const H = `h${useContext(Level)}` as 'h2' | 'h3';
   return (
     <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4 border-t border-line pt-5">
-      <H id={`${id}-heading`} className="text-2xl leading-tight font-bold">
+      <h2 id={`${id}-heading`} className="text-2xl leading-tight font-bold">
         {title}
-      </H>
+      </h2>
       <div className="mt-3 space-y-5">{children}</div>
     </section>
   );
@@ -186,8 +171,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 
 /** A heading one level below the section's. */
 function SubHeading({ className = 'text-lg font-bold', children }: { className?: string; children: ReactNode }) {
-  const H = `h${useContext(Level) + 1}` as 'h3' | 'h4';
-  return <H className={className}>{children}</H>;
+  return <h3 className={className}>{children}</h3>;
 }
 
 function Part({ title, id, children }: { title: string; id?: string; children: ReactNode }) {

@@ -11,12 +11,15 @@ export function Emblem({ className = 'size-7' }: { className?: string }) {
   return <img src="/icons/emblem.png" alt="" className={className} />;
 }
 
-export function AppHeader() {
+/** `wide` lines the header up with a page wider than the usual column, such as the landing page. */
+export function AppHeader({ wide = false }: { wide?: boolean }) {
   const me = useMe();
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const user = me.data?.user;
+  // Signed out, every page but sign-in itself offers it, coming back to the page afterwards.
+  const signIn = me.data && !user && !pathname.startsWith('/login');
 
   const signOut = async () => {
     await api.logout().catch(() => {});
@@ -26,7 +29,7 @@ export function AppHeader() {
 
   return (
     <header className="border-b border-line pt-[env(safe-area-inset-top)]">
-      <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4">
+      <div className={`mx-auto flex h-14 items-center gap-3 px-4 ${wide ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <Link href="/" className="flex items-center gap-2.5">
           <Emblem />
           <span className="font-stencil text-lg tracking-[0.08em]">GEO CHESS</span>
@@ -46,6 +49,14 @@ export function AppHeader() {
               Sign out
             </button>
           </>
+        )}
+        {signIn && (
+          <Link
+            href={pathname === '/' ? '/login' : `/login?next=${encodeURIComponent(pathname)}`}
+            className="btn btn-ghost btn-sm min-h-11"
+          >
+            Sign in
+          </Link>
         )}
       </div>
     </header>

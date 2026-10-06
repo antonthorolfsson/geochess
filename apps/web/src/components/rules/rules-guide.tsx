@@ -21,16 +21,13 @@ import {
   MODIFIER_CAP_PCT,
   type MissionKind,
   type MissionRules,
+  type Pace,
   REPUTATION_BROKEN,
   REPUTATION_PER_ROUND,
   REPUTATION_START,
-  RESPONSE_WINDOW_TEXT,
   TITLES,
   SUPPLY_LINE_PCT,
   TERRAIN_PCT,
-  TURN_WINDOW_TEXT,
-  durationText,
-  holdMs,
   holdsByTurns,
   isLongMission,
   joinWords,
@@ -41,24 +38,35 @@ import {
   missionSummary,
   refillTokens,
   reservesAllowed,
-  selectionMs,
   stakeFloor,
-  tiebreakText,
   topValueOf,
   type CampaignRules,
 } from '@empire/rules';
 import Link from 'next/link';
 import { useEffect, type ReactNode } from 'react';
 import {
+  answerTimeText,
+  backAndForth,
+  deadlineRows,
   forRounds,
+  holdTimeText,
   hoursText,
   inWords,
   liveClockText,
+  missionVersionNote,
+  otherPace,
   perMoveText,
+  plural,
   raisedRowLabel,
+  recordMissions,
+  seasonEndText,
+  selectionTimeText,
+  sentenceCase,
   settingsList,
   stakeTable,
+  turnTimeText,
   warTokens,
+  winningMathText,
 } from '@/lib/rules-text';
 
 /** "a, b or c". */
@@ -68,14 +76,19 @@ const orWords = (items: readonly string[]) =>
 /**
  * - `standard`: the game with the standard settings (/rules). Where the two paces differ, both are
  *   described, and the host's settings come last.
- * - `campaign`: one campaign's rules, with its own settings first.
+ * - `campaign`: one campaign's rules, with its own settings first after the quick start.
  */
 export type RulesGuideProps =
   { variant: 'standard' } | { variant: 'campaign'; rules: CampaignRules; datasetVersion: string; settingsNote: string };
 
 /**
- * How to play, for new players and for reference mid-campaign: each round step by step, then every
- * rule in detail. The numbers come from the rules, so a campaign's page quotes its own settings.
+ * How to play: a quick start for new players (winning, the draft, one war, its game and what
+ * changes hands), then the complete reference for mid-campaign: each round step by step, then every
+ * rule in detail. The numbers come from the rules, so a campaign's page quotes its own settings and
+ * mission rules version, and the standard page the settings new campaigns start with.
+ *
+ * Section ids are deep links (`/rules#answers` from the landing page, `#fortifying`, `#peace`…):
+ * keep them when sections move or are renamed.
  */
 export function RulesGuide(props: RulesGuideProps) {
   const standard = props.variant === 'standard';
@@ -93,7 +106,7 @@ export function RulesGuide(props: RulesGuideProps) {
       <Settings rules={rules} />
     </Section>
   );
-  const contents = [
+  const reference = [
     ...(standard ? [] : [{ id: 'settings', label: 'Settings' }]),
     { id: 'idea', label: 'The idea' },
     { id: 'campaign', label: 'A campaign' },
@@ -102,40 +115,54 @@ export function RulesGuide(props: RulesGuideProps) {
     { id: 'answers', label: 'Answers' },
     { id: 'battle', label: 'The battle' },
     { id: 'after', label: 'After a war' },
+    { id: 'ending', label: 'Winning' },
     { id: 'diplomacy', label: 'Diplomacy' },
     { id: 'bots', label: 'Bots' },
     { id: 'deadlines', label: 'Deadlines' },
-    { id: 'ending', label: 'Winning' },
     ...(standard ? [{ id: 'settings', label: 'Settings' }] : []),
   ];
+  const chip =
+    'inline-flex min-h-9 items-center rounded-[3px] border px-2.5 text-[0.95rem] hover:border-line-strong hover:bg-raised';
   return (
     <div className="readable space-y-10 leading-relaxed">
-      <nav aria-label="Rules contents">
-        <ul role="list" className="flex flex-wrap gap-1.5">
-          {contents.map((item) => (
-            <li key={item.id}>
-              <Link
-                href={`#${item.id}`}
-                className="inline-flex min-h-9 items-center rounded-[3px] border border-line px-2.5 text-[0.95rem] hover:border-line-strong hover:bg-raised"
-              >
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+      <nav id="contents" aria-label="Rules contents" className="scroll-mt-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="label w-full sm:w-24">New here?</span>
+          <Link href="#quick-start" className={`${chip} border-amber/70 font-semibold`}>
+            Quick start
+          </Link>
+          <span className="text-[0.95rem] text-muted">Five steps to your first war.</span>
+        </div>
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
+          <span className="label w-full pt-2 sm:w-24">Reference</span>
+          <ul role="list" className="flex flex-1 flex-wrap gap-1.5">
+            {reference.map((item) => (
+              <li key={item.id}>
+                <Link href={`#${item.id}`} className={`${chip} border-line`}>
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
+      <QuickStart rules={rules} standard={standard} top={top} />
+      <div className="border-t-2 border-line-strong pt-4">
+        <p className="label">The complete rules</p>
+        <p className="mt-1 text-muted">Every rule in detail, to look things up as the campaign goes on.</p>
+      </div>
       {!standard && settings}
       <Idea rules={rules} top={top} />
-      <StartToFinish rules={rules} />
+      <StartToFinish rules={rules} standard={standard} />
       <EachRound rules={rules} standard={standard} />
       <DeclaringWar rules={rules} standard={standard} top={top} />
       <Answers rules={rules} standard={standard} />
       <Battle rules={rules} standard={standard} />
       <AfterWar rules={rules} standard={standard} />
+      <Victory rules={rules} standard={standard} />
       <Diplomacy rules={rules} standard={standard} />
       <Bots />
       <Deadlines rules={rules} standard={standard} />
-      <Victory rules={rules} standard={standard} />
       {standard && settings}
     </div>
   );
@@ -155,28 +182,20 @@ function useScrollToHash() {
   }, []);
 }
 
-/** How long a player has to answer, and in the standard rules, how long in the other pace. */
-function answerTime(rules: CampaignRules, standard: boolean): string {
-  const time = RESPONSE_WINDOW_TEXT[rules.war.pace];
-  if (!standard) return time;
-  const other = rules.war.pace === 'live' ? 'correspondence' : 'live';
-  return `${time} (${RESPONSE_WINDOW_TEXT[other]} in ${other} campaigns)`;
-}
-
-/** How long a turn to declare lasts, for this campaign or (standard) both paces. */
-function turnTime(rules: CampaignRules, standard: boolean): string {
-  const time = TURN_WINDOW_TEXT[rules.war.pace];
-  if (!standard) return time;
-  const other = rules.war.pace === 'live' ? 'correspondence' : 'live';
-  return `${time} (${TURN_WINDOW_TEXT[other]} in ${other} campaigns)`;
-}
-
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4 border-t border-line pt-5">
-      <h2 id={`${id}-heading`} className="text-2xl leading-tight font-bold">
-        {title}
-      </h2>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id={`${id}-heading`} className="text-2xl leading-tight font-bold">
+          {title}
+        </h2>
+        <Link
+          href="#contents"
+          className="shrink-0 text-sm text-muted underline decoration-line-strong underline-offset-2 hover:text-paper"
+        >
+          Contents
+        </Link>
+      </div>
       <div className="mt-3 space-y-5">{children}</div>
     </section>
   );
@@ -215,6 +234,118 @@ function Settings({ rules }: { rules: CampaignRules }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * The game in five steps for a first campaign: how it's won, the draft, declaring one war, its game,
+ * and what changes hands. The reference after it has the rest.
+ */
+function QuickStart({ rules, standard, top }: { rules: CampaignRules; standard: boolean; top: number }) {
+  const { war, victory } = rules;
+  const { points, titles } = missionRules(victory.version);
+  const objectives = victory.mode === 'objectives';
+  const last = lastRoundOf(rules);
+  const finish = war.turns ? ' once everyone has finished declaring' : '';
+  const steps: { title: string; text: ReactNode }[] = [
+    {
+      title: 'How to win',
+      text: objectives ? (
+        <>
+          Score victory points. The first to {points.toWin} wins on the spot
+          {last === null ? '' : `; if nobody has when round ${last} ends, the most points win`}. Public missions, which
+          everyone can score, are worth {points.public} each, and your own secret mission {points.secret}
+          {titles &&
+            `; ${inWords(titles.kinds.length)} titles worth ${plural(titles.points, 'point')} each go to whoever leads the table on population, land, GDP and military might`}
+          . Mission points are yours for good{titles ? ', title points move to whoever passes you' : ''}: see{' '}
+          <InlineLink href="#ending">Winning</InlineLink>.
+        </>
+      ) : (
+        <>
+          This campaign is open-ended: no points and no fixed end. Grow your empire for as long as the group plays; the
+          standings rank empires by total value.
+        </>
+      ),
+    },
+    {
+      title: 'Draft an empire',
+      text: (
+        <>
+          Take turns claiming countries until the whole map is taken.{' '}
+          {rules.draft.mode === 'contiguous'
+            ? 'After your first pick, each country you claim must border your empire while any such country is free.'
+            : 'Claim any free country.'}{' '}
+          Each is worth 1 to {top}, by its real economy, population and area.
+          {objectives && ' Then choose one of the secret missions you’re dealt.'}
+        </>
+      ),
+    },
+    {
+      title: 'Declare one war',
+      text: (
+        <>
+          {war.turns ? 'When your turn to declare comes round, switch' : 'Switch'} on <UI>Targets</UI>, select a lit-up
+          enemy country and press <UI>Declare war</UI>. It costs a war token (everyone gains{' '}
+          {warTokens(war.tokensPerRound)} a round, up to {war.tokenCap}). Choose the country you attack from and build a
+          stake worth at least {war.stakeFloorPct}% of the target&apos;s value: what the defender takes if you lose. The
+          defender has {answerTimeText(rules, standard)} to answer; with no answer, the war goes ahead as declared.
+        </>
+      ),
+    },
+    {
+      title: 'Play the chess game',
+      text: standard ? (
+        <>
+          One game of chess decides the war, with the attacker playing White. In correspondence campaigns it waits under
+          Your games in the Wars tab, with {hoursText(war.hoursPerMove)} for each move as standard; live campaigns play
+          blitz at {war.liveClock}
+          {finish}.
+        </>
+      ) : war.pace === 'live' ? (
+        <>
+          One game of blitz at {war.liveClock} decides the war, with the attacker playing White. The board opens by
+          itself{finish}.
+        </>
+      ) : (
+        <>
+          One game of chess decides the war, with the attacker playing White. Each move is due within{' '}
+          {hoursText(war.hoursPerMove)}; find the game under Your games in the Wars tab.
+        </>
+      ),
+    },
+    {
+      title: 'Take the territory',
+      text: (
+        <>
+          If the attacker wins, they take the target{war.raise === 'matched' ? ' and any country a raise put in' : ''};
+          if the defender wins, they take the whole stake.{' '}
+          {war.draws === 'armageddon' ? 'A draw goes to one more game, an Armageddon.' : 'A draw changes nothing.'}
+          {objectives &&
+            ` Countries changing hands are what complete missions${titles ? ' and move titles' : ''}: the Missions tab shows where you stand.`}
+        </>
+      ),
+    },
+  ];
+  return (
+    <Section id="quick-start" title="Quick start">
+      <p>
+        Your first campaign in five steps{standard ? '' : ', with this campaign’s settings'}. The complete rules below
+        have the rest: every answer to a war, diplomacy, each mission and every deadline.
+      </p>
+      <ol role="list" className="divide-y divide-line rounded-[3px] border border-line">
+        {steps.map(({ title, text }, i) => (
+          <li key={title} className="flex gap-3 px-4 py-3">
+            <span aria-hidden="true" className="w-5 shrink-0 pt-0.5 text-lg font-bold tabular-nums">
+              {i + 1}
+            </span>
+            <div className="min-w-0">
+              <SubHeading className="font-bold">{title}</SubHeading>
+              <p className="mt-0.5">{text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Section>
   );
 }
 
@@ -261,7 +392,7 @@ function Idea({ rules, top }: { rules: CampaignRules; top: number }) {
   );
 }
 
-function StartToFinish({ rules }: { rules: CampaignRules }) {
+function StartToFinish({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const first = refillTokens(rules, 0);
   const stages: { stage: string; text: ReactNode }[] = [
     {
@@ -294,7 +425,7 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
             text: (
               <>
                 Each player privately chooses one of up to three secret missions dealt to fit their empire, within{' '}
-                {durationText(selectionMs(rules))}. Nobody else sees the options or the choice. See{' '}
+                {selectionTimeText(rules, standard)}. Nobody else sees the options or the choice. See{' '}
                 <InlineLink href="#ending">Winning</InlineLink>.
               </>
             ),
@@ -338,7 +469,7 @@ function StartToFinish({ rules }: { rules: CampaignRules }) {
 
 function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
-  const answer = answerTime(rules, standard);
+  const answer = answerTimeText(rules, standard);
   const battle = standard ? (
     <>
       One game of chess, with the attacker playing White: a move a day or so in correspondence campaigns, blitz in live
@@ -426,7 +557,7 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
             'a redirect',
             ...(war.peaceTerms ? [] : ['a tribute offer']),
           ])}
-          . Within {RESPONSE_WINDOW_TEXT[war.pace]}, the attacker agrees or refuses: refusing{' '}
+          . Within {answer}, the attacker agrees or refuses: refusing{' '}
           {war.raise === 'off' ? 'a redirect' : 'a raise or redirect'} calls the war off
           {war.peaceTerms ? '' : ', and refusing tribute means fighting as declared'}. With no reply,{' '}
           {war.raise === 'off' ? 'a redirect is' : 'a raise or redirect is'} refused
@@ -473,10 +604,10 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
       {war.turns ? (
         <p>
           Players take turns to declare war, round the table: on your turn, declare one war
-          {war.fortify ? ', fortify one of your countries' : ''} or pass, within {turnTime(rules, standard)}. Passing
-          ends your declaring for the round, and the turns go round until everyone has passed or has no tokens left.
-          Everything else (answering, playing your games, diplomacy) happens whenever you like. Here is how a round, and
-          each war in it, plays out.
+          {war.fortify ? ', fortify one of your countries' : ''} or pass, within {turnTimeText(rules, standard)}.
+          Passing ends your declaring for the round, and the turns go round until everyone has passed or has no tokens
+          left. Everything else (answering, playing your games, diplomacy) happens whenever you like. Here is how a
+          round, and each war in it, plays out.
         </p>
       ) : (
         <p>
@@ -546,8 +677,8 @@ function DeclaringWar({ rules, standard, top }: { rules: CampaignRules; standard
             is done, declaring is over until the next round.
           </p>
           <p className="text-muted">
-            A turn lasts up to {turnTime(rules, standard)}; after that it passes for you. The host can pass the turn for
-            a player who is away. The war room shows the order and whose turn it is.
+            A turn lasts up to {turnTimeText(rules, standard)}; after that it passes for you. The host can pass the turn
+            for a player who is away. The war room shows the order and whose turn it is.
           </p>
         </Part>
       )}
@@ -677,11 +808,9 @@ function StakeTable({ rules, top }: { rules: CampaignRules; top: number }) {
   );
 }
 
-/** Whether the campaign's stakes can be raised back and forth. */
-const backAndForth = (rules: CampaignRules) => rules.war.raise === 'matched' && rules.war.raises > 1;
-
 function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
+  const answer = answerTimeText(rules, standard);
   const raise = ((): { label: string; text: string } | null => {
     switch (war.raise) {
       case 'matched':
@@ -745,8 +874,8 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
   return (
     <Section id="answers" title="Answering a declaration">
       <p>
-        The defender answers in the Wars tab, under Waiting for your answer, within {answerTime(rules, standard)}. With
-        no answer, the war goes ahead as declared.
+        The defender answers in the Wars tab, under Waiting for your answer, within {answer}. With no answer, the war
+        goes ahead as declared.
       </p>
       <ul role="list" className="grid gap-3 sm:grid-cols-2">
         {answers.map(({ label, text }) => (
@@ -764,7 +893,7 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
         </p>
       )}
       <Part title="The attacker's reply">
-        <p>A counter-offer goes back to the attacker, who has {RESPONSE_WINDOW_TEXT[war.pace]} to reply:</p>
+        <p>A counter-offer goes back to the attacker, who has {answer} to reply:</p>
         <Bullets>
           {war.raise !== 'off' && (
             <li>
@@ -803,7 +932,7 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
         <Part title="Raising back and forth" id="raising">
           <p>
             A war&apos;s stakes can be raised up to {war.raises} times, the defender&apos;s first raise included, each
-            side in turn. Every raise is answered within {RESPONSE_WINDOW_TEXT[war.pace]}:
+            side in turn. Every raise is answered within {answer}:
           </p>
           <Bullets>
             <li>
@@ -860,8 +989,8 @@ function Answers({ rules, standard }: { rules: CampaignRules; standard: boolean 
           </Bullets>
           <p>
             Or nothing at all: a white peace. Only the two players ever see an offer. The other player accepts or turns
-            it down within {answerTime(rules, standard)}, or it lapses; once the game is on, their next move turns it
-            down, as a move does a draw offer. A new offer replaces your last one.
+            it down within {answer}, or it lapses; once the game is on, their next move turns it down, as a move does a
+            draw offer. A new offer replaces your last one.
           </p>
           <p>
             Accepted, the war ends at once: the game stops (its moves are kept, with no result), the terms change hands,
@@ -985,9 +1114,9 @@ function Battle({ rules, standard }: { rules: CampaignRules; standard: boolean }
           Meeting up? Either player can offer to play the game over the board, on a real board, and the game moves there
           once the other accepts. The clocks here stop where they are and no moves are made online; bring your own
           clock. When the game is over, report it: the winner says "I won", or either player reports a draw, and the
-          other confirms it. Unanswered within {answerTime(rules, standard)}, a report stands. "I lost" ends the game at
-          once. A disputed report leaves the game on the real board, and either player can take it back online when no
-          report is waiting, with the clocks as they were. Bots play online only.
+          other confirms it. Unanswered within {answerTimeText(rules, standard)}, a report stands. "I lost" ends the
+          game at once. A disputed report leaves the game on the real board, and either player can take it back online
+          when no report is waiting, with the clocks as they were. Bots play online only.
         </p>
       </Part>
     </Section>
@@ -1070,7 +1199,7 @@ function Diplomacy({ rules, standard }: { rules: CampaignRules; standard: boolea
         <p>
           An accord is a promise between two players not to attack each other, for {ACCORD_MIN_ROUNDS} to{' '}
           {ACCORD_MAX_ROUNDS} rounds. Propose one under Accords in the Diplo tab; only the two of you see the proposal.
-          The other player signs or declines within {answerTime(rules, standard)}, or it lapses. Signed accords are
+          The other player signs or declines within {answerTimeText(rules, standard)}, or it lapses. Signed accords are
           public, and while one holds, neither partner can declare war on the other. Wars already underway carry on.
         </p>
         <p>
@@ -1180,8 +1309,9 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
     return (
       <Section id="ending" title="Winning">
         <p>
-          This campaign is open-ended: play for as long as your group likes. The standings rank empires by total value,
-          and every empire's page keeps its history, war record and chess profile.
+          This campaign is open-ended: no victory points, missions or titles, and no fixed end. Play for as long as your
+          group likes. The standings rank empires by total value, and every empire's page keeps its history, war record
+          and chess profile.
         </p>
       </Section>
     );
@@ -1189,44 +1319,112 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
   const cfg = missionRules(rules.victory.version);
   const { points, titles } = cfg;
   const titleNames = joinWords((titles?.kinds ?? []).map((k) => TITLES[k].name));
-  const titlePts = titles ? `${titles.points} ${titles.points === 1 ? 'point' : 'points'}` : '';
-  const hold = durationText(holdMs(rules));
-  const holdOther = standard
-    ? ` (${durationText(cfg.holdMinutes[rules.war.pace === 'live' ? 'correspondence' : 'live'] * 60_000)} in ${
-        rules.war.pace === 'live' ? 'correspondence' : 'live'
-      } campaigns)`
-    : '';
+  const titlePts = titles ? plural(titles.points, 'point') : '';
   const chosen = rules.victory.publicMissions.map((m) => missionName(m));
   const defaults = cfg.defaultPublic.map((k) => kindName(k, cfg));
   const secretKinds = cfg.secretKinds.filter((k) => k !== 'measured_expansion');
-  // Missions that are records, not positions: they score the moment they're done.
-  const records = [...cfg.publicKinds, ...cfg.secretKinds]
-    .filter((k) => MISSIONS[k].timing === 'historic')
-    .map((k) => kindName(k, cfg));
+  const recordsBy = recordMissions(cfg);
+  const records = [...recordsBy.public, ...recordsBy.secret];
   const last = lastRoundOf(rules);
+  const versionNote = standard ? null : missionVersionNote(rules);
+  const holdText = holdsByTurns(rules)
+    ? 'once the round after next has started and every player has had their turns to declare war in a round since'
+    : `once the round after next has started and at least ${holdTimeText(rules, standard)} have passed since the next round started`;
+  const parts = [
+    { id: 'points', label: 'Points and claims' },
+    { id: 'scoring', label: 'When points count' },
+    { id: 'public-missions', label: 'Public missions' },
+    { id: 'secret-missions', label: 'Secret missions' },
+    { id: 'claims', label: 'Claims' },
+    ...(titles ? [{ id: 'titles', label: 'Titles' }] : []),
+    { id: 'finish', label: 'Reaching the target' },
+    { id: 'last-round', label: 'The last round' },
+  ];
   return (
     <Section id="ending" title="Winning">
+      {versionNote && <p className="border-l-2 border-amber/60 pl-3">{versionNote}</p>}
       <p className="text-lg">
-        The first to {points.toWin} victory points wins. Four public missions are worth {points.public} points each and
-        every player has one secret mission worth {points.secret}
-        {titles ? (
-          <>
-            , and {titles.kinds.length} titles are worth {titlePts} each to whoever leads the table on population, land,
-            GDP and military might. Missions make {points.public * 4 + points.secret} points at most, so a winner holds
-            a title or two as well.
-          </>
-        ) : (
-          <>
-            : two public missions and the secret make {points.public * 2 + points.secret}, and all four public ones make{' '}
-            {points.public * 4}, so a player can win without their secret.
-          </>
-        )}
-        {last !== null &&
-          ` If nobody has ${points.toWin} when round ${last} ends, the campaign ends anyway, and the most points win, then ${tiebreakText(rules.victory.tiebreak)}.`}
-        {standard && ' (The host can pick another last round, or none, in the lobby.)'}
-        {!standard && ' (The host can instead make a campaign open-ended in the lobby: no missions and no fixed end.)'}
+        {last === null ? 'This campaign is won one way:' : 'A campaign is won one of two ways:'}
       </p>
-      <Part title="Public missions">
+      <ol role="list" className="grid gap-3 sm:grid-cols-2">
+        <li className="rounded-[3px] border border-line bg-panel p-3">
+          <SubHeading className="font-bold">Reach {points.toWin} points</SubHeading>
+          <p className="mt-1 text-[0.95rem] leading-normal">
+            The first to {points.toWin} victory points wins at once: the moment a mission scores for them
+            {titles ? ' or a title moves to them' : ''}, even in the middle of a round.
+          </p>
+        </li>
+        {last !== null && (
+          <li className="rounded-[3px] border border-line bg-panel p-3">
+            <SubHeading className="font-bold">Lead after round {last}</SubHeading>
+            <p className="mt-1 text-[0.95rem] leading-normal">
+              If nobody has reached {points.toWin} when the host moves on from round {last}, the campaign ends anyway:{' '}
+              {seasonEndText(rules)}. Players level on all of it share the victory.
+            </p>
+          </li>
+        )}
+      </ol>
+      {standard && (
+        <p className="text-muted">
+          The host can choose another last round, or none, and can make a campaign open-ended instead (no missions and
+          no fixed end), in the lobby.
+        </p>
+      )}
+      <nav aria-label="Winning, part by part">
+        <ul role="list" className="flex flex-wrap gap-x-4 gap-y-1 text-[0.95rem]">
+          {parts.map((part) => (
+            <li key={part.id}>
+              <InlineLink href={`#${part.id}`}>{part.label}</InlineLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <Part title="Points and claims" id="points">
+        <p>
+          Your total is your mission points{titles ? ', plus the titles you hold right now' : ''}. A claim waiting to
+          score isn&apos;t a point yet.
+        </p>
+        <dl className="divide-y divide-line rounded-[3px] border border-line">
+          <PointKind term="Mission points" tag="Permanent">
+            A mission scores once: {points.public} points for a public mission, {points.secret} for your secret. Scored
+            points are yours for good: losing the countries afterwards costs nothing.
+          </PointKind>
+          <PointKind term="Pending claims" tag="Not points yet">
+            A position you have completed and must keep holding before it scores. Everyone sees it in the{' '}
+            <UI>Missions</UI> tab, but it counts for nothing until it scores: lose the position and the claim ends, and
+            a claim still waiting when the campaign ends doesn&apos;t count.
+          </PointKind>
+          {titles && (
+            <PointKind term="Title points" tag="Transferable">
+              {sentenceCase(titlePts)} for each title you hold, counted the moment you take it and gone the moment
+              someone passes you. They&apos;re the only points that can be taken away.
+            </PointKind>
+          )}
+        </dl>
+        <p>{winningMathText(cfg)}</p>
+      </Part>
+      <Part title="When points count" id="scoring">
+        <Bullets>
+          <li>
+            <strong>At once: records.</strong> {joinWords(records)}{' '}
+            {records.length === 1 ? 'is a record' : 'are records'} of what you have done, such as wars won, which
+            can&apos;t be undone: {records.length === 1 ? 'it scores' : 'they score'} the moment{' '}
+            {records.length === 1 ? 'it’s' : 'they’re'} complete, with no claim and no waiting.
+          </li>
+          {titles && (
+            <li>
+              <strong>At once: titles.</strong> A title moves, with its {titlePts}, the moment someone passes its
+              holder. Taking one can win the campaign on the spot; losing one takes its {titlePts} away.
+            </li>
+          )}
+          <li>
+            <strong>After holding: positions.</strong> Every other mission is a position to hold. Completing one starts
+            a claim, which scores {holdText}, if you have held it throughout and no war could still break it. See{' '}
+            <InlineLink href="#claims">Claims</InlineLink>.
+          </li>
+        </Bullets>
+      </Part>
+      <Part title="Public missions" id="public-missions">
         <p>
           Everyone can see them from the lobby on, with their exact targets, and everyone can score each one once:
           someone else scoring a mission takes nothing from you. Countries you draft count toward them, but nothing
@@ -1235,11 +1433,10 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         {standard ? (
           <>
             <p>
-              New campaigns play {joinWords(defaults)}. The host can pick any other four before the draft, or have four
-              drawn at random
-              {cfg.longDrawn < cfg.publicCount &&
-                ` (at most ${cfg.longDrawn === 1 ? 'one' : cfg.longDrawn} of them marked Long campaign)`}
-              , and draw new targets for them.
+              New campaigns play {joinWords(defaults)}. The host can pick any other {inWords(cfg.publicCount)} before
+              the draft, or have {inWords(cfg.publicCount)} drawn at random
+              {cfg.longDrawn < cfg.publicCount && ` (at most ${inWords(cfg.longDrawn)} of them marked Long campaign)`},
+              and draw new targets for them.
               {cfg.positionsNeedConquest &&
                 ' Positions such as Strategic Positions count only once you have won one of their countries since the draft: the draft alone never scores them.'}
             </p>
@@ -1247,17 +1444,17 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           </>
         ) : (
           <p>
-            This campaign plays {chosen.join(', ')}. Their targets are in the <UI>Missions</UI> tab, which can show each
-            one on the map.
+            {chosen.length > 0 ? `This campaign plays ${joinWords(chosen)}. Their` : 'Its public missions and their'}{' '}
+            targets are in the <UI>Missions</UI> tab, which can show each one on the map.
           </p>
         )}
       </Part>
-      <Part title="Secret missions">
+      <Part title="Secret missions" id="secret-missions">
         <p>
           When the draft ends, each player is dealt up to three secret options that fit their empire (each at least two
           steps from done: conquests, or wins for the missions about battles), chooses one within{' '}
-          {durationText(selectionMs(rules))}, and can't change it. Anyone still choosing when time runs out gets the
-          best fit. Other players see only that you're ready.
+          {selectionTimeText(rules, standard)}, and can&apos;t change it. Anyone still choosing when time runs out gets
+          the best fit. Other players see only that you&apos;re ready.
         </p>
         {cfg.namedSets.every((t) => t.reveal >= t.need) ? (
           <p>
@@ -1280,10 +1477,10 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           player goes on without one.
         </p>
       </Part>
-      <Part title="Claims: holding a position">
+      <Part title="Claims: holding a position" id="claims">
         <p>
-          Most missions are positions to hold. When you complete one, it becomes a public claim, and every player can
-          see what you must hold. It scores only when all of these are true:
+          When you complete a position, it becomes a public claim, and every player can see what you must hold. It
+          scores only when all of these are true:
         </p>
         <Bullets>
           <li>
@@ -1294,29 +1491,27 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             <li>
               every player has had their turns to declare war in a round since: declaring is over for that round,
               everyone having passed or run out of things to declare with (whoever has no war tokens and nothing to do
-              is passed over). A host who starts the next round early can't cut this short: the claim waits for a round
-              whose turns run their course;
+              is passed over). A host who starts the next round early can&apos;t cut this short: the claim waits for a
+              round whose turns run their course;
             </li>
           ) : (
             <li>
-              at least {hold}
-              {holdOther} have passed since the next round started, so a host can't rush the rounds (the host can make
-              this time longer in the lobby, never shorter);
+              at least {holdTimeText(rules, standard)} have passed since the next round started, so a host can&apos;t
+              rush the rounds (the host can make this time longer in the lobby, never shorter);
             </li>
           )}
           <li>you have held it the whole time; and</li>
-          <li>no war you're in could still break it. A war that can't touch it doesn't matter.</li>
+          <li>no war you&apos;re in could still break it. A war that can&apos;t touch it doesn&apos;t matter.</li>
         </Bullets>
         <p>
-          Lose the position and the claim ends; complete it again and a new claim starts. Swapping which targets you
-          hold doesn't end a claim, as long as the mission never stops being complete.{' '}
-          {records.length === 1
-            ? `${records[0]} is a record, not a position: it scores the moment it’s done.`
-            : `${joinWords(records)} are records, not positions: they score the moment they’re done.`}
+          Lose the position and the claim ends, with nothing scored; complete it again and a new claim starts. Swapping
+          which targets you hold doesn&apos;t end a claim, as long as the mission never stops being complete. Records
+          {titles ? ' and titles' : ''} never wait for a claim: see{' '}
+          <InlineLink href="#scoring">When points count</InlineLink>.
         </p>
       </Part>
       {titles && (
-        <Part title="Titles">
+        <Part title="Titles" id="titles">
           <p>
             {titleNames} are worth {titlePts} each. When round 1 starts, each goes to the player whose countries add up
             to the most people, the most land, the largest GDP, or the greatest military might. From then on a title
@@ -1335,13 +1530,11 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           </p>
         </Part>
       )}
-      <Part title="Points and the finish">
+      <Part title="Reaching the target" id="finish">
         <p>
-          {titles
-            ? 'Mission points are never taken away: losing a country after a mission has scored costs nothing. Only titles change hands.'
-            : 'Points are never taken away: losing a country after a mission has scored costs nothing.'}{' '}
-          When several players reach {points.toWin} with the same change, the highest total wins, and equal totals share
-          the victory.
+          The campaign is won the moment anyone reaches {points.toWin}, whether a mission scored
+          {titles ? ' or a title moved' : ''}. When several players reach it with the same change, the highest total
+          wins, and equal totals share the victory.
         </p>
         <p>
           The campaign then ends and can no longer change: wars still underway are cancelled without a winner (their
@@ -1349,25 +1542,36 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
           lapse, and every secret mission is revealed in the final results.
         </p>
       </Part>
-      <Part title="The last round">
+      <Part title="The last round" id="last-round">
         {last === null ? (
           <p>
-            This campaign has no last round: it goes on until someone reaches {points.toWin}. The host sets one in the
+            This campaign has no last round: it goes on until someone reaches {points.toWin}. Hosts set one in the
             lobby, before the draft.
           </p>
         ) : (
           <p>
-            Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. When the
-            host moves on from it, the campaign ends as if someone had won: the most victory points win.{' '}
-            {rules.victory.tiebreak === 'value'
-              ? 'Players level on points are separated by the most valuable empire, and players level on both share the victory.'
-              : "Players level on points are separated by their empires' real-world size: the largest population wins; if that's level too, the most land area; then the largest GDP. Players level on all of it share the victory."}{' '}
-            Claims still waiting to score don't count, so a position has to be complete by round {last - 2} to score in
-            time.
+            Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. If nobody
+            has reached {points.toWin} by the time the host moves on from it, the campaign ends as if someone had won,
+            and {seasonEndText(rules)}. Players level on all of it share the victory. Points count as they stand then:{' '}
+            {titles ? 'titles held at that moment count, but ' : ''}claims still waiting to score don&apos;t, so a
+            position has to be complete {last > 2 ? `by round ${last - 2}` : 'before round 1'} to score in time.
           </p>
         )}
       </Part>
     </Section>
+  );
+}
+
+/** One kind of points (or a claim, which isn't one yet) and how it behaves. */
+function PointKind({ term, tag, children }: { term: string; tag: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-1 px-4 py-3 sm:grid-cols-[10rem_1fr] sm:gap-4">
+      <dt>
+        <span className="block font-bold">{term}</span>
+        <span className="label text-muted">{tag}</span>
+      </dt>
+      <dd>{children}</dd>
+    </div>
   );
 }
 
@@ -1416,60 +1620,16 @@ function MissionList({ kinds, cfg }: { kinds: readonly MissionKind[]; cfg: Missi
 }
 
 function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
-  const { war } = rules;
-  const answer = RESPONSE_WINDOW_TEXT[war.pace];
-  const rows: [who: string, time: string, silence: string][] = [
-    ...(war.turns
-      ? [
-          [
-            'A player takes their turn to declare',
-            TURN_WINDOW_TEXT[war.pace],
-            'They pass, and are done declaring for the round.',
-          ] as [string, string, string],
-        ]
-      : []),
-    ['The defender answers a declaration', answer, 'The war goes ahead as declared.'],
-    [
-      war.raise === 'off' ? 'The attacker replies to a redirect' : 'The attacker replies to a raise or redirect',
-      answer,
-      'The war is called off, and the token is spent.',
-    ],
-    ...(backAndForth(rules)
-      ? [
-          ['The defender answers the attacker’s raise', answer, 'They back down: the target goes to the attacker.'] as [
-            string,
-            string,
-            string,
-          ],
-          [
-            'The attacker answers a raise after raising',
-            answer,
-            'They back down: the stake as declared goes to the defender.',
-          ] as [string, string, string],
-        ]
-      : []),
-    war.peaceTerms
-      ? ['A player answers peace terms', `${answer}, or before their next move in the game`, 'The offer lapses.']
-      : ['The attacker replies to a tribute offer', answer, 'The tribute is accepted.'],
-    ['A player answers an accord proposal', answer, 'The proposal lapses.'],
-    ['A player moves', war.pace === 'live' ? 'Their clock' : perMoveText(war.hoursPerMove), 'They lose the game.'],
-    ['A player answers a result reported over the board', answer, 'The result stands.'],
-    ...(rules.victory.mode === 'objectives'
-      ? [
-          [
-            'A player chooses a secret mission',
-            durationText(selectionMs(rules)),
-            'The option that fits them best is chosen for them.',
-          ] as [string, string, string],
-        ]
-      : []),
-  ];
+  // The standard rules quote both paces side by side; a campaign's page only its own.
+  const paces: Pace[] = standard ? [rules.war.pace, otherPace(rules.war.pace)] : [rules.war.pace];
+  const rows = deadlineRows(rules, paces);
   return (
     <Section id="deadlines" title="Deadlines at a glance">
       <p>
         Silence is an answer too.{' '}
-        {standard &&
-          `The times below are for correspondence campaigns; in live ones, ${war.turns ? 'turns and answers' : 'answers'} are due within ${RESPONSE_WINDOW_TEXT.live} and moves on the clock.`}
+        {standard
+          ? 'Live campaigns run on much shorter times than correspondence ones, so both are given.'
+          : `This campaign is ${rules.war.pace === 'live' ? 'live' : 'played by correspondence'}, and these are its times.`}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[20rem] text-left text-[0.95rem] leading-snug">
@@ -1478,21 +1638,27 @@ function Deadlines({ rules, standard }: { rules: CampaignRules; standard: boolea
               <th scope="col" className="label py-1.5 pr-3">
                 Waiting for
               </th>
-              <th scope="col" className="label py-1.5 pr-3">
-                Time
-              </th>
+              {paces.map((pace) => (
+                <th key={pace} scope="col" className="label py-1.5 pr-3">
+                  {standard ? sentenceCase(pace) : 'Time'}
+                </th>
+              ))}
               <th scope="col" className="label py-1.5">
                 If time runs out
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {rows.map(([who, time, silence]) => (
+            {rows.map(({ who, times, silence }) => (
               <tr key={who} className="align-top">
                 <th scope="row" className="py-2 pr-3 font-semibold">
                   {who}
                 </th>
-                <td className="py-2 pr-3">{time}</td>
+                {times.map((time, i) => (
+                  <td key={paces[i]} className="py-2 pr-3">
+                    {time}
+                  </td>
+                ))}
                 <td className="py-2 text-muted">{silence}</td>
               </tr>
             ))}

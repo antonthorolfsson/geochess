@@ -1,17 +1,28 @@
-import { DEFAULT_RULES, parseRules } from '@empire/rules';
+import { DEFAULT_RULES, MISSION_RULES_V4, MISSION_RULES_V6, missionRules, parseRules } from '@empire/rules';
 import { describe, expect, it } from 'vitest';
 import {
+  answerTimeText,
+  deadlineRows,
   forRounds,
   handicapLine,
+  holdTimeText,
+  missionPointsMax,
+  missionVersionNote,
+  objectivesText,
   handicapText,
   ratingText,
   liveClockText,
   perMoveText,
   raiseText,
   raisedRowLabel,
+  recordMissions,
+  seasonEndText,
+  selectionTimeText,
   settingsList,
   stakeTable,
   timeControlText,
+  turnTimeText,
+  winningMathText,
 } from './rules-text';
 
 describe('rules in words', () => {
@@ -126,5 +137,116 @@ describe('rules in words', () => {
     const names = { attacker: 'Ann', defender: 'Bo' };
     expect(handicapLine(h, 'live', names)).toBe('Bo +40% time, Ann −40% (250 points apart)');
     expect(handicapLine(h, 'correspondence', names)).toBe('Bo +40% time (250 points apart)');
+  });
+});
+
+/** Rules stored before victory missions were tuned: version 4 (no titles, 7 to win), as stored campaigns read. */
+const BEFORE_TITLES = parseRules({ victory: { mode: 'objectives', version: 4, lastRound: 20 } });
+const LIVE = { ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, pace: 'live' as const } };
+
+describe('times by pace', () => {
+  it('gives the standard rules both paces, and a campaign its own', () => {
+    expect(answerTimeText(DEFAULT_RULES, true)).toBe('24 hours (5 minutes in live campaigns)');
+    expect(turnTimeText(DEFAULT_RULES, true)).toBe('24 hours (5 minutes in live campaigns)');
+    expect(selectionTimeText(DEFAULT_RULES, true)).toBe('24 hours (5 minutes in live campaigns)');
+    expect(holdTimeText(DEFAULT_RULES, true)).toBe('24 hours (10 minutes in live campaigns)');
+    expect(answerTimeText(LIVE, false)).toBe('5 minutes');
+    expect(selectionTimeText(LIVE, false)).toBe('5 minutes');
+    expect(holdTimeText(LIVE, false)).toBe('10 minutes');
+    // The host's own times, at the campaign's pace.
+    const own = { ...LIVE, victory: { ...LIVE.victory, holdMinutes: 30, selectionMinutes: 10 } };
+    expect(holdTimeText(own, false)).toBe('30 minutes');
+    expect(selectionTimeText(own, false)).toBe('10 minutes');
+  });
+
+  it('tabulates every deadline at each pace asked for', () => {
+    const both = Object.fromEntries(
+      deadlineRows(DEFAULT_RULES, ['correspondence', 'live']).map((r) => [r.who, r.times]),
+    );
+    expect(both).toMatchObject({
+      'A player takes their turn to declare': ['24 hours', '5 minutes'],
+      'The defender answers a declaration': ['24 hours', '5 minutes'],
+      'The attacker answers a raise after raising': ['24 hours', '5 minutes'],
+      'A player answers peace terms': [
+        '24 hours, or before their next move in the game',
+        '5 minutes, or before their next move in the game',
+      ],
+      'A player moves': ['1 day per move', 'On the clock, 5+3'],
+      'A player chooses a secret mission': ['24 hours', '5 minutes'],
+    });
+    const live = Object.fromEntries(deadlineRows(LIVE).map((r) => [r.who, r.times]));
+    expect(Object.values(live).flat().join(' ')).not.toMatch(/24 hours|day/);
+    // Stored rules: no turns, tribute instead of peace terms, no back and forth, no missions.
+    const stored = deadlineRows(parseRules({}), ['correspondence']).map((r) => r.who);
+    expect(stored).toContain('The attacker replies to a tribute offer');
+    expect(stored).not.toContain('A player takes their turn to declare');
+    expect(stored).not.toContain('The attacker answers a raise after raising');
+    expect(stored).not.toContain('A player chooses a secret mission');
+  });
+});
+
+describe('scoring in words', () => {
+  it('never calls a title necessary when missions alone reach the target', () => {
+    expect(missionPointsMax(MISSION_RULES_V6)).toBe(11);
+    expect(winningMathText(MISSION_RULES_V6)).toBe(
+      'Missions alone can make 11 points (all four public missions and the secret), more than the 10 to win, so ' +
+        'no title is ever required. With titles, fewer missions will do: three public missions, the secret and one title make 10.',
+    );
+    // Where missions fall short, it says so: a target of 13 needs two titles on top of every mission.
+    const harder = { ...MISSION_RULES_V6, points: { ...MISSION_RULES_V6.points, toWin: 13 } };
+    expect(winningMathText(harder)).toBe(
+      'Missions make 11 points at most, 2 short of the 13 to win, so a winner holds at least two titles as well.',
+    );
+  });
+
+  it('shows which missions win without titles', () => {
+    expect(winningMathText(MISSION_RULES_V4)).toBe(
+      'Two public missions and the secret make 7, and all four public ones make 8, so a player can win without their secret.',
+    );
+    const needsSecret = { ...MISSION_RULES_V4, points: { ...MISSION_RULES_V4.points, toWin: 9 } };
+    expect(winningMathText(needsSecret)).toBe(
+      'Three public missions and the secret make 9; all four public ones make only 8, so every winner needs their secret.',
+    );
+  });
+
+  it('lists the records, which score with no claim, as each version deals them', () => {
+    expect(recordMissions(MISSION_RULES_V6)).toEqual({
+      public: ['Campaign Veteran', 'Kingslayer', 'Lightning Campaign'],
+      secret: ['Backstab', 'Iron Wall', 'Checkmate Artist'],
+    });
+    // Version 1 had no battle secrets, nor Kingslayer or Lightning Campaign.
+    expect(recordMissions(missionRules(1))).toEqual({ public: ['Campaign Veteran'], secret: [] });
+  });
+
+  it('ends a season on the campaign’s own tiebreak', () => {
+    expect(seasonEndText(DEFAULT_RULES)).toBe(
+      'the most victory points win, then the largest population, then the most land, then the largest GDP',
+    );
+    expect(seasonEndText(BEFORE_TITLES)).toBe('the most victory points win, then the most valuable empire');
+  });
+
+  it('offers Objectives in the lobby with the campaign’s own numbers', () => {
+    expect(objectivesText(DEFAULT_RULES)).toBe(
+      'Four public missions and a secret one for each player, and titles for leading the table. The first to 10 ' +
+        'victory points wins, or the most points when round 25 ends.',
+    );
+    const noEnd = { ...BEFORE_TITLES, victory: { ...BEFORE_TITLES.victory, lastRound: null } };
+    expect(objectivesText(noEnd)).toBe(
+      'Four public missions and a secret one for each player. The first to 7 victory points wins.',
+    );
+  });
+
+  it('notes when a campaign plays older mission rules', () => {
+    expect(missionVersionNote(DEFAULT_RULES)).toBeNull();
+    expect(missionVersionNote(parseRules({}))).toBeNull();
+    expect(missionVersionNote(BEFORE_TITLES)).toBe(
+      'This campaign plays mission rules version 4, which it was created with (7 points to win, no titles): the ' +
+        'missions, numbers and points here are its own. New campaigns play version 6.',
+    );
+    const v5 = { ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, version: 5 } };
+    expect(missionVersionNote(v5)).toBe(
+      'This campaign plays mission rules version 5, which it was created with: the missions, numbers and points ' +
+        'here are its own. New campaigns play version 6.',
+    );
   });
 });

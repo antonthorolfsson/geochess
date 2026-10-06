@@ -28,7 +28,7 @@ export function CampaignRulesScreen() {
           How to play
         </h1>
         <p className="text-[0.95rem] text-muted">
-          Each round step by step, with the settings this campaign plays with.
+          A quick start, then the complete rules, with the settings this campaign plays with.
         </p>
       </header>
       <RulesGuide

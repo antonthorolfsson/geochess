@@ -1,10 +1,11 @@
 'use client';
 
-import { TURN_WINDOW_TEXT, lastRoundOf, type WarView } from '@empire/rules';
+import { TURN_WINDOW_TEXT, lastRoundOf, missionRules, type WarView } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
+import { perMoveText, seasonEndText, sentenceCase } from '@/lib/rules-text';
 import { useMyGames } from '@/lib/use-my-games';
 import { useNow } from '@/lib/use-now';
 import { countryName, playerName, timeLeft, warStatusText } from '@/lib/wars';
@@ -71,10 +72,13 @@ function RoundStatus({ model }: { model: CampaignModel }) {
   const pace =
     rules.war.pace === 'live'
       ? `Live ${rules.war.liveClock}`
-      : `Correspondence · ${rules.war.hoursPerMove === 24 ? '1 day' : `${rules.war.hoursPerMove} hours`} per move`;
+      : `Correspondence · ${perMoveText(rules.war.hoursPerMove)}`;
   const cap = Math.max(rules.war.tokenCap, model.tokens);
   const last = lastRoundOf(rules);
   const final = last !== null && campaign.round >= last;
+  // How the season ends if nobody reaches the points to win first: the campaign's own tiebreak.
+  const toWin = missionRules(rules.victory.version).points.toWin;
+  const seasonEnd = seasonEndText(rules);
   const underway = model.activeWars.length;
   // Players still to take their turns this round, which a new round cuts short.
   const stillDeclaring = model.turns?.current
@@ -90,7 +94,7 @@ function RoundStatus({ model }: { model: CampaignModel }) {
         <p className="text-sm text-muted">{pace}</p>
         {final && campaign.status === 'active' && (
           <p className="text-sm text-amber">
-            The last round: when it ends, the most victory points win, then the most valuable empire.
+            The last round: when it ends, if nobody has reached {toWin} points, {seasonEnd}.
           </p>
         )}
       </div>
@@ -115,8 +119,7 @@ function RoundStatus({ model }: { model: CampaignModel }) {
             disabled={next.isPending}
             onClick={() => {
               const question = final
-                ? `Round ${campaign.round} was the last. End the campaign? The most victory points win, then the most ` +
-                  `valuable empire.${
+                ? `Round ${campaign.round} was the last. End the campaign? ${sentenceCase(seasonEnd)}.${
                     underway > 0
                       ? ` ${underway} ${underway === 1 ? 'war still underway is' : 'wars still underway are'} called off.`
                       : ''

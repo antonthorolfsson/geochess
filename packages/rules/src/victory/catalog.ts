@@ -10,7 +10,8 @@ import type { UserId } from '../draft';
 import { TITLE_KINDS, type TitleKind } from './titles';
 
 /**
- * - `objectives`: public and secret missions score victory points; the first to 7 wins.
+ * - `objectives`: missions (and, from version 5, titles) score victory points; the first to the
+ *   version's `points.toWin` wins, or the most points once the last round ends.
  * - `open`: no fixed end (every campaign before victory missions existed).
  */
 export const VICTORY_MODES = ['objectives', 'open'] as const;

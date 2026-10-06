@@ -144,7 +144,13 @@ export function RulesGuide(props: RulesGuideProps) {
 /** Pages that render once their data arrives miss the browser's own jump to the address's #section. */
 function useScrollToHash() {
   useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    const hash = window.location.hash.slice(1);
+    let id = hash;
+    try {
+      id = decodeURIComponent(hash);
+    } catch {
+      // A malformed escape (#%E0%A4) matches no section, but mustn't break the page.
+    }
     if (id) document.getElementById(id)?.scrollIntoView();
   }, []);
 }

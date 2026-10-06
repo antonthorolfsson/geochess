@@ -1230,6 +1230,9 @@ or read the whole rulebook before it showed them the game).
   `next` (`safeNext`), where the installed app opens (`manifest.ts`), and where "All campaigns",
   leaving or deleting a campaign, the 404 page and a notification without a link go. On a phone the
   signed-in header drops the wordmark (and under 360 pixels the Rules link) to fit.
+- **A malformed `#fragment`** (`/rules#%E0%A4`) no longer breaks the rules pages: `useScrollToHash`
+  decoded it unguarded, and the `URIError` replaced the page. Codex's review of PR #44 found it on
+  the landing page, which no longer needs the hook.
 - **What a visitor sees** (`components/landing/`): the emblem and the pitch, **Start a campaign**
   (`/login?next=/new`, so the usual sign-in goes straight on to the new campaign form; `/new` for a
   player), **See a sample campaign** (an anchor to `#sample`; there is no guest demo) and "Already

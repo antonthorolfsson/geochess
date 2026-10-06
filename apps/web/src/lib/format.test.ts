@@ -60,11 +60,12 @@ describe('number formatting', () => {
 });
 
 describe('safeNext', () => {
-  it('only allows same-site paths', () => {
+  it('only allows same-site paths, and otherwise leads to your campaigns', () => {
     expect(safeNext('/c/abc')).toBe('/c/abc');
-    expect(safeNext('https://evil.example')).toBe('/');
-    expect(safeNext('//evil.example')).toBe('/');
-    expect(safeNext('/\\evil.example')).toBe('/');
-    expect(safeNext(undefined)).toBe('/');
+    expect(safeNext('/')).toBe('/');
+    expect(safeNext('https://evil.example')).toBe('/campaigns');
+    expect(safeNext('//evil.example')).toBe('/campaigns');
+    expect(safeNext('/\\evil.example')).toBe('/campaigns');
+    expect(safeNext(undefined)).toBe('/campaigns');
   });
 });

@@ -72,7 +72,7 @@ export function LobbyPanel({
     mutationFn: () => (isHost ? api.deleteCampaign(campaign.id) : api.leave(campaign.id)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.campaigns });
-      router.push('/');
+      router.push('/campaigns');
     },
     onError: (err) => setError(errorMessage(err)),
   });

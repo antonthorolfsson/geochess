@@ -13,35 +13,41 @@ import {
   lastRoundOf,
   missionRules,
   stakeFloor,
+  type SessionUser,
 } from '@empire/rules';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { inWords, warTokens } from '@/lib/rules-text';
 import { SAMPLE_BATTLE, sampleEmpire } from '@/lib/sample-campaign';
-import { useScrollToHash } from '@/lib/use-scroll-to-hash';
 import { Emblem } from '../app-header';
 import { EmpireSwatch } from '../hatch';
 import { SampleCampaign } from './sample-campaign';
 import { BattleArt, DraftArt, TitlesArt } from './step-art';
 
-/** Signing in first, then straight on to the new campaign form. */
-const START_HREF = '/login?next=/new';
+/**
+ * The session, as far as the page knows it: undefined until it does, then the player or null.
+ * Until it's known, the page shows what a visitor sees; those links still work for a player.
+ */
+type Session = SessionUser | null | undefined;
+
+/** The new campaign form, by way of signing in for a visitor. */
+const startHref = (user: Session) => (user ? '/new' : '/login?next=/new');
 
 const { war } = DEFAULT_RULES;
 const points = missionRules(DEFAULT_RULES.victory.version).points;
 const lastRound = lastRoundOf(DEFAULT_RULES);
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+const TEXT_LINK = 'font-semibold text-paper underline decoration-line-strong underline-offset-4 hover:decoration-paper';
+
 /**
- * The signed-out home page: what the game looks like (a sample campaign on the real map and
- * board), how it plays, and the way in. Every number comes from the rules new campaigns start with.
+ * The home page: what the game looks like (a sample campaign on the real map and board), how it
+ * plays, and the way in. Every number comes from the rules new campaigns start with.
  */
-export function Landing() {
-  // The page appears once the session is known, after the browser's own jump to a #section.
-  useScrollToHash();
+export function Landing({ user }: { user: Session }) {
   return (
     <main className="mx-auto max-w-6xl px-4 pb-16">
-      <Hero />
+      <Hero user={user} />
       <section id="sample" aria-labelledby="sample-heading" className="scroll-mt-4">
         <h2 id="sample-heading" className="sr-only">
           Sample campaign
@@ -52,12 +58,12 @@ export function Landing() {
       <BattleExample />
       <WaysToPlay />
       <RulesInBrief />
-      <ClosingCall />
+      <ClosingCall user={user} />
     </main>
   );
 }
 
-function Hero() {
+function Hero({ user }: { user: Session }) {
   return (
     <section aria-labelledby="landing-heading" className="flex flex-col items-center py-8 text-center sm:py-10">
       <Emblem className="size-16 sm:size-20" />
@@ -72,21 +78,32 @@ function Hero() {
         grow it one war at a time, and every war is decided by a single game of chess.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Link href={START_HREF} className="btn btn-amber">
+        <Link href={startHref(user)} className="btn btn-amber">
           Start a campaign
         </Link>
         <Link href="#sample" className="btn btn-ghost">
           See a sample campaign
         </Link>
       </div>
-      <p className="mt-4 text-muted">
-        Already playing?{' '}
-        <Link
-          href="/login"
-          className="font-semibold text-paper underline decoration-line-strong underline-offset-4 hover:decoration-paper"
-        >
-          Sign in
-        </Link>
+      {/* Kept the same height while the session is unknown, so nothing moves when it's known. */}
+      <p className="mt-4 min-h-7 text-muted">
+        {user ? (
+          <>
+            Signed in as {user.name}.{' '}
+            <Link href="/campaigns" className={TEXT_LINK}>
+              Your campaigns
+            </Link>
+          </>
+        ) : (
+          user === null && (
+            <>
+              Already playing?{' '}
+              <Link href="/login" className={TEXT_LINK}>
+                Sign in
+              </Link>
+            </>
+          )
+        )}
       </p>
     </section>
   );
@@ -410,7 +427,7 @@ function RulesInBrief() {
   );
 }
 
-function ClosingCall() {
+function ClosingCall({ user }: { user: Session }) {
   return (
     <section aria-labelledby="closing-heading" className="mt-16 sm:mt-20">
       <div className="panel flex flex-col items-center gap-4 px-4 py-10 text-center">
@@ -423,12 +440,18 @@ function ClosingCall() {
           link to join.
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-3">
-          <Link href={START_HREF} className="btn btn-amber">
+          <Link href={startHref(user)} className="btn btn-amber">
             Start a campaign
           </Link>
-          <Link href="/login" className="btn btn-ghost">
-            Sign in
-          </Link>
+          {user ? (
+            <Link href="/campaigns" className="btn btn-ghost">
+              Your campaigns
+            </Link>
+          ) : (
+            <Link href="/login" className="btn btn-ghost">
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </section>

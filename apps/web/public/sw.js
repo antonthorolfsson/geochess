@@ -13,14 +13,14 @@ self.addEventListener('push', (event) => {
       icon: '/icons/icon-192.png',
       // Android draws the badge from its alpha channel alone, so it needs the transparent emblem.
       badge: '/icons/emblem.png',
-      data: { url: data.url || '/' },
+      data: { url: data.url || '/campaigns' },
     }),
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  const url = new URL(event.notification.data?.url || '/campaigns', self.location.origin).href;
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

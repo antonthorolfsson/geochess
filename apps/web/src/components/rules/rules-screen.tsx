@@ -28,7 +28,7 @@ export function RulesScreen() {
                 <Link href="/new" className="btn btn-primary">
                   New campaign
                 </Link>
-                <Link href="/" className="btn btn-ghost">
+                <Link href="/campaigns" className="btn btn-ghost">
                   Your campaigns
                 </Link>
               </>

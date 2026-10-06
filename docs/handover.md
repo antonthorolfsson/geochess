@@ -1271,6 +1271,44 @@ or read the whole rulebook before it showed them the game).
 
 Tests since: rules 319, data 73, web 108, sim 29, server 223 (752 in all).
 
+**Rules quick start and scoring text** (2026-10-06, at the user's request: beginners met too much at
+once, and some descriptions still reflected older rules). Text and layout only: no rule, number,
+balance or stored campaign changed.
+
+- **Quick start** (`#quick-start`, first on both rules pages): five steps (how to win, the draft,
+  declaring one war, the chess game, what changes hands), every number from the page's rules. The
+  contents split into "New here?" (the quick start) and "Reference"; each section heading has a
+  Contents link back (`#contents`). Winning moved up after "After a war". **Every existing anchor
+  is kept** (`#idea` … `#settings`, `#fortifying`, `#raising`, `#peace`; the landing page links
+  `/rules#answers`); Winning's parts gained their own (`#points`, `#scoring`, `#public-missions`,
+  `#secret-missions`, `#claims`, `#titles`, `#finish`, `#last-round`).
+- **Winning, rewritten.** Both routes to victory (reaching `points.toWin` at once, when a mission
+  scores or a title moves; or the most points when the host moves on from the last round, then the
+  campaign's tiebreak); permanent mission points, pending claims (not points, and not counted at a
+  season's end) and transferable title points side by side; what scores at once (records, titles)
+  and what waits (positions). The old line "missions make 11 at most, so a winner holds a title or
+  two" was wrong (11 is more than 10): `winningMathText` works it out from the version instead.
+- **Campaign-specific.** A campaign's page reads its own mission rules version (a note says so
+  when it isn't the current one, `missionVersionNote`), tiebreak, hold rule and last round; the
+  standard page reads `DEFAULT_RULES`.
+- **Deadlines.** The standard page gives both paces wherever they differ (`paceTimeText` and the
+  `*TimeText` helpers; the deadlines table has a column per pace, from `deadlineRows`); a
+  campaign's page only its own. Before, the attacker's reply, raises, the secret-mission choice
+  and the deadlines table quoted correspondence times alone.
+- **Elsewhere:** the war panel's last-round notice and end-of-campaign confirmation said "then the
+  most valuable empire" for every campaign; they now quote the campaign's tiebreak
+  (`seasonEndText`). The lobby's Objectives option said "first to 7" (`objectivesText`). The README
+  had pre-revision war defaults (80%, a raise to 125%, tribute), the version 2 default missions,
+  time-held claims and "first to 7, points never lost"; `lib/readme.test.ts` now checks its numbers
+  against the rules. Two stale code comments (`VICTORY_MODES`, `claims.ts`).
+- **Tests:** `components/rules/rules-guide.test.ts` renders the whole guide (`renderToStaticMarkup`)
+  for the standard rules, a live campaign, alternate settings, a version 4 campaign and a stored
+  open-ended one, and checks anchors, the quick start, both routes, the kinds of points and that
+  no contradictory scoring or other pace's deadlines appear. Checked in Chromium at 390 and 1280
+  pixels: no sideways scroll, deep links land, no console errors.
+
+Tests since: rules 319, data 73, web 131, sim 29, server 223 (775 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole

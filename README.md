@@ -25,14 +25,20 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 
 **Phase 2 (War loop)** is in place:
 
-- War tokens (one a round, saved up to three) and host-advanced rounds.
+- War tokens (one a round, saved up to three) and host-advanced rounds. New campaigns declare in
+  turns round the table: one declaration or fortification a turn, and passing ends your declaring
+  for the round.
 - Declaring war on a bordering enemy country, with attackable countries highlighted on the map and
-  a stake builder: the launching country plus connected countries, worth at least 80% of the
-  target.
-- The defender's answers: accept, raise (demand a stake worth 125%), redirect to another country
-  of the same value, or offer tribute. Unanswered declarations go ahead after 24 hours (5 minutes
-  live). New campaigns raise by putting a country into the war, and the stakes can go back and
-  forth up to three raises; whoever raised and then backs down loses the war as declared.
+  a stake builder: the launching country plus connected countries, worth at least 110% of the
+  target (80% in campaigns created before the higher stakes).
+- The defender's answers in new campaigns: accept, raise by putting one of their own countries into
+  the war (the stakes can go back and forth up to three raises; whoever raised and then backs down
+  loses the war as declared), or redirect to a country next to the target, worth the same, for a
+  war token. Either side can offer peace terms until the game ends, and the attacker can call off a
+  declaration until it's answered. A war token fortifies a country, so a war on it needs a stake of
+  150%. Hosts can choose the original answers instead (a free raise to 125%, redirects anywhere,
+  tribute), which campaigns created before keep. Unanswered declarations go ahead after 24 hours
+  (5 minutes live).
 - Chess on Lichess's chessground board with moves checked on the server by chessops, in live
   (blitz) or correspondence campaigns: server clocks with lag compensation, clock modifiers for
   home turf, terrain and supply lines, premoves, typed moves, draw offers, and an optional
@@ -71,28 +77,41 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
   the most-played openings, named from the Lichess openings list.
 
 **Victory missions** are in place. New campaigns play **Objectives** (the host can switch a
-campaign to open-ended in the lobby; campaigns created before missions existed stay open-ended):
+campaign to open-ended in the lobby; campaigns created before missions existed stay open-ended).
+The numbers here are new campaigns' (mission rules version 6); each campaign keeps the version it
+was created with, and the rules page inside a campaign quotes its own.
 
 - Four **public missions**, worth 2 victory points each, chosen and shown with their exact targets
   in the lobby and locked when the draft starts. The default set is Expansion, Strategic
-  Positions, The Great Connection and Campaign Veteran; the host can pick any four of sixteen
-  (among them Mare Nostrum, One Billion, Seven Wonders and Kingslayer), or have four drawn at
-  random, and draw new targets.
+  Positions, Great Powers and Campaign Veteran; the host can pick any four of sixteen (among them
+  Mare Nostrum, Two Billion, Seven Wonders and Kingslayer), or have four drawn at random, and draw
+  new targets.
   Every player can score each public mission once: one player scoring it takes nothing from the
   others.
 - One **secret mission** per player, worth 3. When the draft ends, each player is dealt up to three
   options fitted to their empire (Northern Passage, Black Sea, Silk Road, Encirclement, Strait
   Keeper, Two-Theater Power, Nemesis, Backstab, Checkmate Artist and more), privately, and chooses
   one before round 1; the best fit is assigned if time runs out. A secret mission is revealed to
-  everyone, for good, once its player is one step from completing it, or completes it.
-- **Claims and the response window.** Completing a territorial mission starts a public claim. It
-  scores only once the round after next has started, at least 24 hours (10 minutes live) after
-  the next round started, if the position was held throughout and no unresolved war could still
-  break it. Campaign Veteran scores as soon as it's done.
-- **Winning.** The first to 7 points wins: two public missions and the secret, or all four public
-  ones. Points are never lost. Players crossing the line together are ranked by points, and equal
-  points share the victory. The campaign then becomes read-only: wars underway are cancelled
-  without a result (moves kept), and every secret mission is revealed in the final results.
+  everyone, for good, once its player is one step from completing it (missions to hold named
+  countries only once complete), or completes it.
+- Four **titles**, worth 1 point each, for leading the table on population, land, GDP and military
+  might. They go to the leaders when round 1 starts and move, points and all, the moment someone
+  passes the holder: the only points that can be lost.
+- **Claims and the response window.** Completing a position starts a public claim, which is not a
+  point yet. It scores once the round after next has started and every player has had their turns
+  to declare war in a round since (campaigns without turns, and those created before 2026-10-05,
+  wait at least 24 hours, or 10 minutes live, after the next round starts instead), if the position
+  was held throughout and no unresolved war could still break it. Records score the moment they're
+  done, with no claim: Campaign Veteran, Kingslayer, Lightning Campaign, Backstab, Iron Wall and
+  Checkmate Artist.
+- **Winning.** The first to 10 points wins at once, whether a mission scored or a title moved
+  (campaigns created before titles play to 7). Missions alone can make 11 (all four public ones and
+  the secret), so a title is never required. Players crossing the line together are ranked by
+  points, and equal points share the victory. If nobody has reached 10 when the last round ends
+  (round 25 as standard), the most points win, then the largest population, then the most land,
+  then the largest GDP (the most valuable empire in campaigns created before 2026-10-02). The
+  campaign then becomes read-only: wars underway are cancelled without a result (moves kept), and
+  every secret mission is revealed in the final results.
 - A **Missions** tab (a column tab on desktop) with the race for points, your secret mission and
   your progress, claims waiting to score and what threatens them, everyone's progress on the
   public missions, and each mission's targets and routes on the map. Victory points lead the

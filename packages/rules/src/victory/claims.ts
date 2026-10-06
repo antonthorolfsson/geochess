@@ -3,8 +3,9 @@
  * round R+2 starts, nor before every rival has had their turns to answer it: declaring has run to
  * its end in a round after R (`rules.victory.hold` of `turns`), or, in campaigns that hold by
  * time, the minimum holding time has passed since round R+1 started. It never scores while a war
- * could still break it. Points never go away; the first to reach the target wins, and players who
- * cross it together are ranked by their totals (equal totals share it).
+ * could still break it. Mission points never go away (titles move with the lead); the first to reach
+ * the target wins, and players who cross it together are ranked by their totals (equal totals share
+ * it).
  */
 import type { CampaignRules } from '../config';
 import type { TerritoryId } from '../dataset';

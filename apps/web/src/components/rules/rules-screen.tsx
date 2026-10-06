@@ -16,8 +16,8 @@ export function RulesScreen() {
         <header>
           <h1 className="font-stencil text-[2.5rem] leading-tight tracking-wide">How to play</h1>
           <p className="mt-1 text-lg text-muted">
-            The whole game in one page, with each round step by step. Inside a campaign, the Rules button shows the
-            settings that campaign plays with.
+            New? Start with the quick start: five steps to your first war. The complete rules follow. Inside a campaign,
+            the Rules button shows the settings that campaign plays with.
           </p>
         </header>
         <RulesGuide variant="standard" />

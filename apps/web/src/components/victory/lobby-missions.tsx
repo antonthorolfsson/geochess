@@ -15,6 +15,7 @@ import {
   publicMissionIssue,
   selectionMs,
   tiebreakText,
+  type CampaignRules,
   type PublicMissionKind,
   type TerritoryId,
   type VictoryMode,
@@ -24,6 +25,7 @@ import { useId, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
+import { inWords, objectivesText, sentenceCase } from '@/lib/rules-text';
 import { Notice } from '../ui';
 import { MissionCard } from './mission-card';
 import type { MissionFocus } from './missions-panel';
@@ -32,12 +34,9 @@ import type { MissionFocus } from './missions-panel';
 const withCurrent = (presets: readonly number[], current: number | null) =>
   current === null || presets.includes(current) ? presets : [...presets, current].sort((a, b) => a - b);
 
-const MODES: { value: VictoryMode; title: string; body: string }[] = [
-  {
-    value: 'objectives',
-    title: 'Objectives',
-    body: 'Four public missions and a secret one for each player. The first to 7 victory points wins, or the most points when the last round ends.',
-  },
+/** The victory modes, in the words of the campaign's own mission rules and last round. */
+const modes = (rules: CampaignRules): { value: VictoryMode; title: string; body: string }[] => [
+  { value: 'objectives', title: 'Objectives', body: objectivesText(rules) },
   { value: 'open', title: 'Open-ended', body: 'No fixed end: play for as long as the group likes.' },
 ];
 
@@ -89,7 +88,7 @@ export function LobbyMissions({
       <div className="space-y-4 rounded-[3px] border border-line p-3">
         <fieldset className="space-y-1">
           <legend className="sr-only">Victory mode</legend>
-          {MODES.map((mode) => (
+          {modes(rules).map((mode) => (
             <label key={mode.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
               <input
                 type="radio"
@@ -113,7 +112,7 @@ export function LobbyMissions({
               Public missions are worth {cfg.points.public} points each, and everyone can score every one. After the
               draft each player privately picks a secret mission worth {cfg.points.secret}.{' '}
               {cfg.titles
-                ? `Four titles worth ${cfg.titles.points} each go to whoever leads on population, land, GDP and military might, and move with the lead; mission points are never lost. The first to ${cfg.points.toWin} wins.`
+                ? `${sentenceCase(inWords(cfg.titles.kinds.length))} titles worth ${cfg.titles.points} each go to whoever leads on population, land, GDP and military might, and move with the lead; mission points are never lost. The first to ${cfg.points.toWin} wins.`
                 : `Points are never lost; the first to ${cfg.points.toWin} wins.`}{' '}
               {holdsByTurns(rules)
                 ? 'A completed position scores once the round after next has started, if everyone has had their turns to declare war in a round since.'

@@ -1,11 +1,14 @@
 import {
+  CURRENT_MISSION_RULES,
   MATCHED_RAISE_MIN_PCT,
   MAX_VALUE,
+  MISSIONS,
   RESPONSE_WINDOW_TEXT,
   TURN_WINDOW_TEXT,
   durationText,
   holdMs,
   holdsByTurns,
+  kindName,
   missionRules,
   raiseFloor,
   selectionMs,
@@ -14,6 +17,8 @@ import {
   type CampaignRules,
   type Handicap,
   type LiveClock,
+  type MissionKind,
+  type MissionRules,
   type Pace,
   type PlayerRating,
 } from '@empire/rules';
@@ -80,7 +85,204 @@ export function stakeTable(rules: CampaignRules, top = MAX_VALUE): { value: numb
   return values.map((value) => ({ value, stake: stakeFloor(rules, value), raised: raiseFloor(rules, value) }));
 }
 
-const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+export const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Whether the campaign's stakes can be raised back and forth. */
+export const backAndForth = (rules: CampaignRules) => rules.war.raise === 'matched' && rules.war.raises > 1;
+
+export const otherPace = (pace: Pace): Pace => (pace === 'live' ? 'correspondence' : 'live');
+
+/** The rules as they read at another pace: what the standard rules quote for the pace they don't play. */
+const atPace = (rules: CampaignRules, pace: Pace): CampaignRules => ({ ...rules, war: { ...rules.war, pace } });
+
+/**
+ * A time that depends on the pace. A campaign's page quotes its own; the standard rules quote the
+ * standard pace's, then the other's: "24 hours (5 minutes in live campaigns)".
+ */
+export function paceTimeText(rules: CampaignRules, standard: boolean, time: (rules: CampaignRules) => string): string {
+  const own = time(rules);
+  if (!standard) return own;
+  const other = otherPace(rules.war.pace);
+  return `${own} (${time(atPace(rules, other))} in ${other} campaigns)`;
+}
+
+/** How long a player has to answer a declaration, a counter, peace terms or an accord proposal. */
+export const answerTimeText = (rules: CampaignRules, standard: boolean) =>
+  paceTimeText(rules, standard, (r) => RESPONSE_WINDOW_TEXT[r.war.pace]);
+
+/** How long a turn to declare lasts. */
+export const turnTimeText = (rules: CampaignRules, standard: boolean) =>
+  paceTimeText(rules, standard, (r) => TURN_WINDOW_TEXT[r.war.pace]);
+
+/** How long players have to choose a secret mission once the draft ends. */
+export const selectionTimeText = (rules: CampaignRules, standard: boolean) =>
+  paceTimeText(rules, standard, (r) => durationText(selectionMs(r)));
+
+/** How long a claim is held after the next round starts, where claims are held for a time. */
+export const holdTimeText = (rules: CampaignRules, standard: boolean) =>
+  paceTimeText(rules, standard, (r) => durationText(holdMs(r)));
+
+export interface DeadlineRow {
+  who: string;
+  /** The time allowed at each pace asked for, in the order asked. */
+  times: string[];
+  silence: string;
+}
+
+/**
+ * Everything that waits on a player, how long it waits at each of `paces`, and what silence does.
+ * A campaign's page asks for its own pace; the standard rules for both.
+ */
+export function deadlineRows(rules: CampaignRules, paces: readonly Pace[] = [rules.war.pace]): DeadlineRow[] {
+  const { war } = rules;
+  const row = (who: string, time: (r: CampaignRules) => string, silence: string): DeadlineRow => ({
+    who,
+    times: paces.map((pace) => time(atPace(rules, pace))),
+    silence,
+  });
+  const answer = (r: CampaignRules) => RESPONSE_WINDOW_TEXT[r.war.pace];
+  return [
+    ...(war.turns
+      ? [
+          row(
+            'A player takes their turn to declare',
+            (r) => TURN_WINDOW_TEXT[r.war.pace],
+            'They pass, and are done declaring for the round.',
+          ),
+        ]
+      : []),
+    row('The defender answers a declaration', answer, 'The war goes ahead as declared.'),
+    row(
+      war.raise === 'off' ? 'The attacker replies to a redirect' : 'The attacker replies to a raise or redirect',
+      answer,
+      'The war is called off, and the token is spent.',
+    ),
+    ...(backAndForth(rules)
+      ? [
+          row('The defender answers the attacker’s raise', answer, 'They back down: the target goes to the attacker.'),
+          row(
+            'The attacker answers a raise after raising',
+            answer,
+            'They back down: the stake as declared goes to the defender.',
+          ),
+        ]
+      : []),
+    war.peaceTerms
+      ? row(
+          'A player answers peace terms',
+          (r) => `${answer(r)}, or before their next move in the game`,
+          'The offer lapses.',
+        )
+      : row('The attacker replies to a tribute offer', answer, 'The tribute is accepted.'),
+    row('A player answers an accord proposal', answer, 'The proposal lapses.'),
+    row(
+      'A player moves',
+      (r) => (r.war.pace === 'live' ? `On the clock, ${r.war.liveClock}` : perMoveText(r.war.hoursPerMove)),
+      'They lose the game.',
+    ),
+    row('A player answers a result reported over the board', answer, 'The result stands.'),
+    ...(rules.victory.mode === 'objectives'
+      ? [
+          row(
+            'A player chooses a secret mission',
+            (r) => durationText(selectionMs(r)),
+            'The option that fits them best is chosen for them.',
+          ),
+        ]
+      : []),
+  ];
+}
+
+/** The most points missions can make: every public mission, and the secret. */
+export const missionPointsMax = (cfg: MissionRules) => cfg.publicCount * cfg.points.public + cfg.points.secret;
+
+/**
+ * How points add up to a win, in a sentence or two: whether missions alone can get there (so
+ * whether titles are ever needed) and, without titles, whether the secret is.
+ */
+export function winningMathText(cfg: MissionRules): string {
+  const { public: pub, secret, toWin } = cfg.points;
+  const most = missionPointsMax(cfg);
+  const all = cfg.publicCount * pub;
+  if (cfg.titles) {
+    const each = cfg.titles.points;
+    const titles = (n: number) => (n === 1 ? 'one title' : `${inWords(n)} titles`);
+    if (most < toWin) {
+      const need = Math.ceil((toWin - most) / each);
+      return (
+        `Missions make ${most} points at most, ${toWin - most} short of the ${toWin} to win, so a winner holds at ` +
+        `least ${titles(need)} as well.`
+      );
+    }
+    // A mix with one public mission fewer, made up with titles.
+    const fewer = cfg.publicCount - 1;
+    const short = toWin - (fewer * pub + secret);
+    const mix = Math.ceil(short / each);
+    const example =
+      short > 0 && mix <= cfg.titles.kinds.length
+        ? ` With titles, fewer missions will do: ${inWords(fewer)} public missions, the secret and ${titles(mix)} make ` +
+          `${fewer * pub + secret + mix * each}.`
+        : '';
+    return (
+      `Missions alone can make ${most} points (all ${inWords(cfg.publicCount)} public missions and the secret), ` +
+      `${most > toWin ? 'more than' : 'exactly'} the ${toWin} to win, so no title is ever required.${example}`
+    );
+  }
+  if (most < toWin) return `Missions make ${most} points at most, so a campaign can only end at its last round.`;
+  const withSecret = Math.max(0, Math.ceil((toWin - secret) / pub));
+  const without = Math.ceil(toWin / pub);
+  const mix =
+    withSecret === 0
+      ? `The secret alone makes ${secret}`
+      : `${sentenceCase(inWords(withSecret))} public ${withSecret === 1 ? 'mission' : 'missions'} and the secret make ${withSecret * pub + secret}`;
+  const publicOnes = without === cfg.publicCount ? `all ${inWords(without)}` : inWords(without);
+  return without <= cfg.publicCount
+    ? `${mix}, and ${publicOnes} public ones make ${without * pub}, so a player can win without their secret.`
+    : `${mix}; all ${inWords(cfg.publicCount)} public ones make only ${all}, so every winner needs their secret.`;
+}
+
+/**
+ * Missions that are records, not positions (wars won, an accord broken): they score the moment
+ * they're complete, with no claim. By scope, as the version deals them.
+ */
+export function recordMissions(cfg: MissionRules): { public: string[]; secret: string[] } {
+  const records = (kinds: readonly MissionKind[]) =>
+    kinds.filter((k) => MISSIONS[k].timing === 'historic').map((k) => kindName(k, cfg));
+  return { public: records(cfg.publicKinds), secret: records(cfg.secretKinds) };
+}
+
+/** How a season ends when nobody reaches the target: "the most victory points win, then …". */
+export const seasonEndText = (rules: CampaignRules) =>
+  `the most victory points win, then ${tiebreakText(rules.victory.tiebreak)}`;
+
+/** An Objectives campaign in a sentence, as the lobby offers it. */
+export function objectivesText(rules: CampaignRules): string {
+  const cfg = missionRules(rules.victory.version);
+  const last = rules.victory.lastRound;
+  return (
+    `${sentenceCase(inWords(cfg.publicCount))} public missions and a secret one for each player` +
+    `${cfg.titles ? ', and titles for leading the table' : ''}. The first to ${cfg.points.toWin} victory points wins` +
+    `${last === null ? '' : `, or the most points when round ${last} ends`}.`
+  );
+}
+
+/**
+ * Why a campaign's Winning rules differ from the standard ones, if they do: it keeps the mission
+ * rules version it was created with.
+ */
+export function missionVersionNote(rules: CampaignRules): string | null {
+  const { version } = rules.victory;
+  if (rules.victory.mode !== 'objectives' || version === CURRENT_MISSION_RULES) return null;
+  const cfg = missionRules(version);
+  const current = missionRules(CURRENT_MISSION_RULES);
+  const changes = [
+    cfg.points.toWin !== current.points.toWin && `${cfg.points.toWin} points to win`,
+    !cfg.titles && current.titles && 'no titles',
+  ].filter((s): s is string => Boolean(s));
+  return `This campaign plays mission rules version ${version}, which it was created with${
+    changes.length > 0 ? ` (${changes.join(', ')})` : ''
+  }: the missions, numbers and points here are its own. New campaigns play version ${CURRENT_MISSION_RULES}.`;
+}
 
 /** The host's settings, in the words the rules use. */
 export function settingsList(rules: CampaignRules): { label: string; value: string }[] {

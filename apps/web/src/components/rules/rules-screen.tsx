@@ -12,7 +12,7 @@ export function RulesScreen() {
   return (
     <div className="min-h-dvh">
       <AppHeader />
-      <main className="mx-auto max-w-3xl space-y-8 px-4 py-8">
+      <main className="readable mx-auto max-w-3xl space-y-8 px-4 py-8">
         <header>
           <h1 className="font-stencil text-[2.5rem] leading-tight tracking-wide">How to play</h1>
           <p className="mt-1 text-lg text-muted">
@@ -34,10 +34,11 @@ export function RulesScreen() {
               </>
             ) : (
               <>
-                <p className="w-full text-muted">
-                  Ready? Sign in, start a campaign and send the invite link to your group.
-                </p>
-                <Link href="/login" className="btn btn-primary">
+                <p className="w-full text-muted">Ready? Start a campaign and send the invite link to your group.</p>
+                <Link href="/login?next=/new" className="btn btn-amber">
+                  Start a campaign
+                </Link>
+                <Link href="/login" className="btn btn-ghost">
                   Sign in
                 </Link>
               </>

@@ -1057,9 +1057,24 @@ const MISSION_RULES: Record<number, MissionRules> = {
 /** The mission rules version new campaigns are created with. */
 export const CURRENT_MISSION_RULES = MISSION_RULES_V6.version;
 
+/**
+ * Numbers the balance simulator tries before any version carries them (`packages/sim`, a what-if's
+ * `missionRules`), generation and dealing included. They're registered in the simulator's process
+ * only, under a version of 1000 or more: the server fixes a campaign's version when it's created,
+ * so the game never plays one.
+ */
+const TRIAL_MISSION_RULES = new Map<number, MissionRules>();
+
+/** Registers trial numbers and returns the version to play them under. */
+export function registerTrialMissionRules(rules: MissionRules): number {
+  const version = 1000 + TRIAL_MISSION_RULES.size;
+  TRIAL_MISSION_RULES.set(version, { ...rules, version });
+  return version;
+}
+
 /** The numbers a campaign plays with, by the version it stored. */
 export function missionRules(version: number): MissionRules {
-  const rules = MISSION_RULES[version];
+  const rules = MISSION_RULES[version] ?? TRIAL_MISSION_RULES.get(version);
   if (!rules) throw new Error(`Unknown mission rules version: ${version}`);
   return rules;
 }

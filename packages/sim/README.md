@@ -92,8 +92,14 @@ pnpm sim:report whatif-<name> --compare baseline
 leading the table on population, land, GDP and military spending (`Variant.titles`, played in
 `src/engine/titles.ts`); see the balance report's "Titles".
 
-Generation parameters (how targets are chosen and options dealt) are read from the catalog by
-version and can't be varied here.
+A variant can also play other mission rules altogether (`Variant.missionRules`, given the
+version's and returning its own): targets are then generated, options dealt and missions specified
+with those numbers, as a lobby would with a version carrying them, so an option that no longer
+fits isn't offered. The simulator registers them as a trial version (`registerTrialMissionRules`,
+1000 and up) in its own process only; the server never has one. `sets-plus-one` and `sets-all`
+(and their `-forced` forms, paired with `secrets`) play the named seas and regions needing one
+country more, or all of them; see the balance report's "Named regions, harder". Patches
+(`patchSecret`, `patchPublic`) change a mission after it's dealt, so the deal itself is today's.
 
 ## Datasets and value scales
 

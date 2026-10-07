@@ -59,7 +59,10 @@ export interface CampaignRecord {
   draftMode: string;
   mode: string;
   seed: number;
-  /** The mission rules version played, and the season's last round (null: none). Unset in older records. */
+  /**
+   * The mission rules version played (the one a variant's trial numbers start from), and the
+   * season's last round (null: none). Unset in older records.
+   */
   missionVersion?: number;
   lastRound?: number | null;
   publics: string[];
@@ -163,7 +166,7 @@ export function recordOf(s: SimState, ms: number): CampaignRecord {
     draftMode: s.cfg.draftMode,
     mode: s.cfg.mode,
     seed: s.seed,
-    missionVersion: s.rules.victory.version,
+    missionVersion: s.cfg.missionVersion,
     lastRound: s.rules.victory.lastRound,
     publics: s.publicSpecs.map((spec) => spec.kind),
     rounds,

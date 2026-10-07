@@ -2,6 +2,7 @@ import {
   REVISED_WAR_RULES,
   missionRules,
   parseRules,
+  registerTrialMissionRules,
   type CampaignRules,
   type DatasetIndex,
   type TerritoryId,
@@ -45,10 +46,29 @@ export function emptyStats(): WarStats {
   };
 }
 
+const trials = new Map<string, number>();
+
 /**
- * The campaign's rules: Objectives at the configured mission rules version and last round, claims
- * held through a round's turns as new campaigns hold them, the scenario's draft mode and war
- * settings (over a new campaign's answers), the variant's too.
+ * The mission rules version played: the configured one, or, for a variant with mission rules of
+ * its own, the trial version they're registered under (once per variant and version).
+ */
+function playedVersion(cfg: SimConfig): number {
+  const patch = cfg.variant?.missionRules;
+  if (!patch) return cfg.missionVersion;
+  const key = `${cfg.variant!.name}|${cfg.missionVersion}`;
+  let version = trials.get(key);
+  if (version === undefined) {
+    version = registerTrialMissionRules(patch(missionRules(cfg.missionVersion)));
+    trials.set(key, version);
+  }
+  return version;
+}
+
+/**
+ * The campaign's rules: Objectives at the configured mission rules version (or the variant's
+ * trial on top of it) and last round, claims held through a round's turns as new campaigns hold
+ * them, the scenario's draft mode and war settings (over a new campaign's answers), the variant's
+ * too.
  */
 export function simRules(cfg: SimConfig): CampaignRules {
   const lastRound = cfg.variant?.lastRound !== undefined ? cfg.variant.lastRound : cfg.lastRound;
@@ -56,7 +76,7 @@ export function simRules(cfg: SimConfig): CampaignRules {
     maxPlayers: 8,
     draft: { mode: cfg.draftMode },
     war: { ...REVISED_WAR_RULES, pace: cfg.pace, ...cfg.war, ...cfg.variant?.war },
-    victory: { mode: 'objectives', version: cfg.missionVersion, lastRound, hold: 'turns' },
+    victory: { mode: 'objectives', version: playedVersion(cfg), lastRound, hold: 'turns' },
   });
 }
 

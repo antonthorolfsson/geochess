@@ -1,11 +1,12 @@
 /**
  * What-if variants: changes to the missions tried in the simulator only, never in the game. A
  * variant can patch mission specs (their thresholds live in the specs), keep kinds out of play,
- * add a condition on completion, or change the points and the host's war settings. Generation
- * parameters (which `missionRules(version)` reads from the catalog) can't be varied here.
+ * add a condition on completion, change the points and the host's war settings, or play other
+ * mission rules, generation and dealing included (`missionRules`).
  */
 import type {
   DatasetIndex,
+  MissionRules,
   MissionSpec,
   MissionWorld,
   PublicMissionKind,
@@ -34,6 +35,12 @@ export interface PublicPatchContext extends VariantContext {
 export interface Variant {
   name: string;
   description: string;
+  /**
+   * Mission rules in place of the version's own: targets are generated, options dealt and
+   * missions specified with them, as a lobby would with a version carrying these numbers. Played
+   * as a trial version only the simulator knows (`registerTrialMissionRules`).
+   */
+  missionRules?(base: MissionRules): MissionRules;
   /** A public mission after its targets are generated. */
   patchPublic?(spec: PublicMissionSpec, ctx: PublicPatchContext): PublicMissionSpec;
   /** A secret mission after it's dealt. */

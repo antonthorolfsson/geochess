@@ -1,7 +1,10 @@
 import {
+  CURRENT_MISSION_RULES,
+  NAMED_SET_KINDS,
   WHITE_PEACE,
   attackableTargets,
   missionComplete,
+  missionRules,
   protectedEpisodes,
   raiseDemand,
   raiseOptions,
@@ -25,6 +28,7 @@ import { isComplete } from '../src/engine/victory';
 import { missionWorld } from '../src/engine/world';
 import { recordOf } from '../src/record';
 import { baseConfig } from '../src/scenarios';
+import { VARIANTS } from '../src/variants-catalog';
 import { ORIGINAL_ANSWERS, awardsOf, declareOn, give, idx, pointsOf, result, scripted, targetOf, war } from './helpers';
 
 /** In the scripted three-player draft p1 holds France, Germany and Italy; p2 China; p3 India. */
@@ -530,5 +534,23 @@ describe('the season', () => {
       'great_powers',
       'campaign_veteran',
     ]);
+  });
+
+  it('plays a variant’s own mission rules, dealing included, as a trial on top of the version', () => {
+    const { variant } = VARIANTS['sets-all']!;
+    const dealOnly = { variant, mode: 'horizon', roundCap: 1 } as const;
+    const s = play(6, 1, dealOnly);
+    expect(s.rules.victory.version).toBeGreaterThanOrEqual(1000);
+    expect(s.mr.namedSets.every((t) => t.need === t.territories.length && t.reveal === t.need)).toBe(true);
+    const dealt = s.players
+      .flatMap((p) => p.options.map((o) => o.spec))
+      .filter((spec) => (NAMED_SET_KINDS as readonly string[]).includes(spec.kind));
+    expect(dealt.length).toBeGreaterThan(0);
+    for (const spec of dealt) expect(spec).toMatchObject({ need: 'territories' in spec && spec.territories.length });
+    // Registered once, recorded as the version it starts from, which is left as it was.
+    expect(play(6, 2, dealOnly).rules.victory.version).toBe(s.rules.victory.version);
+    expect(recordOf(s, 0).missionVersion).toBe(CURRENT_MISSION_RULES);
+    const northern = missionRules(CURRENT_MISSION_RULES).namedSets.find((t) => t.kind === 'northern_passage');
+    expect(northern?.need).toBe(2);
   });
 });

@@ -15,8 +15,10 @@ import {
   pathWithin,
   roundAt,
   shuffled,
+  type MissionRules,
   type MissionSpec,
   type MissionWorld,
+  type NamedSetTemplate,
   type PublicMissionSpec,
   type SecretMissionSpec,
   type TerritoryId,
@@ -637,3 +639,34 @@ VARIANTS['no-titles'] = {
     points: { toWin: 7 },
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Named seas and regions, harder (October 2026). Version 6's need half their countries, at least
+// two: two of four (Northern Passage), three of five (Caspian), five of nine (Baltic League).
+// These need one more, or all of them, still revealed only once complete. They're dealt with
+// their own numbers (`missionRules`), as a lobby would deal them, so an option that would now
+// take too many conquests, or whose countries don't hang together, isn't offered at all.
+
+/** Mission rules whose named sets need `need` of their countries (at most all of them). */
+const namedSetsNeeding =
+  (need: (t: NamedSetTemplate) => number) =>
+  (mr: MissionRules): MissionRules => ({
+    ...mr,
+    namedSets: mr.namedSets.map((t) => {
+      const n = Math.min(t.territories.length, need(t));
+      return { ...t, need: n, reveal: n };
+    }),
+  });
+
+for (const [name, what, need] of [
+  ['sets-plus-one', 'one country more (three of four, four of five)', (t: NamedSetTemplate) => t.need + 1],
+  ['sets-all', 'all their countries', (t: NamedSetTemplate) => t.territories.length],
+] as const) {
+  const variant: Variant = {
+    name,
+    description: `Named seas and regions need ${what}, revealed once complete, and are dealt with those numbers.`,
+    missionRules: namedSetsNeeding(need),
+  };
+  VARIANTS[name] = { variant };
+  VARIANTS[`${name}-forced`] = { scenario: 'secrets', variant: { ...variant, name: `${name}-forced` } };
+}

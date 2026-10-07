@@ -27,7 +27,7 @@ const s = runScenarioCampaign(cfg, seed, idx);
 const out: string[] = [];
 out.push(
   `${cfg.scenario} · ${players} players · ${cfg.pace} · ${cfg.draftMode} draft · seed ${seed} · ` +
-    `dataset ${idx.dataset.version} · mission rules ${s.rules.victory.version} · last round ${s.rules.victory.lastRound ?? 'none'}`,
+    `dataset ${idx.dataset.version} · mission rules ${s.cfg.missionVersion}${cfg.variant?.missionRules ? ' (with trial numbers)' : ''} · last round ${s.rules.victory.lastRound ?? 'none'}`,
 );
 out.push('Public missions:');
 for (const spec of s.publicSpecs) out.push(`  ${missionName(spec)}: ${JSON.stringify(spec)}`);

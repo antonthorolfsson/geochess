@@ -12,7 +12,16 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Config } from 'chessground/config';
 import type { Key } from 'chessground/types';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+  type RefObject,
+} from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys, newerGame, toBoardGame, useGame, type BoardGame } from '@/lib/queries';
@@ -25,8 +34,12 @@ import { Board } from './board';
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** A war game: the board, both clocks, the moves, and the player's controls. */
+/**
+ * A war game: the board, both clocks, the moves, and the player's controls. `ref` is the panel, which
+ * can take focus: the campaign screen moves focus here when the panel it was in folds away.
+ */
 export function GamePanel({
+  ref,
   model,
   gameId,
   onClose,
@@ -34,6 +47,7 @@ export function GamePanel({
   fullscreen,
   onFullscreen,
 }: {
+  ref?: Ref<HTMLElement>;
   model: CampaignModel;
   gameId: string;
   onClose(): void;
@@ -43,11 +57,19 @@ export function GamePanel({
   onFullscreen(): void;
 }) {
   const query = useGame(gameId);
+  const panelRef = useRef<HTMLElement>(null);
+  useImperativeHandle(ref, () => panelRef.current!, []);
   return (
-    <section aria-label="Game" className={`flex flex-col ${fullscreen ? 'h-full' : 'min-h-full'}`}>
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      aria-label="Game"
+      className={`flex flex-col outline-none ${fullscreen ? 'h-full' : 'min-h-full'}`}
+    >
       {query.data ? (
         <GameBoard
           key={query.data.id}
+          panelRef={panelRef}
           model={model}
           game={query.data}
           onClose={onClose}
@@ -99,6 +121,7 @@ function FullscreenButton({ on, onClick }: { on: boolean; onClick(): void }) {
 }
 
 function GameBoard({
+  panelRef,
   model,
   game,
   onClose,
@@ -106,6 +129,8 @@ function GameBoard({
   fullscreen,
   onFullscreen,
 }: {
+  /** The whole panel: arrow keys step through the moves from anywhere in it. */
+  panelRef: RefObject<HTMLElement | null>;
   model: CampaignModel;
   game: BoardGame;
   onClose(): void;
@@ -142,13 +167,12 @@ function GameBoard({
     [browsing, chess, game.moves, shownPly],
   );
   const goTo = useCallback((ply: number) => setViewPly(ply >= plies ? null : Math.max(0, ply)), [plies]);
-  const sectionRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       const target = e.target as HTMLElement | null;
       // Only from the board's own panel, or with nothing in particular focused: the map pans with arrows.
-      if (target && target !== document.body && !sectionRef.current?.contains(target)) return;
+      if (target && target !== document.body && !panelRef.current?.contains(target)) return;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
       const to =
         e.key === 'ArrowLeft'
@@ -166,7 +190,7 @@ function GameBoard({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shownPly, plies, goTo]);
+  }, [shownPly, plies, goTo, panelRef]);
 
   const [error, setError] = useState<string | null>(null);
   const [resync, setResync] = useState(0);
@@ -268,7 +292,7 @@ function GameBoard({
   };
 
   return (
-    <div ref={sectionRef} className={`flex flex-1 flex-col gap-3 p-3 lg:p-4 ${fullscreen ? 'min-h-0' : ''}`}>
+    <div className={`flex flex-1 flex-col gap-3 p-3 lg:p-4 ${fullscreen ? 'min-h-0' : ''}`}>
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="label">{game.armageddon ? 'Armageddon · Black wins a draw' : 'War game'}</div>

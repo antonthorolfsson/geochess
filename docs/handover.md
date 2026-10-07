@@ -1331,6 +1331,56 @@ open-ended rules. Checked in Chromium at 390 and 1280 pixels.
 
 Tests since: rules 319, data 73, web 137, sim 29, server 223 (781 in all).
 
+**A responsive campaign screen** (2026-10-07, at the user's request: from 1024 pixels the screen
+had three columns, 340 and 360 pixels wide, which left the map 324 pixels at 1024, and 224 beside a
+game's 460-pixel column). Layout only: no rule changed.
+
+- **Three columns only while the map keeps its room.** `roomLayout()` (`lib/room-layout.ts`, with
+  tests) shares out the room under the header. The left column (the lobby, draft or war room, the
+  missions, diplomacy) stays open only while the map keeps 600 pixels beside both columns
+  (`MAP_MIN`): from 1300 pixels wide while planning. Narrower, it folds into a 64-pixel rail along
+  the left edge, a button per section with the column's counts; a button opens its section over
+  the map as a drawer, and the button again, ✕ or Escape closes it. Under 1024 pixels
+  (`useIsDesktop`) phones and portrait tablets keep their layout: tabs along the bottom, sheets
+  over the map, the board over everything, full screen as before.
+- **The board comes first in a game.** A game's column is as wide as the board can be with both
+  clocks fitting the room's height (`GAME_CHROME`), 420 to 680 pixels, leaving the map at least 360;
+  the left column folds first. At 1440 × 900 the board grew from 428 to about 630 pixels; at
+  1024 × 768 to about 505, with 421 pixels of map (was 224).
+- **Nothing is lost when panels open, close or fold.** The column and the drawer are one element,
+  so folding keeps what's in it. Its sections, and the phone's tabs, mount the first time they show
+  and stay mounted, hidden, after: a scroll position, a half-filled form or a stake being built
+  (the phone's sheet stays under other tabs) survive switching away. A chat box keeps unsent text
+  per conversation in memory (`Composer`'s `draftKey`). The map never remounts, and the drawer
+  covers it without moving it; framing keeps clear of the drawer (`WorldMap`'s `leftInset`), and
+  so do the search and toggles (beside it, wrapping to two rows, or hidden under it when there's no
+  room). A hidden Diplo panel marks nothing read (`DiploPanel`'s `active`). Closing the drawer on
+  Diplo is leaving Diplo, which drops `?chat=` as before; a game folding the column isn't.
+- **What's waiting stays in sight.** The header shows every call to action, not only the most
+  pressing: the first filled in amber, the rest outlined, from 768 pixels up ("Your move", "Your
+  turn", "Answer needed"); each goes where it names, opening the drawer if need be. The rail keeps
+  the column's badges.
+- **Keyboard.** A section opened from the rail takes focus (its heading); closing puts focus back on
+  the button. If the column folds while it has focus (a game opened from the war room), focus goes
+  to the game, whose panel now takes focus and steps through moves with the arrow keys, or to the
+  rail. Closing a game puts focus back where it was opened from. Hidden sections, a closed drawer,
+  the map under a phone's tab or a game, and everything behind a full-screen map or board are
+  `inert`. With reduced motion the drawer appears without sliding.
+- **Checked in the browser** (dev server, Chromium, scripted) at 390, 768, 1024, 1280 and 1440
+  pixels: the map, a country, the stake builder (and the war room open beside it), missions,
+  diplomacy, a game and a full-screen game, on a scratch database's three-player campaign "Layout
+  Check" (round 2: Field Marshal to move in a war on Cy, to declare, and to answer Bo's war and
+  Cy's accord), plus a lobby and a draft. No sideways scroll and no cut-off or covered control in
+  any of them. Scripted checks also followed a message being written, a stake, an open
+  conversation and the map's position through the drawer, folds, resizes and phone tabs, focus
+  each way, unread messages, and reduced motion.
+
+Defaults taken (not asked; easy to change): the widths above; the rail on the left, with text
+labels; the drawer stays open while you pick countries or wars from it, but "Show on map" closes it;
+extra calls to action from 768 pixels.
+
+Tests since: rules 319, data 73, web 140, sim 29, server 223 (784 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1683,8 +1733,10 @@ pnpm format       # Prettier
   - `buildModel()` in [apps/web/src/lib/campaign.ts](../apps/web/src/lib/campaign.ts) derives the
     war board, targets, active and past wars, what's waiting on the viewer, and each locked
     country's war. `useMyGames()` adds whose move it is in each of the viewer's games.
-  - `CampaignRoom` (campaign-screen.tsx) renders either the desktop columns or the phone layout.
-    The right column shows the game, else the war, else the selected country, else the empire.
+  - `CampaignRoom` (campaign-screen.tsx) renders the phone layout under 1024 pixels, and columns
+    from there as `roomLayout()` (`lib/room-layout.ts`) decides: three, or the left one folded into
+    a rail that opens it over the map as a drawer. The right column shows the game (as wide as its
+    board needs), else the war, else the selected country, else the empire.
   - War components: `wars-panel.tsx`, `war-detail.tsx`, `declare-war.tsx`, `stake-builder.tsx`;
     the board in `components/game/`.
   - Diplomacy components in `components/diplo/`: `diplo-panel.tsx` (the three views), `feed.tsx`,
@@ -1694,7 +1746,8 @@ pnpm format       # Prettier
 - **The map:** d3-zoom handles zoom imperatively; `counter-scale` keeps markers the same screen
   size; programmatic zooms go through `clamp()`. War arrows and the stake preview are the
   `WarArrows` layer, drawn beneath labels. Framing and panning keep clear of the controls along
-  the top (`topInset`) and the phone's sheet (`bottomInset`), both measured by the campaign screen.
+  the top (`topInset`) and the phone's sheet (`bottomInset`), both measured by the campaign screen,
+  and of a drawer open over the map's left side (`leftInset`).
   The sheet is measured just after the zoom that opens it, so a zoom asked for from outside
   (`focus`, `fit`) is done again if the room changes within a moment. One country is framed on
   `focusBounds()`, which leaves out pieces stranded across the date line or far out at sea.
@@ -1754,6 +1807,11 @@ Smaller follow-ups, none blocking:
 - **SVG focus rings:** browsers draw a `:focus` outline on a focusable `<svg>` after a click, even
   when `:focus-visible` doesn't match; the history chart turns it off and keeps an amber
   `:focus-visible` ring.
+- **Hidden but mounted:** the campaign screen hides its column's sections, a closed drawer and the
+  phone's other tabs with `visibility: hidden` and `inert`, not `display: none`, so their scroll
+  positions survive; a class that sets `visibility: visible` inside them would show through.
+- **Scripted checks against `pnpm dev`:** Next's dev badge (`nextjs-portal`) sits over the phone's
+  first tab and takes its clicks; hide it (`nextjs-portal { display: none }`) before driving phones.
 
 ## File map
 
@@ -1764,7 +1822,7 @@ Smaller follow-ups, none blocking:
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                |
 | `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                        |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                                                   |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`         |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

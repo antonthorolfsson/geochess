@@ -87,10 +87,13 @@ export function ConversationThread({
   model,
   peerId,
   onBack,
+  active,
 }: {
   model: CampaignModel;
   peerId: string;
   onBack(): void;
+  /** On screen, so its newest messages count as read. */
+  active: boolean;
 }) {
   const campaignId = model.campaign.id;
   const conversation = useConversation(campaignId, peerId);
@@ -104,7 +107,7 @@ export function ConversationThread({
     messages.length > 0 ? String(messages.at(-1)!.id) : null,
   );
   const unread = summary.data?.conversations.find((c) => c.userId === peerId)?.unread ?? 0;
-  useMarkRead(campaignId, peerId, messages.at(-1)?.id ?? null, unread, true);
+  useMarkRead(campaignId, peerId, messages.at(-1)?.id ?? null, unread, active);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
   const remove = async (message: MessageView) => {
@@ -175,6 +178,7 @@ export function ConversationThread({
         <p className="shrink-0 border-t border-line p-3 text-sm text-muted">Bots don’t read messages.</p>
       ) : peer ? (
         <Composer
+          draftKey={`${model.me.userId}\n${campaignId}\n${peerId}`}
           placeholder={`Message ${peer.name}`}
           onSend={async (body) => {
             const message = await api.sendMessage(campaignId, { body, to: peerId });

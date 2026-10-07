@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T17:03:25.754Z",
+  "generatedAt": "2026-10-07T15:16:39.895Z",
   "attribution": [
     "Global Firepower (globalfirepower.com), 2025 edition, via the nupurmadaan04/unified-military-analytics scrape on GitHub.",
     "Our World in Data energy dataset (CC BY 4.0), from the Energy Institute Statistical Review of World Energy, Ember and The Shift Project."
@@ -9,14 +9,14 @@
     "tanks": "Global Firepower 2025, combat tanks",
     "combatAircraft": "Global Firepower 2025, fighters, interceptors and attack aircraft",
     "navalShips": "Global Firepower 2025, total naval assets",
-    "oilTwh": "Our World in Data (Energy Institute; The Shift Project), oil production",
-    "gasTwh": "Our World in Data (Energy Institute; The Shift Project), natural gas production",
+    "oilMillionBarrels": "Our World in Data (Energy Institute; The Shift Project), oil production, at 0.67 million barrels a TWh",
+    "gasMillionM3": "Our World in Data (Energy Institute; The Shift Project), natural gas production, at 100 million m³ a TWh",
     "electricityTwh": "Our World in Data (Ember; Energy Institute), electricity generation"
   },
   "territories": {
     "ABC": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1, "year": 2024 }
     },
     "AFG": {
@@ -24,8 +24,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 1.793, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 179.3, "year": 2016 },
       "electricityTwh": { "value": 0.99, "year": 2024 }
     },
     "AGO": {
@@ -33,8 +33,8 @@
       "tanks": { "value": 319, "year": 2025 },
       "combatAircraft": { "value": 73, "year": 2025 },
       "navalShips": { "value": 32, "year": 2025 },
-      "oilTwh": { "value": 667.383, "year": 2024 },
-      "gasTwh": { "value": 18.579, "year": 2016 },
+      "oilMillionBarrels": { "value": 447.147, "year": 2024 },
+      "gasMillionM3": { "value": 1857.9, "year": 2016 },
       "electricityTwh": { "value": 15.59, "year": 2024 }
     },
     "ALB": {
@@ -42,8 +42,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 33, "year": 2025 },
-      "oilTwh": { "value": 15.398, "year": 2016 },
-      "gasTwh": { "value": 0.466, "year": 2016 },
+      "oilMillionBarrels": { "value": 10.317, "year": 2016 },
+      "gasMillionM3": { "value": 46.6, "year": 2016 },
       "electricityTwh": { "value": 8.34, "year": 2024 }
     },
     "AND": {},
@@ -52,8 +52,8 @@
       "tanks": { "value": 354, "year": 2025 },
       "combatAircraft": { "value": 139, "year": 2025 },
       "navalShips": { "value": 84, "year": 2025 },
-      "oilTwh": { "value": 2090.457, "year": 2024 },
-      "gasTwh": { "value": 614.018, "year": 2024 },
+      "oilMillionBarrels": { "value": 1400.606, "year": 2024 },
+      "gasMillionM3": { "value": 61401.8, "year": 2024 },
       "electricityTwh": { "value": 177.26, "year": 2024 }
     },
     "ARG": {
@@ -61,8 +61,8 @@
       "tanks": { "value": 362, "year": 2025 },
       "combatAircraft": { "value": 34, "year": 2025 },
       "navalShips": { "value": 42, "year": 2025 },
-      "oilTwh": { "value": 681.964, "year": 2024 },
-      "gasTwh": { "value": 441.133, "year": 2024 },
+      "oilMillionBarrels": { "value": 456.916, "year": 2024 },
+      "gasMillionM3": { "value": 44113.3, "year": 2024 },
       "electricityTwh": { "value": 153.15, "year": 2025 }
     },
     "ARM": {
@@ -70,8 +70,8 @@
       "tanks": { "value": 109, "year": 2025 },
       "combatAircraft": { "value": 18, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 9.72, "year": 2025 }
     },
     "AUS": {
@@ -79,8 +79,8 @@
       "tanks": { "value": 46, "year": 2025 },
       "combatAircraft": { "value": 95, "year": 2025 },
       "navalShips": { "value": 45, "year": 2025 },
-      "oilTwh": { "value": 173.426, "year": 2024 },
-      "gasTwh": { "value": 1501.404, "year": 2024 },
+      "oilMillionBarrels": { "value": 116.195, "year": 2024 },
+      "gasMillionM3": { "value": 150140.4, "year": 2024 },
       "electricityTwh": { "value": 286.34, "year": 2025 }
     },
     "AUT": {
@@ -88,8 +88,8 @@
       "tanks": { "value": 56, "year": 2025 },
       "combatAircraft": { "value": 15, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 9.799, "year": 2016 },
-      "gasTwh": { "value": 12.6, "year": 2016 },
+      "oilMillionBarrels": { "value": 6.565, "year": 2016 },
+      "gasMillionM3": { "value": 1260, "year": 2016 },
       "electricityTwh": { "value": 73.22, "year": 2025 }
     },
     "AZE": {
@@ -97,13 +97,13 @@
       "tanks": { "value": 1354, "year": 2025 },
       "combatAircraft": { "value": 32, "year": 2025 },
       "navalShips": { "value": 32, "year": 2025 },
-      "oilTwh": { "value": 339.212, "year": 2024 },
-      "gasTwh": { "value": 377.599, "year": 2024 },
+      "oilMillionBarrels": { "value": 227.272, "year": 2024 },
+      "gasMillionM3": { "value": 37759.9, "year": 2024 },
       "electricityTwh": { "value": 28.09, "year": 2025 }
     },
     "BDI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.49, "year": 2024 }
     },
     "BEL": {
@@ -111,8 +111,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 56, "year": 2025 },
       "navalShips": { "value": 9, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 72.89, "year": 2025 }
     },
     "BEN": {
@@ -120,8 +120,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 2, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.01, "year": 2024 }
     },
     "BFA": {
@@ -129,8 +129,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 3, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.69, "year": 2024 }
     },
     "BGD": {
@@ -138,8 +138,8 @@
       "tanks": { "value": 320, "year": 2025 },
       "combatAircraft": { "value": 41, "year": 2025 },
       "navalShips": { "value": 121, "year": 2025 },
-      "oilTwh": { "value": 2.574, "year": 2016 },
-      "gasTwh": { "value": 197.25, "year": 2024 },
+      "oilMillionBarrels": { "value": 1.725, "year": 2016 },
+      "gasMillionM3": { "value": 19725, "year": 2024 },
       "electricityTwh": { "value": 103.4, "year": 2025 }
     },
     "BGR": {
@@ -147,8 +147,8 @@
       "tanks": { "value": 334, "year": 2025 },
       "combatAircraft": { "value": 16, "year": 2025 },
       "navalShips": { "value": 45, "year": 2025 },
-      "oilTwh": { "value": 0.631, "year": 2016 },
-      "gasTwh": { "value": 0.974, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.423, "year": 2016 },
+      "gasMillionM3": { "value": 97.4, "year": 2016 },
       "electricityTwh": { "value": 37.96, "year": 2025 }
     },
     "BHR": {
@@ -156,13 +156,13 @@
       "tanks": { "value": 150, "year": 2025 },
       "combatAircraft": { "value": 28, "year": 2025 },
       "navalShips": { "value": 64, "year": 2025 },
-      "oilTwh": { "value": 35.989, "year": 2016 },
-      "gasTwh": { "value": 165.719, "year": 2024 },
+      "oilMillionBarrels": { "value": 24.113, "year": 2016 },
+      "gasMillionM3": { "value": 16571.9, "year": 2024 },
       "electricityTwh": { "value": 37.95, "year": 2024 }
     },
     "BHS": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 2.25, "year": 2024 }
     },
     "BIH": {
@@ -170,8 +170,8 @@
       "tanks": { "value": 45, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 14.44, "year": 2025 }
     },
     "BLR": {
@@ -179,8 +179,8 @@
       "tanks": { "value": 577, "year": 2025 },
       "combatAircraft": { "value": 93, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 20.622, "year": 2016 },
-      "gasTwh": { "value": 0.236, "year": 2016 },
+      "oilMillionBarrels": { "value": 13.817, "year": 2016 },
+      "gasMillionM3": { "value": 23.6, "year": 2016 },
       "electricityTwh": { "value": 46.37, "year": 2025 }
     },
     "BLZ": {
@@ -188,8 +188,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 15, "year": 2025 },
-      "oilTwh": { "value": 1.23, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.824, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.47, "year": 2024 }
     },
     "BOL": {
@@ -197,8 +197,8 @@
       "tanks": { "value": 54, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 67, "year": 2025 },
-      "oilTwh": { "value": 40.733, "year": 2016 },
-      "gasTwh": { "value": 119.065, "year": 2024 },
+      "oilMillionBarrels": { "value": 27.291, "year": 2016 },
+      "gasMillionM3": { "value": 11906.5, "year": 2024 },
       "electricityTwh": { "value": 13.63, "year": 2025 }
     },
     "BRA": {
@@ -206,13 +206,13 @@
       "tanks": { "value": 294, "year": 2025 },
       "combatAircraft": { "value": 74, "year": 2025 },
       "navalShips": { "value": 69, "year": 2025 },
-      "oilTwh": { "value": 2117.55, "year": 2024 },
-      "gasTwh": { "value": 228.385, "year": 2024 },
+      "oilMillionBarrels": { "value": 1418.759, "year": 2024 },
+      "gasMillionM3": { "value": 22838.5, "year": 2024 },
       "electricityTwh": { "value": 750.53, "year": 2025 }
     },
     "BRN": {
-      "oilTwh": { "value": 56.393, "year": 2024 },
-      "gasTwh": { "value": 103.656, "year": 2024 },
+      "oilMillionBarrels": { "value": 37.783, "year": 2024 },
+      "gasMillionM3": { "value": 10365.6, "year": 2024 },
       "electricityTwh": { "value": 5.56, "year": 2024 }
     },
     "BTN": {
@@ -220,8 +220,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 11, "year": 2024 }
     },
     "BWA": {
@@ -229,8 +229,8 @@
       "tanks": { "value": 45, "year": 2025 },
       "combatAircraft": { "value": 10, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 3.43, "year": 2024 }
     },
     "CAF": {
@@ -238,8 +238,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 8, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.14, "year": 2023 }
     },
     "CAN": {
@@ -247,8 +247,8 @@
       "tanks": { "value": 74, "year": 2025 },
       "combatAircraft": { "value": 66, "year": 2025 },
       "navalShips": { "value": 67, "year": 2025 },
-      "oilTwh": { "value": 3372.073, "year": 2024 },
-      "gasTwh": { "value": 1941.59, "year": 2024 },
+      "oilMillionBarrels": { "value": 2259.289, "year": 2024 },
+      "gasMillionM3": { "value": 194159, "year": 2024 },
       "electricityTwh": { "value": 652.44, "year": 2025 }
     },
     "CHE": {
@@ -256,8 +256,8 @@
       "tanks": { "value": 134, "year": 2025 },
       "combatAircraft": { "value": 40, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 65.02, "year": 2025 }
     },
     "CHL": {
@@ -265,8 +265,8 @@
       "tanks": { "value": 386, "year": 2025 },
       "combatAircraft": { "value": 45, "year": 2025 },
       "navalShips": { "value": 130, "year": 2025 },
-      "oilTwh": { "value": 3.191, "year": 2016 },
-      "gasTwh": { "value": 13.123, "year": 2016 },
+      "oilMillionBarrels": { "value": 2.138, "year": 2016 },
+      "gasMillionM3": { "value": 1312.3, "year": 2016 },
       "electricityTwh": { "value": 88.5, "year": 2025 }
     },
     "CHN": {
@@ -274,8 +274,8 @@
       "tanks": { "value": 5870, "year": 2025 },
       "combatAircraft": { "value": 1814, "year": 2025 },
       "navalShips": { "value": 841, "year": 2025 },
-      "oilTwh": { "value": 2475.922, "year": 2024 },
-      "gasTwh": { "value": 2483.896, "year": 2024 },
+      "oilMillionBarrels": { "value": 1658.868, "year": 2024 },
+      "gasMillionM3": { "value": 248389.6, "year": 2024 },
       "electricityTwh": { "value": 10621.58, "year": 2025 }
     },
     "CIV": {
@@ -283,8 +283,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 8, "year": 2025 },
-      "oilTwh": { "value": 31.034, "year": 2016 },
-      "gasTwh": { "value": 23.953, "year": 2016 },
+      "oilMillionBarrels": { "value": 20.793, "year": 2016 },
+      "gasMillionM3": { "value": 2395.3, "year": 2016 },
       "electricityTwh": { "value": 10.79, "year": 2024 }
     },
     "CMR": {
@@ -292,8 +292,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 19, "year": 2025 },
-      "oilTwh": { "value": 58.749, "year": 2016 },
-      "gasTwh": { "value": 7.809, "year": 2016 },
+      "oilMillionBarrels": { "value": 39.362, "year": 2016 },
+      "gasMillionM3": { "value": 780.9, "year": 2016 },
       "electricityTwh": { "value": 7.26, "year": 2024 }
     },
     "COD": {
@@ -301,8 +301,8 @@
       "tanks": { "value": 212, "year": 2025 },
       "combatAircraft": { "value": 6, "year": 2025 },
       "navalShips": { "value": 16, "year": 2025 },
-      "oilTwh": { "value": 12.623, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 8.457, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 15.92, "year": 2024 }
     },
     "COG": {
@@ -310,8 +310,8 @@
       "tanks": { "value": 61, "year": 2025 },
       "combatAircraft": { "value": 2, "year": 2025 },
       "navalShips": { "value": 4, "year": 2025 },
-      "oilTwh": { "value": 159.295, "year": 2024 },
-      "gasTwh": { "value": 15.184, "year": 2016 },
+      "oilMillionBarrels": { "value": 106.728, "year": 2024 },
+      "gasMillionM3": { "value": 1518.4, "year": 2016 },
       "electricityTwh": { "value": 5.46, "year": 2024 }
     },
     "COL": {
@@ -319,18 +319,18 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 40, "year": 2025 },
       "navalShips": { "value": 213, "year": 2025 },
-      "oilTwh": { "value": 474.579, "year": 2024 },
-      "gasTwh": { "value": 110.954, "year": 2024 },
+      "oilMillionBarrels": { "value": 317.968, "year": 2024 },
+      "gasMillionM3": { "value": 11095.4, "year": 2024 },
       "electricityTwh": { "value": 90.36, "year": 2025 }
     },
     "CPV": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.52, "year": 2024 }
     },
     "CRI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 12.81, "year": 2025 }
     },
     "CUB": {
@@ -338,13 +338,13 @@
       "tanks": { "value": 194, "year": 2025 },
       "combatAircraft": { "value": 11, "year": 2025 },
       "navalShips": { "value": 19, "year": 2025 },
-      "oilTwh": { "value": 34.205, "year": 2016 },
-      "gasTwh": { "value": 12.229, "year": 2016 },
+      "oilMillionBarrels": { "value": 22.917, "year": 2016 },
+      "gasMillionM3": { "value": 1222.9, "year": 2016 },
       "electricityTwh": { "value": 19.43, "year": 2024 }
     },
     "CYP": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 5.91, "year": 2025 }
     },
     "CZE": {
@@ -352,8 +352,8 @@
       "tanks": { "value": 20, "year": 2025 },
       "combatAircraft": { "value": 28, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 1.556, "year": 2016 },
-      "gasTwh": { "value": 2.338, "year": 2016 },
+      "oilMillionBarrels": { "value": 1.043, "year": 2016 },
+      "gasMillionM3": { "value": 233.8, "year": 2016 },
       "electricityTwh": { "value": 75.5, "year": 2025 }
     },
     "DEU": {
@@ -361,13 +361,13 @@
       "tanks": { "value": 296, "year": 2025 },
       "combatAircraft": { "value": 190, "year": 2025 },
       "navalShips": { "value": 96, "year": 2025 },
-      "oilTwh": { "value": 29.639, "year": 2016 },
-      "gasTwh": { "value": 36.603, "year": 2024 },
+      "oilMillionBarrels": { "value": 19.858, "year": 2016 },
+      "gasMillionM3": { "value": 3660.3, "year": 2024 },
       "electricityTwh": { "value": 500.47, "year": 2025 }
     },
     "DJI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.2, "year": 2024 }
     },
     "DNK": {
@@ -375,8 +375,8 @@
       "tanks": { "value": 44, "year": 2025 },
       "combatAircraft": { "value": 45, "year": 2025 },
       "navalShips": { "value": 50, "year": 2025 },
-      "oilTwh": { "value": 34.374, "year": 2024 },
-      "gasTwh": { "value": 18.416, "year": 2024 },
+      "oilMillionBarrels": { "value": 23.031, "year": 2024 },
+      "gasMillionM3": { "value": 1841.6, "year": 2024 },
       "electricityTwh": { "value": 33.79, "year": 2025 }
     },
     "DOM": {
@@ -384,8 +384,8 @@
       "tanks": { "value": 6, "year": 2025 },
       "combatAircraft": { "value": 8, "year": 2025 },
       "navalShips": { "value": 34, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 22.68, "year": 2025 }
     },
     "DZA": {
@@ -393,8 +393,8 @@
       "tanks": { "value": 1485, "year": 2025 },
       "combatAircraft": { "value": 153, "year": 2025 },
       "navalShips": { "value": 111, "year": 2025 },
-      "oilTwh": { "value": 689.273, "year": 2024 },
-      "gasTwh": { "value": 947.196, "year": 2024 },
+      "oilMillionBarrels": { "value": 461.813, "year": 2024 },
+      "gasMillionM3": { "value": 94719.6, "year": 2024 },
       "electricityTwh": { "value": 96.36, "year": 2024 }
     },
     "ECU": {
@@ -402,8 +402,8 @@
       "tanks": { "value": 202, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 30, "year": 2025 },
-      "oilTwh": { "value": 297.075, "year": 2024 },
-      "gasTwh": { "value": 5.984, "year": 2016 },
+      "oilMillionBarrels": { "value": 199.04, "year": 2024 },
+      "gasMillionM3": { "value": 598.4, "year": 2016 },
       "electricityTwh": { "value": 36.6, "year": 2025 }
     },
     "EGY": {
@@ -411,8 +411,8 @@
       "tanks": { "value": 3620, "year": 2025 },
       "combatAircraft": { "value": 332, "year": 2025 },
       "navalShips": { "value": 149, "year": 2025 },
-      "oilTwh": { "value": 362.153, "year": 2024 },
-      "gasTwh": { "value": 475.192, "year": 2024 },
+      "oilMillionBarrels": { "value": 242.643, "year": 2024 },
+      "gasMillionM3": { "value": 47519.2, "year": 2024 },
       "electricityTwh": { "value": 245.71, "year": 2025 }
     },
     "ERI": {
@@ -420,13 +420,13 @@
       "tanks": { "value": 148, "year": 2025 },
       "combatAircraft": { "value": 1, "year": 2025 },
       "navalShips": { "value": 23, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.45, "year": 2024 }
     },
     "ESH": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.09, "year": 2009 }
     },
     "ESP": {
@@ -434,8 +434,8 @@
       "tanks": { "value": 298, "year": 2025 },
       "combatAircraft": { "value": 148, "year": 2025 },
       "navalShips": { "value": 175, "year": 2025 },
-      "oilTwh": { "value": 1.655, "year": 2016 },
-      "gasTwh": { "value": 0.61, "year": 2016 },
+      "oilMillionBarrels": { "value": 1.109, "year": 2016 },
+      "gasMillionM3": { "value": 61, "year": 2016 },
       "electricityTwh": { "value": 287.89, "year": 2025 }
     },
     "EST": {
@@ -443,8 +443,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 8, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 6.11, "year": 2025 }
     },
     "ETH": {
@@ -452,8 +452,8 @@
       "tanks": { "value": 338, "year": 2025 },
       "combatAircraft": { "value": 25, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 33.37, "year": 2025 }
     },
     "FIN": {
@@ -461,18 +461,18 @@
       "tanks": { "value": 200, "year": 2025 },
       "combatAircraft": { "value": 53, "year": 2025 },
       "navalShips": { "value": 165, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 82.3, "year": 2025 }
     },
     "FJI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.15, "year": 2024 }
     },
     "FLK": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.01, "year": 2023 }
     },
     "FRA": {
@@ -480,8 +480,8 @@
       "tanks": { "value": 427, "year": 2025 },
       "combatAircraft": { "value": 223, "year": 2025 },
       "navalShips": { "value": 166, "year": 2025 },
-      "oilTwh": { "value": 10.533, "year": 2016 },
-      "gasTwh": { "value": 0.236, "year": 2016 },
+      "oilMillionBarrels": { "value": 7.057, "year": 2016 },
+      "gasMillionM3": { "value": 23.6, "year": 2016 },
       "electricityTwh": { "value": 569.98, "year": 2025 }
     },
     "GAB": {
@@ -489,8 +489,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 6, "year": 2025 },
       "navalShips": { "value": 5, "year": 2025 },
-      "oilTwh": { "value": 130.434, "year": 2024 },
-      "gasTwh": { "value": 4.111, "year": 2016 },
+      "oilMillionBarrels": { "value": 87.391, "year": 2024 },
+      "gasMillionM3": { "value": 411.1, "year": 2016 },
       "electricityTwh": { "value": 2.6, "year": 2024 }
     },
     "GBR": {
@@ -498,8 +498,8 @@
       "tanks": { "value": 288, "year": 2025 },
       "combatAircraft": { "value": 141, "year": 2025 },
       "navalShips": { "value": 116, "year": 2025 },
-      "oilTwh": { "value": 353.536, "year": 2024 },
-      "gasTwh": { "value": 307.186, "year": 2024 },
+      "oilMillionBarrels": { "value": 236.869, "year": 2024 },
+      "gasMillionM3": { "value": 30718.6, "year": 2024 },
       "electricityTwh": { "value": 292.31, "year": 2025 }
     },
     "GEO": {
@@ -507,8 +507,8 @@
       "tanks": { "value": 132, "year": 2025 },
       "combatAircraft": { "value": 5, "year": 2025 },
       "navalShips": { "value": 19, "year": 2025 },
-      "oilTwh": { "value": 0.253, "year": 2016 },
-      "gasTwh": { "value": 0.062, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.17, "year": 2016 },
+      "gasMillionM3": { "value": 6.2, "year": 2016 },
       "electricityTwh": { "value": 13.5, "year": 2025 }
     },
     "GHA": {
@@ -516,28 +516,28 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 20, "year": 2025 },
-      "oilTwh": { "value": 62.684, "year": 2016 },
-      "gasTwh": { "value": 6.898, "year": 2016 },
+      "oilMillionBarrels": { "value": 41.998, "year": 2016 },
+      "gasMillionM3": { "value": 689.8, "year": 2016 },
       "electricityTwh": { "value": 24.27, "year": 2024 }
     },
     "GIN": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 4.03, "year": 2024 }
     },
     "GMB": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.51, "year": 2024 }
     },
     "GNB": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.08, "year": 2024 }
     },
     "GNQ": {
-      "oilTwh": { "value": 50.439, "year": 2024 },
-      "gasTwh": { "value": 62.949, "year": 2016 },
+      "oilMillionBarrels": { "value": 33.794, "year": 2024 },
+      "gasMillionM3": { "value": 6294.9, "year": 2016 },
       "electricityTwh": { "value": 1.49, "year": 2024 }
     },
     "GRC": {
@@ -545,13 +545,13 @@
       "tanks": { "value": 1344, "year": 2025 },
       "combatAircraft": { "value": 178, "year": 2025 },
       "navalShips": { "value": 186, "year": 2025 },
-      "oilTwh": { "value": 2.018, "year": 2016 },
-      "gasTwh": { "value": 0.137, "year": 2016 },
+      "oilMillionBarrels": { "value": 1.352, "year": 2016 },
+      "gasMillionM3": { "value": 13.7, "year": 2016 },
       "electricityTwh": { "value": 58.27, "year": 2025 }
     },
     "GRL": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.6, "year": 2024 }
     },
     "GTM": {
@@ -559,18 +559,18 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 3, "year": 2025 },
       "navalShips": { "value": 25, "year": 2025 },
-      "oilTwh": { "value": 5.731, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 3.84, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 15.79, "year": 2024 }
     },
     "GUF": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.98, "year": 2023 }
     },
     "GUY": {
-      "oilTwh": { "value": 357.681, "year": 2024 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 239.646, "year": 2024 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.38, "year": 2024 }
     },
     "HND": {
@@ -578,8 +578,8 @@
       "tanks": { "value": 22, "year": 2025 },
       "combatAircraft": { "value": 13, "year": 2025 },
       "navalShips": { "value": 98, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 12.48, "year": 2024 }
     },
     "HRV": {
@@ -587,13 +587,13 @@
       "tanks": { "value": 55, "year": 2025 },
       "combatAircraft": { "value": 12, "year": 2025 },
       "navalShips": { "value": 30, "year": 2025 },
-      "oilTwh": { "value": 8.958, "year": 2016 },
-      "gasTwh": { "value": 12.796, "year": 2016 },
+      "oilMillionBarrels": { "value": 6.002, "year": 2016 },
+      "gasMillionM3": { "value": 1279.6, "year": 2016 },
       "electricityTwh": { "value": 14.7, "year": 2025 }
     },
     "HTI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.86, "year": 2024 }
     },
     "HUN": {
@@ -601,8 +601,8 @@
       "tanks": { "value": 220, "year": 2025 },
       "combatAircraft": { "value": 12, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 12.577, "year": 2016 },
-      "gasTwh": { "value": 18.395, "year": 2016 },
+      "oilMillionBarrels": { "value": 8.427, "year": 2016 },
+      "gasMillionM3": { "value": 1839.5, "year": 2016 },
       "electricityTwh": { "value": 40.24, "year": 2025 }
     },
     "IDN": {
@@ -610,8 +610,8 @@
       "tanks": { "value": 331, "year": 2025 },
       "combatAircraft": { "value": 75, "year": 2025 },
       "navalShips": { "value": 338, "year": 2025 },
-      "oilTwh": { "value": 347.964, "year": 2024 },
-      "gasTwh": { "value": 713.887, "year": 2024 },
+      "oilMillionBarrels": { "value": 233.136, "year": 2024 },
+      "gasMillionM3": { "value": 71388.7, "year": 2024 },
       "electricityTwh": { "value": 371.54, "year": 2024 }
     },
     "IND": {
@@ -619,13 +619,13 @@
       "tanks": { "value": 3913, "year": 2025 },
       "combatAircraft": { "value": 600, "year": 2025 },
       "navalShips": { "value": 343, "year": 2025 },
-      "oilTwh": { "value": 382.465, "year": 2024 },
-      "gasTwh": { "value": 323.537, "year": 2024 },
+      "oilMillionBarrels": { "value": 256.252, "year": 2024 },
+      "gasMillionM3": { "value": 32353.7, "year": 2024 },
       "electricityTwh": { "value": 2081.6, "year": 2025 }
     },
     "INDIAN-OCEAN": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 7.25, "year": 2024 }
     },
     "IRL": {
@@ -633,8 +633,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 8, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 32.247, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 3224.7, "year": 2016 },
       "electricityTwh": { "value": 30.95, "year": 2025 }
     },
     "IRN": {
@@ -642,8 +642,8 @@
       "tanks": { "value": 2675, "year": 2025 },
       "combatAircraft": { "value": 209, "year": 2025 },
       "navalShips": { "value": 109, "year": 2025 },
-      "oilTwh": { "value": 2726.667, "year": 2024 },
-      "gasTwh": { "value": 2629.157, "year": 2024 },
+      "oilMillionBarrels": { "value": 1826.867, "year": 2024 },
+      "gasMillionM3": { "value": 262915.7, "year": 2024 },
       "electricityTwh": { "value": 395.78, "year": 2025 }
     },
     "IRQ": {
@@ -651,8 +651,8 @@
       "tanks": { "value": 1188, "year": 2025 },
       "combatAircraft": { "value": 62, "year": 2025 },
       "navalShips": { "value": 67, "year": 2025 },
-      "oilTwh": { "value": 2507.699, "year": 2024 },
-      "gasTwh": { "value": 119.244, "year": 2024 },
+      "oilMillionBarrels": { "value": 1680.158, "year": 2024 },
+      "gasMillionM3": { "value": 11924.4, "year": 2024 },
       "electricityTwh": { "value": 149.73, "year": 2024 }
     },
     "ISL": {
@@ -660,8 +660,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 19.05, "year": 2024 }
     },
     "ISR": {
@@ -669,8 +669,8 @@
       "tanks": { "value": 1300, "year": 2025 },
       "combatAircraft": { "value": 284, "year": 2025 },
       "navalShips": { "value": 82, "year": 2025 },
-      "oilTwh": { "value": 0.248, "year": 2016 },
-      "gasTwh": { "value": 214.277, "year": 2024 },
+      "oilMillionBarrels": { "value": 0.166, "year": 2016 },
+      "gasMillionM3": { "value": 21427.7, "year": 2024 },
       "electricityTwh": { "value": 82.1, "year": 2025 }
     },
     "ITA": {
@@ -678,13 +678,13 @@
       "tanks": { "value": 203, "year": 2025 },
       "combatAircraft": { "value": 153, "year": 2025 },
       "navalShips": { "value": 285, "year": 2025 },
-      "oilTwh": { "value": 51.815, "year": 2024 },
-      "gasTwh": { "value": 28.001, "year": 2024 },
+      "oilMillionBarrels": { "value": 34.716, "year": 2024 },
+      "gasMillionM3": { "value": 2800.1, "year": 2024 },
       "electricityTwh": { "value": 264.7, "year": 2025 }
     },
     "JAM": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 4.92, "year": 2024 }
     },
     "JOR": {
@@ -692,8 +692,8 @@
       "tanks": { "value": 1508, "year": 2025 },
       "combatAircraft": { "value": 54, "year": 2025 },
       "navalShips": { "value": 27, "year": 2025 },
-      "oilTwh": { "value": 0.014, "year": 2016 },
-      "gasTwh": { "value": 1.111, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.009, "year": 2016 },
+      "gasMillionM3": { "value": 111.1, "year": 2016 },
       "electricityTwh": { "value": 23.67, "year": 2024 }
     },
     "JPN": {
@@ -701,8 +701,8 @@
       "tanks": { "value": 734, "year": 2025 },
       "combatAircraft": { "value": 264, "year": 2025 },
       "navalShips": { "value": 158, "year": 2025 },
-      "oilTwh": { "value": 6.198, "year": 2016 },
-      "gasTwh": { "value": 33.77, "year": 2016 },
+      "oilMillionBarrels": { "value": 4.153, "year": 2016 },
+      "gasMillionM3": { "value": 3377, "year": 2016 },
       "electricityTwh": { "value": 1029.86, "year": 2025 }
     },
     "KAZ": {
@@ -710,8 +710,8 @@
       "tanks": { "value": 353, "year": 2025 },
       "combatAircraft": { "value": 50, "year": 2025 },
       "navalShips": { "value": 26, "year": 2025 },
-      "oilTwh": { "value": 1018.305, "year": 2024 },
-      "gasTwh": { "value": 297.295, "year": 2024 },
+      "oilMillionBarrels": { "value": 682.264, "year": 2024 },
+      "gasMillionM3": { "value": 29729.5, "year": 2024 },
       "electricityTwh": { "value": 123.69, "year": 2025 }
     },
     "KEN": {
@@ -719,8 +719,8 @@
       "tanks": { "value": 188, "year": 2025 },
       "combatAircraft": { "value": 17, "year": 2025 },
       "navalShips": { "value": 27, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 14.04, "year": 2025 }
     },
     "KGZ": {
@@ -728,8 +728,8 @@
       "tanks": { "value": 215, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0.631, "year": 2016 },
-      "gasTwh": { "value": 0.295, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.423, "year": 2016 },
+      "gasMillionM3": { "value": 29.5, "year": 2016 },
       "electricityTwh": { "value": 15.78, "year": 2025 }
     },
     "KHM": {
@@ -737,8 +737,8 @@
       "tanks": { "value": 520, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 20, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 17.76, "year": 2025 }
     },
     "KOR": {
@@ -746,8 +746,8 @@
       "tanks": { "value": 1831, "year": 2025 },
       "combatAircraft": { "value": 340, "year": 2025 },
       "navalShips": { "value": 215, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 1.786, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 178.6, "year": 2016 },
       "electricityTwh": { "value": 624.66, "year": 2025 }
     },
     "KWT": {
@@ -755,8 +755,8 @@
       "tanks": { "value": 367, "year": 2025 },
       "combatAircraft": { "value": 47, "year": 2025 },
       "navalShips": { "value": 123, "year": 2025 },
-      "oilTwh": { "value": 1520.714, "year": 2024 },
-      "gasTwh": { "value": 149.182, "year": 2024 },
+      "oilMillionBarrels": { "value": 1018.878, "year": 2024 },
+      "gasMillionM3": { "value": 14918.2, "year": 2024 },
       "electricityTwh": { "value": 92.49, "year": 2025 }
     },
     "LAO": {
@@ -764,8 +764,8 @@
       "tanks": { "value": 160, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 51, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 52.31, "year": 2024 }
     },
     "LBN": {
@@ -773,8 +773,8 @@
       "tanks": { "value": 334, "year": 2025 },
       "combatAircraft": { "value": 9, "year": 2025 },
       "navalShips": { "value": 48, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 5.34, "year": 2024 }
     },
     "LBR": {
@@ -782,8 +782,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 6, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.57, "year": 2024 }
     },
     "LBY": {
@@ -791,13 +791,13 @@
       "tanks": { "value": 55, "year": 2025 },
       "combatAircraft": { "value": 11, "year": 2025 },
       "navalShips": { "value": 5, "year": 2025 },
-      "oilTwh": { "value": 648.061, "year": 2024 },
-      "gasTwh": { "value": 142.593, "year": 2024 },
+      "oilMillionBarrels": { "value": 434.201, "year": 2024 },
+      "gasMillionM3": { "value": 14259.3, "year": 2024 },
       "electricityTwh": { "value": 34.59, "year": 2024 }
     },
     "LEEWARD": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 3.13, "year": 2024 }
     },
     "LIE": {},
@@ -806,13 +806,13 @@
       "tanks": { "value": 87, "year": 2025 },
       "combatAircraft": { "value": 6, "year": 2025 },
       "navalShips": { "value": 275, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 17.25, "year": 2025 }
     },
     "LSO": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0, "year": 2024 }
     },
     "LTU": {
@@ -820,8 +820,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 13, "year": 2025 },
-      "oilTwh": { "value": 1.263, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.846, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 8.89, "year": 2025 }
     },
     "LUX": {
@@ -829,8 +829,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.54, "year": 2025 }
     },
     "LVA": {
@@ -838,8 +838,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 18, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 6.27, "year": 2025 }
     },
     "MAR": {
@@ -847,8 +847,8 @@
       "tanks": { "value": 1346, "year": 2025 },
       "combatAircraft": { "value": 84, "year": 2025 },
       "navalShips": { "value": 100, "year": 2025 },
-      "oilTwh": { "value": 0.099, "year": 2016 },
-      "gasTwh": { "value": 0.922, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.066, "year": 2016 },
+      "gasMillionM3": { "value": 92.2, "year": 2016 },
       "electricityTwh": { "value": 44.5, "year": 2025 }
     },
     "MDA": {
@@ -856,8 +856,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0.103, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 10.3, "year": 2016 },
       "electricityTwh": { "value": 6.16, "year": 2025 }
     },
     "MDG": {
@@ -865,13 +865,13 @@
       "tanks": { "value": 12, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 7, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 2.43, "year": 2024 }
     },
     "MDV": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.85, "year": 2024 }
     },
     "MEX": {
@@ -879,13 +879,13 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 34, "year": 2025 },
       "navalShips": { "value": 164, "year": 2025 },
-      "oilTwh": { "value": 1120.788, "year": 2024 },
-      "gasTwh": { "value": 357.64, "year": 2024 },
+      "oilMillionBarrels": { "value": 750.928, "year": 2024 },
+      "gasMillionM3": { "value": 35764, "year": 2024 },
       "electricityTwh": { "value": 356.97, "year": 2025 }
     },
     "MICRONESIA": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.95, "year": 2024 }
     },
     "MKD": {
@@ -893,8 +893,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 6.82, "year": 2025 }
     },
     "MLI": {
@@ -902,13 +902,13 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 21, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 5.96, "year": 2024 }
     },
     "MLT": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 2.19, "year": 2025 }
     },
     "MMR": {
@@ -916,8 +916,8 @@
       "tanks": { "value": 1040, "year": 2025 },
       "combatAircraft": { "value": 90, "year": 2025 },
       "navalShips": { "value": 239, "year": 2025 },
-      "oilTwh": { "value": 9.788, "year": 2016 },
-      "gasTwh": { "value": 147.686, "year": 2024 },
+      "oilMillionBarrels": { "value": 6.558, "year": 2016 },
+      "gasMillionM3": { "value": 14768.6, "year": 2024 },
       "electricityTwh": { "value": 21.71, "year": 2024 }
     },
     "MNE": {
@@ -925,8 +925,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 20, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 2.46, "year": 2025 }
     },
     "MNG": {
@@ -934,8 +934,8 @@
       "tanks": { "value": 420, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 15.115, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 10.127, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 9.69, "year": 2025 }
     },
     "MOZ": {
@@ -943,8 +943,8 @@
       "tanks": { "value": 60, "year": 2025 },
       "combatAircraft": { "value": 10, "year": 2025 },
       "navalShips": { "value": 36, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 66.456, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 6645.6, "year": 2016 },
       "electricityTwh": { "value": 19.79, "year": 2024 }
     },
     "MRT": {
@@ -952,13 +952,13 @@
       "tanks": { "value": 51, "year": 2025 },
       "combatAircraft": { "value": 4, "year": 2025 },
       "navalShips": { "value": 6, "year": 2025 },
-      "oilTwh": { "value": 3.04, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 2.037, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 2.07, "year": 2024 }
     },
     "MWI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.83, "year": 2024 }
     },
     "MYS": {
@@ -966,8 +966,8 @@
       "tanks": { "value": 48, "year": 2025 },
       "combatAircraft": { "value": 36, "year": 2025 },
       "navalShips": { "value": 100, "year": 2025 },
-      "oilTwh": { "value": 279.863, "year": 2024 },
-      "gasTwh": { "value": 803.667, "year": 2024 },
+      "oilMillionBarrels": { "value": 187.508, "year": 2024 },
+      "gasMillionM3": { "value": 80366.7, "year": 2024 },
       "electricityTwh": { "value": 201.09, "year": 2025 }
     },
     "NAM": {
@@ -975,13 +975,13 @@
       "tanks": { "value": 7, "year": 2025 },
       "combatAircraft": { "value": 11, "year": 2025 },
       "navalShips": { "value": 15, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.64, "year": 2024 }
     },
     "NCL": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 3.12, "year": 2024 }
     },
     "NER": {
@@ -989,8 +989,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 2, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 8.276, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 5.545, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.95, "year": 2024 }
     },
     "NGA": {
@@ -998,8 +998,8 @@
       "tanks": { "value": 330, "year": 2025 },
       "combatAircraft": { "value": 38, "year": 2025 },
       "navalShips": { "value": 152, "year": 2025 },
-      "oilTwh": { "value": 917.537, "year": 2024 },
-      "gasTwh": { "value": 468.458, "year": 2024 },
+      "oilMillionBarrels": { "value": 614.75, "year": 2024 },
+      "gasMillionM3": { "value": 46845.8, "year": 2024 },
       "electricityTwh": { "value": 41.54, "year": 2025 }
     },
     "NIC": {
@@ -1007,8 +1007,8 @@
       "tanks": { "value": 186, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 23, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 4.52, "year": 2024 }
     },
     "NLD": {
@@ -1016,8 +1016,8 @@
       "tanks": { "value": 18, "year": 2025 },
       "combatAircraft": { "value": 38, "year": 2025 },
       "navalShips": { "value": 140, "year": 2025 },
-      "oilTwh": { "value": 14.758, "year": 2016 },
-      "gasTwh": { "value": 80.667, "year": 2024 },
+      "oilMillionBarrels": { "value": 9.888, "year": 2016 },
+      "gasMillionM3": { "value": 8066.7, "year": 2024 },
       "electricityTwh": { "value": 134.96, "year": 2025 }
     },
     "NOR": {
@@ -1025,8 +1025,8 @@
       "tanks": { "value": 36, "year": 2025 },
       "combatAircraft": { "value": 43, "year": 2025 },
       "navalShips": { "value": 48, "year": 2025 },
-      "oilTwh": { "value": 998.779, "year": 2024 },
-      "gasTwh": { "value": 1132, "year": 2024 },
+      "oilMillionBarrels": { "value": 669.182, "year": 2024 },
+      "gasMillionM3": { "value": 113200, "year": 2024 },
       "electricityTwh": { "value": 160.81, "year": 2025 }
     },
     "NPL": {
@@ -1034,8 +1034,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 11.13, "year": 2024 }
     },
     "NZL": {
@@ -1043,8 +1043,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 8, "year": 2025 },
-      "oilTwh": { "value": 22.911, "year": 2016 },
-      "gasTwh": { "value": 53.482, "year": 2016 },
+      "oilMillionBarrels": { "value": 15.35, "year": 2016 },
+      "gasMillionM3": { "value": 5348.2, "year": 2016 },
       "electricityTwh": { "value": 43.34, "year": 2025 }
     },
     "OMN": {
@@ -1052,8 +1052,8 @@
       "tanks": { "value": 264, "year": 2025 },
       "combatAircraft": { "value": 39, "year": 2025 },
       "navalShips": { "value": 17, "year": 2025 },
-      "oilTwh": { "value": 557.484, "year": 2024 },
-      "gasTwh": { "value": 453.207, "year": 2024 },
+      "oilMillionBarrels": { "value": 373.514, "year": 2024 },
+      "gasMillionM3": { "value": 45320.7, "year": 2024 },
       "electricityTwh": { "value": 52.84, "year": 2025 }
     },
     "PAK": {
@@ -1061,8 +1061,8 @@
       "tanks": { "value": 2677, "year": 2025 },
       "combatAircraft": { "value": 421, "year": 2025 },
       "navalShips": { "value": 120, "year": 2025 },
-      "oilTwh": { "value": 54.91, "year": 2016 },
-      "gasTwh": { "value": 260.888, "year": 2024 },
+      "oilMillionBarrels": { "value": 36.79, "year": 2016 },
+      "gasMillionM3": { "value": 26088.8, "year": 2024 },
       "electricityTwh": { "value": 195.03, "year": 2025 }
     },
     "PAN": {
@@ -1070,8 +1070,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 22, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 13.43, "year": 2024 }
     },
     "PER": {
@@ -1079,8 +1079,8 @@
       "tanks": { "value": 355, "year": 2025 },
       "combatAircraft": { "value": 37, "year": 2025 },
       "navalShips": { "value": 78, "year": 2025 },
-      "oilTwh": { "value": 60.667, "year": 2024 },
-      "gasTwh": { "value": 159.605, "year": 2024 },
+      "oilMillionBarrels": { "value": 40.647, "year": 2024 },
+      "gasMillionM3": { "value": 15960.5, "year": 2024 },
       "electricityTwh": { "value": 60.44, "year": 2025 }
     },
     "PHL": {
@@ -1088,13 +1088,13 @@
       "tanks": { "value": 18, "year": 2025 },
       "combatAircraft": { "value": 17, "year": 2025 },
       "navalShips": { "value": 127, "year": 2025 },
-      "oilTwh": { "value": 12.672, "year": 2016 },
-      "gasTwh": { "value": 33.301, "year": 2016 },
+      "oilMillionBarrels": { "value": 8.49, "year": 2016 },
+      "gasMillionM3": { "value": 3330.1, "year": 2016 },
       "electricityTwh": { "value": 123.12, "year": 2025 }
     },
     "PNG": {
-      "oilTwh": { "value": 33.705, "year": 2016 },
-      "gasTwh": { "value": 119.242, "year": 2016 },
+      "oilMillionBarrels": { "value": 22.582, "year": 2016 },
+      "gasMillionM3": { "value": 11924.2, "year": 2016 },
       "electricityTwh": { "value": 4.73, "year": 2024 }
     },
     "POL": {
@@ -1102,18 +1102,18 @@
       "tanks": { "value": 798, "year": 2025 },
       "combatAircraft": { "value": 70, "year": 2025 },
       "navalShips": { "value": 63, "year": 2025 },
-      "oilTwh": { "value": 12.561, "year": 2016 },
-      "gasTwh": { "value": 35.815, "year": 2024 },
+      "oilMillionBarrels": { "value": 8.416, "year": 2016 },
+      "gasMillionM3": { "value": 3581.5, "year": 2024 },
       "electricityTwh": { "value": 173.26, "year": 2025 }
     },
     "POLYNESIA": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.17, "year": 2024 }
     },
     "PRI": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 20.27, "year": 2025 }
     },
     "PRK": {
@@ -1121,8 +1121,8 @@
       "tanks": { "value": 4895, "year": 2025 },
       "combatAircraft": { "value": 455, "year": 2025 },
       "navalShips": { "value": 332, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 27.1, "year": 2024 }
     },
     "PRT": {
@@ -1130,8 +1130,8 @@
       "tanks": { "value": 34, "year": 2025 },
       "combatAircraft": { "value": 33, "year": 2025 },
       "navalShips": { "value": 128, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 51.13, "year": 2025 }
     },
     "PRY": {
@@ -1139,13 +1139,13 @@
       "tanks": { "value": 10, "year": 2025 },
       "combatAircraft": { "value": 4, "year": 2025 },
       "navalShips": { "value": 73, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 45.35, "year": 2025 }
     },
     "PSE": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.99, "year": 2024 }
     },
     "QAT": {
@@ -1153,8 +1153,8 @@
       "tanks": { "value": 62, "year": 2025 },
       "combatAircraft": { "value": 121, "year": 2025 },
       "navalShips": { "value": 125, "year": 2025 },
-      "oilTwh": { "value": 877.85, "year": 2024 },
-      "gasTwh": { "value": 1794.504, "year": 2024 },
+      "oilMillionBarrels": { "value": 588.16, "year": 2024 },
+      "gasMillionM3": { "value": 179450.4, "year": 2024 },
       "electricityTwh": { "value": 56.18, "year": 2025 }
     },
     "ROU": {
@@ -1162,8 +1162,8 @@
       "tanks": { "value": 451, "year": 2025 },
       "combatAircraft": { "value": 29, "year": 2025 },
       "navalShips": { "value": 18, "year": 2025 },
-      "oilTwh": { "value": 33.343, "year": 2024 },
-      "gasTwh": { "value": 89.836, "year": 2024 },
+      "oilMillionBarrels": { "value": 22.34, "year": 2024 },
+      "gasMillionM3": { "value": 8983.6, "year": 2024 },
       "electricityTwh": { "value": 49.81, "year": 2025 }
     },
     "RUS": {
@@ -1171,13 +1171,13 @@
       "tanks": { "value": 5630, "year": 2025 },
       "combatAircraft": { "value": 1559, "year": 2025 },
       "navalShips": { "value": 747, "year": 2025 },
-      "oilTwh": { "value": 6121.835, "year": 2024 },
-      "gasTwh": { "value": 6298.639, "year": 2024 },
+      "oilMillionBarrels": { "value": 4101.629, "year": 2024 },
+      "gasMillionM3": { "value": 629863.9, "year": 2024 },
       "electricityTwh": { "value": 1192.79, "year": 2025 }
     },
     "RWA": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.13, "year": 2024 }
     },
     "SAU": {
@@ -1185,8 +1185,8 @@
       "tanks": { "value": 1085, "year": 2025 },
       "combatAircraft": { "value": 364, "year": 2025 },
       "navalShips": { "value": 32, "year": 2025 },
-      "oilTwh": { "value": 5933.262, "year": 2024 },
-      "gasTwh": { "value": 1214.825, "year": 2024 },
+      "oilMillionBarrels": { "value": 3975.286, "year": 2024 },
+      "gasMillionM3": { "value": 121482.5, "year": 2024 },
       "electricityTwh": { "value": 454.64, "year": 2024 }
     },
     "SDN": {
@@ -1194,8 +1194,8 @@
       "tanks": { "value": 1055, "year": 2025 },
       "combatAircraft": { "value": 73, "year": 2025 },
       "navalShips": { "value": 10, "year": 2025 },
-      "oilTwh": { "value": 21.614, "year": 2024 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 14.481, "year": 2024 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 14.77, "year": 2024 }
     },
     "SEN": {
@@ -1203,8 +1203,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 4, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0.559, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 55.9, "year": 2016 },
       "electricityTwh": { "value": 7.63, "year": 2024 }
     },
     "SGP": {
@@ -1212,13 +1212,13 @@
       "tanks": { "value": 170, "year": 2025 },
       "combatAircraft": { "value": 100, "year": 2025 },
       "navalShips": { "value": 101, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 60.15, "year": 2025 }
     },
     "SLB": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.11, "year": 2024 }
     },
     "SLE": {
@@ -1226,8 +1226,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 10, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.21, "year": 2024 }
     },
     "SLV": {
@@ -1235,8 +1235,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 15, "year": 2025 },
       "navalShips": { "value": 13, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 6.46, "year": 2025 }
     },
     "SOM": {
@@ -1244,8 +1244,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 19, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.43, "year": 2024 }
     },
     "SRB": {
@@ -1253,8 +1253,8 @@
       "tanks": { "value": 242, "year": 2025 },
       "combatAircraft": { "value": 28, "year": 2025 },
       "navalShips": { "value": 30, "year": 2025 },
-      "oilTwh": { "value": 12.97, "year": 2016 },
-      "gasTwh": { "value": 5.663, "year": 2016 },
+      "oilMillionBarrels": { "value": 8.69, "year": 2016 },
+      "gasMillionM3": { "value": 566.3, "year": 2016 },
       "electricityTwh": { "value": 36.62, "year": 2025 }
     },
     "SSD": {
@@ -1262,13 +1262,13 @@
       "tanks": { "value": 122, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 49.688, "year": 2024 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 33.291, "year": 2024 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.56, "year": 2024 }
     },
     "STP": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.09, "year": 2023 }
     },
     "SUR": {
@@ -1276,8 +1276,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 17, "year": 2025 },
-      "oilTwh": { "value": 11.536, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 7.729, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 1.74, "year": 2024 }
     },
     "SVK": {
@@ -1285,8 +1285,8 @@
       "tanks": { "value": 45, "year": 2025 },
       "combatAircraft": { "value": 7, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0.133, "year": 2016 },
-      "gasTwh": { "value": 1.006, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.089, "year": 2016 },
+      "gasMillionM3": { "value": 100.6, "year": 2016 },
       "electricityTwh": { "value": 29.1, "year": 2025 }
     },
     "SVN": {
@@ -1294,8 +1294,8 @@
       "tanks": { "value": 54, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 3, "year": 2025 },
-      "oilTwh": { "value": 0.003, "year": 2016 },
-      "gasTwh": { "value": 0.055, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.002, "year": 2016 },
+      "gasMillionM3": { "value": 5.5, "year": 2016 },
       "electricityTwh": { "value": 14.84, "year": 2025 }
     },
     "SWE": {
@@ -1303,13 +1303,13 @@
       "tanks": { "value": 110, "year": 2025 },
       "combatAircraft": { "value": 73, "year": 2025 },
       "navalShips": { "value": 279, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 170.71, "year": 2025 }
     },
     "SWZ": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.61, "year": 2024 }
     },
     "SYR": {
@@ -1317,8 +1317,8 @@
       "tanks": { "value": 168, "year": 2025 },
       "combatAircraft": { "value": 57, "year": 2025 },
       "navalShips": { "value": 12, "year": 2025 },
-      "oilTwh": { "value": 19.278, "year": 2024 },
-      "gasTwh": { "value": 27.23, "year": 2024 },
+      "oilMillionBarrels": { "value": 12.916, "year": 2024 },
+      "gasMillionM3": { "value": 2723, "year": 2024 },
       "electricityTwh": { "value": 24.88, "year": 2024 }
     },
     "TCD": {
@@ -1326,13 +1326,13 @@
       "tanks": { "value": 90, "year": 2025 },
       "combatAircraft": { "value": 7, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 78.396, "year": 2024 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 52.525, "year": 2024 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.37, "year": 2024 }
     },
     "TGO": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.71, "year": 2024 }
     },
     "THA": {
@@ -1340,8 +1340,8 @@
       "tanks": { "value": 744, "year": 2025 },
       "combatAircraft": { "value": 99, "year": 2025 },
       "navalShips": { "value": 304, "year": 2025 },
-      "oilTwh": { "value": 144.105, "year": 2024 },
-      "gasTwh": { "value": 285.435, "year": 2024 },
+      "oilMillionBarrels": { "value": 96.55, "year": 2024 },
+      "gasMillionM3": { "value": 28543.5, "year": 2024 },
       "electricityTwh": { "value": 188.24, "year": 2025 }
     },
     "TJK": {
@@ -1349,8 +1349,8 @@
       "tanks": { "value": 38, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0.114, "year": 2016 },
-      "gasTwh": { "value": 0.206, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.076, "year": 2016 },
+      "gasMillionM3": { "value": 20.6, "year": 2016 },
       "electricityTwh": { "value": 24.67, "year": 2025 }
     },
     "TKM": {
@@ -1358,18 +1358,18 @@
       "tanks": { "value": 654, "year": 2025 },
       "combatAircraft": { "value": 49, "year": 2025 },
       "navalShips": { "value": 16, "year": 2025 },
-      "oilTwh": { "value": 104.783, "year": 2024 },
-      "gasTwh": { "value": 734.634, "year": 2024 },
+      "oilMillionBarrels": { "value": 70.205, "year": 2024 },
+      "gasMillionM3": { "value": 73463.4, "year": 2024 },
       "electricityTwh": { "value": 33.01, "year": 2024 }
     },
     "TLS": {
-      "oilTwh": { "value": 28.175, "year": 2016 },
-      "gasTwh": { "value": 68.949, "year": 2016 },
+      "oilMillionBarrels": { "value": 18.877, "year": 2016 },
+      "gasMillionM3": { "value": 6894.9, "year": 2016 },
       "electricityTwh": { "value": 0.51, "year": 2024 }
     },
     "TTO": {
-      "oilTwh": { "value": 39.361, "year": 2024 },
-      "gasTwh": { "value": 244.126, "year": 2024 },
+      "oilMillionBarrels": { "value": 26.372, "year": 2024 },
+      "gasMillionM3": { "value": 24412.6, "year": 2024 },
       "electricityTwh": { "value": 9.55, "year": 2024 }
     },
     "TUN": {
@@ -1377,8 +1377,8 @@
       "tanks": { "value": 145, "year": 2025 },
       "combatAircraft": { "value": 10, "year": 2025 },
       "navalShips": { "value": 37, "year": 2025 },
-      "oilTwh": { "value": 17.282, "year": 2024 },
-      "gasTwh": { "value": 15.075, "year": 2016 },
+      "oilMillionBarrels": { "value": 11.579, "year": 2024 },
+      "gasMillionM3": { "value": 1507.5, "year": 2016 },
       "electricityTwh": { "value": 22.31, "year": 2025 }
     },
     "TUR": {
@@ -1386,8 +1386,8 @@
       "tanks": { "value": 2284, "year": 2025 },
       "combatAircraft": { "value": 201, "year": 2025 },
       "navalShips": { "value": 192, "year": 2025 },
-      "oilTwh": { "value": 31.756, "year": 2016 },
-      "gasTwh": { "value": 3.906, "year": 2016 },
+      "oilMillionBarrels": { "value": 21.277, "year": 2016 },
+      "gasMillionM3": { "value": 390.6, "year": 2016 },
       "electricityTwh": { "value": 353.86, "year": 2025 }
     },
     "TWN": {
@@ -1395,8 +1395,8 @@
       "tanks": { "value": 1090, "year": 2025 },
       "combatAircraft": { "value": 258, "year": 2025 },
       "navalShips": { "value": 91, "year": 2025 },
-      "oilTwh": { "value": 0.145, "year": 2016 },
-      "gasTwh": { "value": 2.994, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.097, "year": 2016 },
+      "gasMillionM3": { "value": 299.4, "year": 2016 },
       "electricityTwh": { "value": 288.39, "year": 2025 }
     },
     "TZA": {
@@ -1404,8 +1404,8 @@
       "tanks": { "value": 200, "year": 2025 },
       "combatAircraft": { "value": 11, "year": 2025 },
       "navalShips": { "value": 12, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 16.299, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 1629.9, "year": 2016 },
       "electricityTwh": { "value": 8.84, "year": 2024 }
     },
     "UGA": {
@@ -1413,8 +1413,8 @@
       "tanks": { "value": 259, "year": 2025 },
       "combatAircraft": { "value": 6, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 5.81, "year": 2024 }
     },
     "UKR": {
@@ -1422,8 +1422,8 @@
       "tanks": { "value": 1121, "year": 2025 },
       "combatAircraft": { "value": 118, "year": 2025 },
       "navalShips": { "value": 169, "year": 2025 },
-      "oilTwh": { "value": 28.341, "year": 2016 },
-      "gasTwh": { "value": 180.954, "year": 2024 },
+      "oilMillionBarrels": { "value": 18.988, "year": 2016 },
+      "gasMillionM3": { "value": 18095.4, "year": 2024 },
       "electricityTwh": { "value": 111.51, "year": 2022 }
     },
     "URY": {
@@ -1431,8 +1431,8 @@
       "tanks": { "value": 62, "year": 2025 },
       "combatAircraft": { "value": 6, "year": 2025 },
       "navalShips": { "value": 16, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 11.94, "year": 2025 }
     },
     "USA": {
@@ -1440,8 +1440,8 @@
       "tanks": { "value": 4666, "year": 2025 },
       "combatAircraft": { "value": 2717, "year": 2025 },
       "navalShips": { "value": 465, "year": 2025 },
-      "oilTwh": { "value": 9977.384, "year": 2024 },
-      "gasTwh": { "value": 10330.044, "year": 2024 },
+      "oilMillionBarrels": { "value": 6684.847, "year": 2024 },
+      "gasMillionM3": { "value": 1033004.4, "year": 2024 },
       "electricityTwh": { "value": 4519.79, "year": 2025 }
     },
     "UZB": {
@@ -1449,8 +1449,8 @@
       "tanks": { "value": 470, "year": 2025 },
       "combatAircraft": { "value": 39, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 22.419, "year": 2024 },
-      "gasTwh": { "value": 422.077, "year": 2024 },
+      "oilMillionBarrels": { "value": 15.021, "year": 2024 },
+      "gasMillionM3": { "value": 42207.7, "year": 2024 },
       "electricityTwh": { "value": 86.7, "year": 2025 }
     },
     "VEN": {
@@ -1458,8 +1458,8 @@
       "tanks": { "value": 282, "year": 2025 },
       "combatAircraft": { "value": 30, "year": 2025 },
       "navalShips": { "value": 41, "year": 2025 },
-      "oilTwh": { "value": 576.013, "year": 2024 },
-      "gasTwh": { "value": 317.312, "year": 2024 },
+      "oilMillionBarrels": { "value": 385.929, "year": 2024 },
+      "gasMillionM3": { "value": 31731.2, "year": 2024 },
       "electricityTwh": { "value": 80.13, "year": 2024 }
     },
     "VNM": {
@@ -1467,18 +1467,18 @@
       "tanks": { "value": 1999, "year": 2025 },
       "combatAircraft": { "value": 61, "year": 2025 },
       "navalShips": { "value": 116, "year": 2025 },
-      "oilTwh": { "value": 98.901, "year": 2024 },
-      "gasTwh": { "value": 60.988, "year": 2024 },
+      "oilMillionBarrels": { "value": 66.264, "year": 2024 },
+      "gasMillionM3": { "value": 6098.8, "year": 2024 },
       "electricityTwh": { "value": 309.99, "year": 2025 }
     },
     "VUT": {
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 0.08, "year": 2023 }
     },
     "WINDWARD": {
-      "oilTwh": { "value": 0.63, "year": 2016 },
-      "gasTwh": { "value": 0.186, "year": 2016 },
+      "oilMillionBarrels": { "value": 0.422, "year": 2016 },
+      "gasMillionM3": { "value": 18.6, "year": 2016 },
       "electricityTwh": { "value": 3.56, "year": 2024 }
     },
     "XKX": {
@@ -1486,8 +1486,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 5.35, "year": 2025 }
     },
     "YEM": {
@@ -1495,8 +1495,8 @@
       "tanks": { "value": 0, "year": 2025 },
       "combatAircraft": { "value": 68, "year": 2025 },
       "navalShips": { "value": 26, "year": 2025 },
-      "oilTwh": { "value": 20.718, "year": 2024 },
-      "gasTwh": { "value": 5.475, "year": 2016 },
+      "oilMillionBarrels": { "value": 13.881, "year": 2024 },
+      "gasMillionM3": { "value": 547.5, "year": 2016 },
       "electricityTwh": { "value": 5.25, "year": 2024 }
     },
     "ZAF": {
@@ -1504,8 +1504,8 @@
       "tanks": { "value": 248, "year": 2025 },
       "combatAircraft": { "value": 2, "year": 2025 },
       "navalShips": { "value": 63, "year": 2025 },
-      "oilTwh": { "value": 2.712, "year": 2016 },
-      "gasTwh": { "value": 10.531, "year": 2016 },
+      "oilMillionBarrels": { "value": 1.817, "year": 2016 },
+      "gasMillionM3": { "value": 1053.1, "year": 2016 },
       "electricityTwh": { "value": 242.76, "year": 2025 }
     },
     "ZMB": {
@@ -1513,8 +1513,8 @@
       "tanks": { "value": 75, "year": 2025 },
       "combatAircraft": { "value": 0, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 19.72, "year": 2024 }
     },
     "ZWE": {
@@ -1522,8 +1522,8 @@
       "tanks": { "value": 60, "year": 2025 },
       "combatAircraft": { "value": 18, "year": 2025 },
       "navalShips": { "value": 0, "year": 2025 },
-      "oilTwh": { "value": 0, "year": 2016 },
-      "gasTwh": { "value": 0, "year": 2016 },
+      "oilMillionBarrels": { "value": 0, "year": 2016 },
+      "gasMillionM3": { "value": 0, "year": 2016 },
       "electricityTwh": { "value": 10.26, "year": 2024 }
     }
   }

@@ -146,7 +146,7 @@ export function TerritoryPanel({
                     <dt className="label">{label}</dt>
                     <dd
                       title={fact ? `${facts.sources[key]}${fact.year === null ? '' : `, ${fact.year}`}` : undefined}
-                      className="truncate text-base font-semibold tabular-nums lg:text-lg"
+                      className="text-base font-semibold tabular-nums lg:text-lg"
                     >
                       {format(fact?.value ?? null)}
                     </dd>

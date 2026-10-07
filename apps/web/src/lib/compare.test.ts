@@ -77,12 +77,15 @@ describe('measuring empires', () => {
       generatedAt: '2026-10-05T00:00:00.000Z',
       attribution: [],
       sources: {} as FactTable['sources'],
-      territories: { A: { oilTwh: { value: 30, year: 2024 } }, C: { oilTwh: { value: 10, year: 2016 } } },
+      territories: {
+        A: { oilMillionBarrels: { value: 30, year: 2024 } },
+        C: { oilMillionBarrels: { value: 10, year: 2016 } },
+      },
     };
-    expect(amountOf(idx, ['C', 'E'], 'oilTwh', facts)).toBe(10);
-    expect(amountOf(idx, ['C', 'E'], 'oilTwh')).toBeNull();
-    expect(worldAmount(idx, 'oilTwh', facts)).toBe(40);
-    const oil = shareRow(idx, holdings, ['bo', 'ann', 'cy'], 'oilTwh', facts);
+    expect(amountOf(idx, ['C', 'E'], 'oilMillionBarrels', facts)).toBe(10);
+    expect(amountOf(idx, ['C', 'E'], 'oilMillionBarrels')).toBeNull();
+    expect(worldAmount(idx, 'oilMillionBarrels', facts)).toBe(40);
+    const oil = shareRow(idx, holdings, ['bo', 'ann', 'cy'], 'oilMillionBarrels', facts);
     expect(oil.parts.map((p) => p.share)).toEqual([0.75, 0.25, 0]);
     expect(oil.unclaimed).toBe(0);
   });

@@ -3,6 +3,8 @@ import {
   formatArea,
   formatAreaCompact,
   formatCount,
+  formatMillionBarrels,
+  formatMillionM3,
   formatTwh,
   formatUsd,
   formatWhole,
@@ -28,11 +30,20 @@ describe('number formatting', () => {
     expect(formatTwh(0)).toBe('0 TWh');
   });
 
+  it('writes oil in millions of barrels and gas in millions of cubic metres, kept with their units', () => {
+    expect(formatMillionBarrels(6684.847)).toBe('6,685 million\u00a0barrels');
+    expect(formatMillionBarrels(10.317)).toBe('10.3 million\u00a0barrels');
+    expect(formatMillionM3(1_033_004.4)).toBe('1,033,004 million\u00a0m³');
+    expect(formatMillionM3(0)).toBe('0 million\u00a0m³');
+  });
+
   it('shows a dash for missing data', () => {
     expect(formatCount(null)).toBe('—');
     expect(formatUsd(null)).toBe('—');
     expect(formatWhole(null)).toBe('—');
     expect(formatTwh(null)).toBe('—');
+    expect(formatMillionBarrels(null)).toBe('—');
+    expect(formatMillionM3(null)).toBe('—');
   });
 
   it('writes ordinals', () => {

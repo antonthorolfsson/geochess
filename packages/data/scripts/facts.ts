@@ -21,16 +21,30 @@ const GFP_YEAR = 2025;
 const OWID_COMMIT = 'f8de88a4f6f9cab44f1cf606047cbd6c4414042c';
 const OWID_URL = `https://raw.githubusercontent.com/owid/energy-data/${OWID_COMMIT}/owid-energy-data.csv`;
 
-/** Where each figure is read from: a Global Firepower column or an Our World in Data one. */
-const COLUMNS: Record<FactKey, { from: 'gfp' | 'owid'; columns: string[] }> = {
+/**
+ * Our World in Data gives oil and gas in terawatt-hours, and they are better known by volume. Gas
+ * converts exactly: the Energy Institute counts a billion cubic metres as 36 PJ, which is 10 TWh.
+ * Oil only roughly: its terawatt-hours are tonnes (11.63 TWh to a million tonnes), and a tonne runs
+ * from under 7 barrels of heavy crude to over 8 of natural gas liquids. This is the world's average,
+ * the Energy Institute's 97 million barrels a day in 2024 over the file's 52,831 TWh: within about
+ * 10% of the big producers' own counts (the United States, rich in light liquids, comes out 9% low).
+ */
+const MILLION_M3_PER_TWH = 100;
+const MILLION_BARRELS_PER_TWH = 0.67;
+
+/**
+ * Where each figure is read from, a Global Firepower column or an Our World in Data one, and what
+ * to multiply it by for the figure's unit.
+ */
+const COLUMNS: Record<FactKey, { from: 'gfp' | 'owid'; columns: string[]; scale?: number }> = {
   activePersonnel: { from: 'gfp', columns: ['active_personnel'] },
   tanks: { from: 'gfp', columns: ['tanks'] },
   // Global Firepower counts multirole jets such as the F-35 as attack aircraft, which would leave
   // Norway and the Netherlands with no fighters, so the two are added up.
   combatAircraft: { from: 'gfp', columns: ['fighter_aircraft', 'attack_aircraft'] },
   navalShips: { from: 'gfp', columns: ['total_naval_fleet'] },
-  oilTwh: { from: 'owid', columns: ['oil_production'] },
-  gasTwh: { from: 'owid', columns: ['gas_production'] },
+  oilMillionBarrels: { from: 'owid', columns: ['oil_production'], scale: MILLION_BARRELS_PER_TWH },
+  gasMillionM3: { from: 'owid', columns: ['gas_production'], scale: MILLION_M3_PER_TWH },
   electricityTwh: { from: 'owid', columns: ['electricity_generation'] },
 };
 
@@ -41,8 +55,12 @@ const SOURCES: Record<FactKey, string> = {
   tanks: `${GFP_SOURCE}, combat tanks`,
   combatAircraft: `${GFP_SOURCE}, fighters, interceptors and attack aircraft`,
   navalShips: `${GFP_SOURCE}, total naval assets`,
-  oilTwh: `${OWID_SOURCE} (Energy Institute; The Shift Project), oil production`,
-  gasTwh: `${OWID_SOURCE} (Energy Institute; The Shift Project), natural gas production`,
+  oilMillionBarrels:
+    `${OWID_SOURCE} (Energy Institute; The Shift Project), oil production, ` +
+    `at ${MILLION_BARRELS_PER_TWH} million barrels a TWh`,
+  gasMillionM3:
+    `${OWID_SOURCE} (Energy Institute; The Shift Project), natural gas production, ` +
+    `at ${MILLION_M3_PER_TWH} million m³ a TWh`,
   electricityTwh: `${OWID_SOURCE} (Ember; Energy Institute), electricity generation`,
 };
 
@@ -101,7 +119,7 @@ function numberOf(cell: string | undefined): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-/** The sum of a row's columns for one figure, or null when any of them is empty. */
+/** The sum of a row's columns for one figure in its unit, or null when any of them is empty. */
 function valueOf(row: Record<string, string>, key: FactKey): number | null {
   let total = 0;
   for (const column of COLUMNS[key].columns) {
@@ -109,7 +127,7 @@ function valueOf(row: Record<string, string>, key: FactKey): number | null {
     if (n === null) return null;
     total += n;
   }
-  return total;
+  return total * (COLUMNS[key].scale ?? 1);
 }
 
 function put(figures: Figures, code: string, key: FactKey, fact: Fact): void {

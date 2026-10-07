@@ -476,7 +476,7 @@ function GameBoard({
   );
 }
 
-function PlayerStrip({
+export function PlayerStrip({
   model,
   userId,
   color,
@@ -708,7 +708,15 @@ function PromotionPicker({ color, onPick, onCancel }: { color: Color; onPick(rol
 }
 
 /** Keyboard move entry: SAN (Nf3, O-O) or UCI (g1f3). */
-function TypedMove({ chess, pending, onMove }: { chess: ChessGame; pending: boolean; onMove(uci: string): void }) {
+export function TypedMove({
+  chess,
+  pending,
+  onMove,
+}: {
+  chess: ChessGame;
+  pending: boolean;
+  onMove(uci: string): void;
+}) {
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   return (

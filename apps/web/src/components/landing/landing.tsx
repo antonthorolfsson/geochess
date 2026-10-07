@@ -53,6 +53,12 @@ export function Landing({ user }: { user: Session }) {
           Sample campaign
         </h2>
         <SampleCampaign />
+        <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Link href="/tutorial" className="btn btn-primary">
+            Fight this battle yourself
+          </Link>
+          <span className="text-muted">A five-step tutorial on this sample campaign. No account needed.</span>
+        </p>
       </section>
       <HowItWorks />
       <BattleExample />
@@ -80,6 +86,9 @@ function Hero({ user }: { user: Session }) {
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <Link href={startHref(user)} className="btn btn-amber">
           Start a campaign
+        </Link>
+        <Link href="/tutorial" className="btn btn-primary">
+          Try the tutorial
         </Link>
         <Link href="#sample" className="btn btn-ghost">
           See a sample campaign

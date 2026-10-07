@@ -12,6 +12,34 @@ import { useCompareHref, useEmpireHref } from './room-context';
 export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelect(id: TerritoryId): void }) {
   const empireHref = useEmpireHref(model.campaign.id);
   const compareHref = useCompareHref(model.campaign.id);
+  return (
+    <div className="space-y-6 p-4">
+      <header className="space-y-3">
+        <div>
+          <div className="label mb-1">Your empire</div>
+          <PlayerName member={model.me} size="lg" />
+        </div>
+        {model.campaign.status !== 'lobby' && (
+          <div className="flex flex-wrap gap-2">
+            <Link href={empireHref(model.me.userId)} className="btn btn-ghost btn-sm">
+              Full statistics
+            </Link>
+            <Link href={compareHref} className="btn btn-ghost btn-sm">
+              Compare empires
+            </Link>
+          </div>
+        )}
+      </header>
+      <EmpireSummary model={model} onSelect={onSelect} />
+    </div>
+  );
+}
+
+/**
+ * The player's empire in figures: its totals with their share of the world, where it would rank
+ * among the world's countries, and its holdings, each of which finds the country on the map.
+ */
+export function EmpireSummary({ model, onSelect }: { model: CampaignModel; onSelect(id: TerritoryId): void }) {
   const ids = model.holdingsByUser.get(model.me.userId) ?? [];
   const all = model.idx.dataset.territories;
   const mine = ids
@@ -40,24 +68,7 @@ export function EmpirePanel({ model, onSelect }: { model: CampaignModel; onSelec
   ] as const;
 
   return (
-    <div className="space-y-6 p-4">
-      <header className="space-y-3">
-        <div>
-          <div className="label mb-1">Your empire</div>
-          <PlayerName member={model.me} size="lg" />
-        </div>
-        {model.campaign.status !== 'lobby' && (
-          <div className="flex flex-wrap gap-2">
-            <Link href={empireHref(model.me.userId)} className="btn btn-ghost btn-sm">
-              Full statistics
-            </Link>
-            <Link href={compareHref} className="btn btn-ghost btn-sm">
-              Compare empires
-            </Link>
-          </div>
-        )}
-      </header>
-
+    <div className="space-y-6">
       {mine.length === 0 ? (
         <p className="text-[0.95rem] text-muted">
           {model.campaign.status === 'lobby'

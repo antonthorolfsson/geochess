@@ -236,6 +236,29 @@ export async function loadOpenWars(db: Tx | Db, campaignId: string): Promise<Ope
   }));
 }
 
+/**
+ * Where each unresolved war's declaration falls in the campaign's history (its `war.declared`
+ * event id), by war id: what Kingslayer reads to know who led when a war was declared.
+ */
+export async function loadDeclarations(
+  db: Tx | Db,
+  campaignId: string,
+  warIds: readonly string[],
+): Promise<Record<string, number>> {
+  if (warIds.length === 0) return {};
+  const open = new Set(warIds);
+  const rows = await db
+    .select({ id: events.id, payload: events.payload })
+    .from(events)
+    .where(and(eq(events.campaignId, campaignId), eq(events.type, 'war.declared')));
+  const out: Record<string, number> = {};
+  for (const e of rows) {
+    const warId = (e.payload as { warId: string }).warId;
+    if (open.has(warId)) out[warId] = e.id;
+  }
+  return out;
+}
+
 /** Each player's points: the award ledger, and the titles they hold now (mission rules version 5 on). */
 export function pointsOf(
   awards: readonly Pick<AwardRow, 'userId' | 'points'>[],

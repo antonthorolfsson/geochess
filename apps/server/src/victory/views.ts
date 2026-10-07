@@ -23,6 +23,8 @@ import type { Db, Tx } from '../db/client';
 import { campaignResults } from '../db/schema';
 import {
   loadAwards,
+  loadDeclarations,
+  loadOpenWars,
   loadPendingClaims,
   loadPlayers,
   loadWorld,
@@ -91,6 +93,19 @@ export async function victoryViews(
   const titleCfg = cfg.titles;
   const totals = world && titleCfg ? titleTotals(world.idx, world.owners, memberIds, titleCfg.kinds) : null;
   const byUser = new Map(players.map((p) => [p.userId, p]));
+  // While the war is on, what previews of a war's endings need beyond the map: all of it public.
+  const worldView =
+    world && campaign.status === 'active'
+      ? {
+          baselines: Object.fromEntries(players.map((p) => [p.userId, p.baseline])),
+          history: world.history,
+          declared: await loadDeclarations(
+            db,
+            campaign.id,
+            (await loadOpenWars(db, campaign.id)).map((w) => w.id),
+          ),
+        }
+      : undefined;
 
   const victory: VictoryView = {
     version: cfg.version,
@@ -142,6 +157,7 @@ export async function victoryViews(
           }
         : null,
     result: result?.snapshot ?? null,
+    ...(worldView && { world: worldView }),
   };
 
   const mine = byUser.get(viewerId);

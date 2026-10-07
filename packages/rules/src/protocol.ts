@@ -10,6 +10,7 @@ import type { ResultReport } from './over-the-board';
 import type { ClaimHold, MissionSpec, SeasonTiebreak, SecretMissionSpec } from './victory/catalog';
 import type { Evaluation } from './victory/evaluate';
 import type { EffortEstimate } from './victory/generate';
+import type { MissionWorldView } from './victory/projection';
 import type { TitleKind } from './victory/titles';
 import type { PeaceTerms, Transfer, Truce, WarCounter, WarOutcome } from './war';
 
@@ -468,6 +469,13 @@ export interface VictoryView {
     unresolved: string[];
   } | null;
   result: VictoryResultView | null;
+  /**
+   * While the war is on: every player's holdings when the draft ended and the history the missions
+   * count, so a preview of a war's endings scores with the same functions the server does
+   * (`missionWorldFrom`, `projectWar`). Public, like the dispatches it comes from. Unset from
+   * servers older than 2026-10-07, and outside the war.
+   */
+  world?: MissionWorldView;
 }
 
 export interface SecretOptionView {

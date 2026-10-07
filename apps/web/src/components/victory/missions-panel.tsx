@@ -24,9 +24,10 @@ import { awardKey } from '@/lib/ceremony';
 import { keys } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
 import {
-  claimTiming,
+  claimSteps,
   findMission,
   hasMapView,
+  pointsBreakdown,
   pointsRace,
   progressOf,
   requirementText,
@@ -98,17 +99,35 @@ export function PointsRace({ model }: { model: CampaignModel }) {
   useReorderSlide(list, race.map((r) => r.userId).join());
   return (
     <section aria-labelledby="race-heading">
-      <h2 id="race-heading" className="label mb-2">
+      <h2 id="race-heading" className="label mb-1">
         Victory points · first to {victory.pointsToWin}
         {victory.lastRound !== null && ` · last round ${victory.lastRound}`}
       </h2>
+      {victory.result === null && (
+        <p className="mb-2 text-sm text-muted">
+          Mission points are kept for good
+          {victory.titles.length > 0 ? '; title points go with the lead' : ''}. A claim isn’t points until it scores.
+        </p>
+      )}
       <ol ref={list} className="relative space-y-2">
         {race.map(({ userId, points }) => {
           const member = model.membersById.get(userId);
+          const parts = pointsBreakdown(model, userId);
           return (
             <li key={userId} data-key={userId} className="flex items-center gap-2">
               <span className="min-w-0 flex-1">
                 <PlayerName member={member} you={userId === model.me.userId} size="sm" href={empireHref(userId)} />
+                {victory.result === null && (points > 0 || parts.claimed > 0) && (
+                  <span className="block truncate pl-6 text-xs text-muted">
+                    {[
+                      parts.missions > 0 && `${parts.missions} kept`,
+                      parts.titles > 0 && `${parts.titles} from titles`,
+                      parts.claimed > 0 && `+${parts.claimed} claimed, not yet scored`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                )}
               </span>
               <RaceMarks
                 points={points}
@@ -476,7 +495,8 @@ function Claims({ model, claims, onOpenWar, onShowOnMap }: PanelProps & { claims
       <ul className="space-y-2">
         {sorted.map((claim) => {
           const played = findMission(model, claim.userId, claim.missionKey);
-          const timing = claimTiming(model, claim, now);
+          const { steps, next } = claimSteps(model, claim, now);
+          const blockers = claim.blockedBy.flatMap((id) => model.campaign.wars.find((w) => w.id === id) ?? []);
           const mine = claim.userId === me;
           return (
             <li key={claim.id} className={`rounded-[3px] border p-3 ${mine ? 'border-amber/60' : 'border-grease/50'}`}>
@@ -490,31 +510,38 @@ function Claims({ model, claims, onOpenWar, onShowOnMap }: PanelProps & { claims
                     </span>
                   </div>
                   {played && <p className="mt-1 text-sm text-muted">{requirementText(model, played.mission.spec)}</p>}
-                  <p className="mt-1 text-sm">
-                    {timing.round} {timing.hold ?? timing.held}
-                  </p>
-                  {timing.blockers.length > 0 && (
-                    <p className="mt-1 text-sm text-[#ef7b72]">
-                      Waiting on{' '}
-                      {timing.blockers.map((w, i) => (
-                        <span key={w.id}>
-                          {i > 0 && ', '}
-                          <button
-                            type="button"
-                            className="underline underline-offset-2"
-                            onClick={() => onOpenWar(w.id)}
-                          >
-                            the war for {countryName(model, w.targetId)}
-                          </button>
+                  <h3 className="label mt-2">Claimed in round {claim.startedRound} · not scored yet</h3>
+                  <ul className="mt-1 space-y-0.5 text-sm" aria-label="What it waits for">
+                    {steps.map((step) => (
+                      <li key={step.text} className={`flex gap-1.5 ${step.done ? 'text-muted' : ''}`}>
+                        <span
+                          aria-hidden="true"
+                          className={`w-3 shrink-0 text-center ${step.done ? 'text-amber' : 'text-[#ef7b72]'}`}
+                        >
+                          {step.done ? '✓' : '○'}
                         </span>
+                        <span className="min-w-0">
+                          {step.text}
+                          <span className="sr-only">{step.done ? ' Done.' : ' Not yet.'}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-sm text-muted">{next}</p>
+                  {blockers.length > 0 && (
+                    <p className="mt-1 flex flex-wrap gap-x-3 text-sm">
+                      {blockers.map((w) => (
+                        <button
+                          key={w.id}
+                          type="button"
+                          className="min-h-9 text-[#ef7b72] underline underline-offset-2"
+                          onClick={() => onOpenWar(w.id)}
+                        >
+                          See the war for {countryName(model, w.targetId)}
+                        </button>
                       ))}
-                      , which could still break it.
                     </p>
                   )}
-                  <p className="mt-1 text-sm text-muted">
-                    {mine ? 'Keep it held.' : 'Break the position before then to stop it.'} Claimed in round{' '}
-                    {claim.startedRound}.
-                  </p>
                 </div>
                 {played && <PointsBadge points={played.mission.points} />}
               </div>
@@ -544,7 +571,7 @@ function standingLine(model: CampaignModel, userId: string, key: string, progres
   const award = player?.awards.find((a) => a.missionKey === key);
   if (award) return `Scored in round ${award.round}`;
   const claim = model.campaign.victory?.claims.find((c) => c.userId === userId && c.missionKey === key);
-  if (claim) return `Claimed: can score in round ${claim.eligibleRound}`;
+  if (claim) return `Claimed, not points yet: can score in round ${claim.eligibleRound}`;
   if (!progress) return '';
   return progress.parts.map((p) => `${p.label} ${partAmount(p, p.have)}/${partAmount(p, p.need)}`).join(' · ');
 }

@@ -1,6 +1,4 @@
 import {
-  accordsInForce,
-  activeWar,
   attackableTargets,
   canTakeTurn,
   checkTurn,
@@ -10,9 +8,9 @@ import {
   legalPicks,
   partnerIn,
   picksUntilTurn,
-  renunciationsFrom,
   upcomingPickers,
   waitingOn,
+  warBoardFrom,
   type AccordView,
   type AutodraftFallback,
   type CampaignView,
@@ -144,21 +142,7 @@ export function buildModel(campaign: CampaignView, user: SessionUser, idx: Datas
   const running = campaign.status === 'draft' && draft !== null;
   const legal = myTurn ? new Set(legalPicks(idx, campaign.rules, owners, user.id)) : null;
 
-  const board: WarBoard = {
-    idx,
-    rules: campaign.rules,
-    round: campaign.round,
-    holdings: new Map(
-      [...owners].map(([id, ownerId]) => [
-        id,
-        { ownerId, acquiredRound: campaign.acquired[id] ?? 0, fortifiedUntil: campaign.fortified[id] ?? null },
-      ]),
-    ),
-    wars: campaign.wars.filter((w) => w.status !== 'resolved').map(activeWar),
-    truces: campaign.truces,
-    accords: accordsInForce(campaign.accords, campaign.round),
-    renunciations: renunciationsFrom(campaign.accords, campaign.round),
-  };
+  const board = warBoardFrom(campaign, idx);
   const activeWars = campaign.wars.filter((w) => w.status !== 'resolved');
   const warOf = new Map<TerritoryId, WarView>();
   const byId = new Map(activeWars.map((w) => [w.id, w]));

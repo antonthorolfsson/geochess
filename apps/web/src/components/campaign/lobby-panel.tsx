@@ -2,48 +2,35 @@
 
 import {
   COLOR_PALETTES,
-  CORRESPONDENCE_HOURS,
   DEFAULT_BOT_LEVEL,
   EMPIRE_COLORS,
-  HANDICAP_CAP_PCT,
-  HANDICAP_LEVELS,
-  HANDICAP_PCT_PER_100,
-  LIVE_CLOCKS,
-  MAX_PLAYERS,
   MIN_PLAYERS,
-  MATCHED_RAISE_MIN_PCT,
-  MAX_RAISES,
   RATING_MAX,
   RATING_MIN,
-  TURN_WINDOW_TEXT,
   type ColorPalette,
-  type DraftMode,
-  type DrawRule,
-  type HandicapLevel,
   type MemberView,
-  type Pace,
-  type RaiseStyle,
   type TerritoryId,
-  type WarRules,
   botLevelText,
   empireColor,
+  joinWords,
   lichessPerfFor,
-  withStakeFloor,
 } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
-import { ratingText } from '@/lib/rules-text';
+import { changedSettings, keySettings, ratingText, settingsList } from '@/lib/rules-text';
 import { EmpireSwatch } from '../hatch';
-import { Notice, Toggle } from '../ui';
-import { LobbyMissions } from '../victory/lobby-missions';
+import { Notice } from '../ui';
+import { PublicMissions } from '../victory/lobby-missions';
 import type { MissionFocus } from '../victory/missions-panel';
 import { BotLevelSelect } from './bot-level-select';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
+import { useSettingsHref } from './room-context';
 
 export function LobbyPanel({
   model,
@@ -59,6 +46,7 @@ export function LobbyPanel({
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) });
+  const settingsHref = useSettingsHref(campaign.id);
 
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
@@ -187,14 +175,9 @@ export function LobbyPanel({
         />
       )}
 
-      <RulesSection model={model} onSave={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))} />
+      <LobbySettings model={model} settingsHref={settingsHref} />
 
-      <LobbyMissions
-        model={model}
-        onSaveRules={(rules) => run(() => api.updateCampaign(campaign.id, { rules }))}
-        onSelectCountry={onSelect}
-        onShowOnMap={onShowOnMap}
-      />
+      <PublicMissions model={model} settingsHref={settingsHref} onSelectCountry={onSelect} onShowOnMap={onShowOnMap} />
 
       <DraftListSection model={model} onSelect={onSelect} />
 
@@ -215,7 +198,7 @@ export function LobbyPanel({
               {!enough
                 ? `You need at least ${MIN_PLAYERS} players. Share the invite link or add a bot to fill the table.`
                 : !missionsReady
-                  ? 'Choose four public missions first, or play open-ended.'
+                  ? 'Choose the public missions in the settings first, or play open-ended.'
                   : 'The pick order is drawn at random and snakes back each round. Everyone can join until you start. The rules and missions lock when you do.'}
             </p>
           </>
@@ -492,389 +475,64 @@ function InviteLink({ code, campaignName }: { code: string; campaignName: string
   );
 }
 
-function RulesSection({ model, onSave }: { model: CampaignModel; onSave(rules: Record<string, unknown>): void }) {
+/**
+ * The campaign's settings at a glance: the few that sum it up, whether any differ from the standard
+ * rules, and the rest folded away. The host changes them on the settings page, away from the map.
+ */
+function LobbySettings({ model, settingsHref }: { model: CampaignModel; settingsHref: string }) {
   const { campaign, isHost } = model;
-  const radioName = useId();
-  const modes: { value: DraftMode; title: string; body: string }[] = [
-    {
-      value: 'contiguous',
-      title: 'Contiguous',
-      body: 'After your first pick, claim countries bordering your empire (by land or sea lane) while any are left.',
-    },
-    { value: 'free', title: 'Free', body: 'Claim any free country on every pick.' },
-  ];
+  const { rules } = campaign;
+  const heading = useId();
+  const changed = changedSettings(rules);
+  const key = keySettings(rules);
+  const rest = settingsList(rules).filter((s) => !key.some((k) => k.label === s.label));
+  const host = model.membersById.get(campaign.hostId)?.name ?? 'The host';
   return (
-    <section>
-      <h2 className="label mb-2">Rules{isHost ? '' : ' · set by the host'}</h2>
+    <section aria-labelledby={heading}>
+      <div className="mb-2 flex min-h-9 items-center justify-between gap-2">
+        <h2 id={heading} className="label">
+          Settings
+        </h2>
+        {isHost && (
+          <Link href={settingsHref} className="btn btn-ghost btn-sm">
+            Change settings
+          </Link>
+        )}
+      </div>
       <div className="space-y-3 rounded-[3px] border border-line p-3">
-        <label className="flex min-h-11 items-center justify-between gap-3">
-          <span className="font-semibold">Player limit</span>
-          <select
-            className="input w-24"
-            value={campaign.rules.maxPlayers}
-            disabled={!isHost}
-            onChange={(e) => onSave({ maxPlayers: Number(e.target.value) })}
-          >
-            {Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => i + MIN_PLAYERS).map((n) => (
-              <option key={n} value={n} disabled={n < campaign.members.length}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <fieldset>
-          <legend className="mb-1 font-semibold">Draft</legend>
-          <div className="space-y-1">
-            {modes.map((mode) => (
-              <label key={mode.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
-                <input
-                  type="radio"
-                  name={radioName}
-                  className="mt-1 size-4 accent-amber"
-                  checked={campaign.rules.draft.mode === mode.value}
-                  disabled={!isHost}
-                  onChange={() => onSave({ draft: { mode: mode.value } })}
-                />
-                <span>
-                  <span className="block font-semibold">{mode.title}</span>
-                  <span className="block text-sm text-muted">{mode.body}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <WarRulesFields rules={campaign.rules.war} disabled={!isHost} onSave={(war) => onSave({ war })} />
+        <div>
+          <p className="font-semibold">{changed.length === 0 ? 'Standard rules' : 'Custom rules'}</p>
+          <p className="text-sm text-muted">
+            {changed.length > 0 && `Changed from the standard rules: ${joinWords(changed.map(lowerFirst))}. `}
+            {isHost
+              ? 'You can change any setting until the draft starts.'
+              : `${host} can change them until the draft starts.`}
+          </p>
+        </div>
+        <SettingRows rows={key} />
+        <details>
+          <summary className="min-h-9 cursor-pointer content-center text-sm font-semibold">All settings</summary>
+          <SettingRows rows={rest} />
+        </details>
       </div>
     </section>
   );
 }
 
-export const PACE_OPTIONS: { value: Pace; title: string; body: string }[] = [
-  {
-    value: 'correspondence',
-    title: 'Correspondence',
-    body: 'Games run over days, each move within the time per move. Suits campaigns that last weeks.',
-  },
-  {
-    value: 'live',
-    title: 'Live',
-    body: 'Blitz for game nights with everyone online. Each player plays one game at a time.',
-  },
-];
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
-const DRAW_OPTIONS: { value: DrawRule; title: string; body: string }[] = [
-  { value: 'defender-holds', title: 'Defender holds', body: 'A drawn war changes nothing.' },
-  {
-    value: 'armageddon',
-    title: 'Armageddon',
-    body: 'A draw goes to one more game with colors swapped. Black gets four fifths of the time and wins a draw.',
-  },
-];
-
-const handicapBody = (level: Exclude<HandicapLevel, 'off'>) =>
-  `The weaker player gets ${HANDICAP_PCT_PER_100[level]}% more time for every 100 rating points between the two, up to ${HANDICAP_CAP_PCT[level]}%. In live games the stronger player has as much less.`;
-
-const HANDICAP_OPTIONS: { value: HandicapLevel; title: string; body: string }[] = HANDICAP_LEVELS.map((value) =>
-  value === 'off'
-    ? { value, title: 'Off', body: 'Both players get the same time, whatever their ratings.' }
-    : { value, title: value === 'full' ? 'Full' : 'Light', body: handicapBody(value) },
-);
-
-const hoursLabel = (h: number) => (h % 24 === 0 ? `${h / 24} ${h === 24 ? 'day' : 'days'}` : `${h} hours`);
-
-/** How a defender raises the stakes, in the lobby's words. */
-export function raiseStyleOptions(rules: WarRules): { value: RaiseStyle; title: string; body: string }[] {
-  return [
-    {
-      value: 'matched',
-      title: 'Matched',
-      body: `The defender puts one of their countries, worth ${MATCHED_RAISE_MIN_PCT}% to 100% of the target, into the war. The attacker adds at least as much to the stake or withdraws; winning takes both. With more than one raise, either side can raise again in turn.`,
-    },
-    {
-      value: 'token',
-      title: 'Costs a token',
-      body: `The defender pays a war token to demand a stake of ${rules.raisePct}% of the target. The attacker gets the token for meeting it.`,
-    },
-    {
-      value: 'free',
-      title: 'Free (original)',
-      body: `The defender demands a stake of ${rules.raisePct}% of the target at no cost.`,
-    },
-    {
-      value: 'off',
-      title: 'No raising',
-      body: 'Defenders accept, redirect or talk peace. Try it with a higher stake floor.',
-    },
-  ];
-}
-
-/** The host's war settings: pace, clocks, draws, and the numbers the playtest will tune. */
-function WarRulesFields({
-  rules,
-  disabled,
-  onSave,
-}: {
-  rules: WarRules;
-  disabled: boolean;
-  onSave(war: Partial<WarRules>): void;
-}) {
-  const paceName = useId();
-  const drawName = useId();
-  const raiseName = useId();
-  const handicapName = useId();
-  const numbers: {
-    key: 'tokensPerRound' | 'tokenCap' | 'truceRounds' | 'lockRounds';
-    label: string;
-    range: number[];
-  }[] = [
-    { key: 'tokensPerRound', label: 'War tokens each round', range: [1, 2, 3] },
-    { key: 'tokenCap', label: 'Most tokens a player can save up', range: [1, 2, 3, 4, 5] },
-    { key: 'truceRounds', label: 'Rounds of truce after a war', range: [0, 1, 2, 3] },
-    { key: 'lockRounds', label: 'Rounds before a won country can be staked', range: [0, 1, 2, 3, 4] },
-  ];
+function SettingRows({ rows }: { rows: { label: string; value: string }[] }) {
   return (
-    <fieldset className="space-y-3">
-      <legend className="mb-1 font-semibold">Wars</legend>
-      <div className="space-y-1">
-        {PACE_OPTIONS.map((p) => (
-          <label key={p.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
-            <input
-              type="radio"
-              name={paceName}
-              className="mt-1 size-4 accent-amber"
-              checked={rules.pace === p.value}
-              disabled={disabled}
-              onChange={() => onSave({ pace: p.value })}
-            />
-            <span>
-              <span className="block font-semibold">{p.title}</span>
-              <span className="block text-sm text-muted">{p.body}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-      <label className="flex min-h-11 items-center justify-between gap-3">
-        <span className="font-semibold">Time control</span>
-        {rules.pace === 'live' ? (
-          <select
-            className="input w-32"
-            value={rules.liveClock}
-            disabled={disabled}
-            onChange={(e) => onSave({ liveClock: e.target.value as WarRules['liveClock'] })}
-          >
-            {LIVE_CLOCKS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <select
-            className="input w-44"
-            value={rules.hoursPerMove}
-            disabled={disabled}
-            onChange={(e) => onSave({ hoursPerMove: Number(e.target.value) as WarRules['hoursPerMove'] })}
-          >
-            {CORRESPONDENCE_HOURS.map((h) => (
-              <option key={h} value={h}>
-                {hoursLabel(h)} per move
-              </option>
-            ))}
-          </select>
-        )}
-      </label>
-      <Toggle
-        checked={rules.turns}
-        disabled={disabled}
-        onChange={(turns) => onSave({ turns })}
-        label="Take turns declaring"
-        description={`Each round, players declare war or fortify one at a time, round the table, with ${TURN_WINDOW_TEXT[rules.pace]} a turn; passing ends a player's declaring for the round. Off: anyone declares whenever they like, so the quickest get first pick.`}
-      />
-      <div className="space-y-1">
-        <span className="block text-sm font-semibold text-muted">Draws</span>
-        {DRAW_OPTIONS.map((d) => (
-          <label key={d.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
-            <input
-              type="radio"
-              name={drawName}
-              className="mt-1 size-4 accent-amber"
-              checked={rules.draws === d.value}
-              disabled={disabled}
-              onChange={() => onSave({ draws: d.value })}
-            />
-            <span>
-              <span className="block font-semibold">{d.title}</span>
-              <span className="block text-sm text-muted">{d.body}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-      <Toggle
-        checked={rules.clockModifiers}
-        disabled={disabled}
-        onChange={(clockModifiers) => onSave({ clockModifiers })}
-        label="Clock modifiers"
-        description="Home turf, mountains and islands give the defender extra time; supply lines give the attacker extra time. Capped at 25%."
-      />
-      <div className="space-y-1">
-        <span className="block text-sm font-semibold text-muted">Rating handicap</span>
-        {HANDICAP_OPTIONS.map((h) => (
-          <label key={h.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
-            <input
-              type="radio"
-              name={handicapName}
-              className="mt-1 size-4 accent-amber"
-              checked={rules.handicap === h.value}
-              disabled={disabled}
-              onChange={() => onSave({ handicap: h.value })}
-            />
-            <span>
-              <span className="block font-semibold">{h.title}</span>
-              <span className="block text-sm text-muted">{h.body}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-      {rules.handicap !== 'off' && (
-        <Toggle
-          checked={rules.selfRatings}
-          disabled={disabled}
-          onChange={(selfRatings) => onSave({ selfRatings })}
-          label="Players give their own rating"
-          description="Players without an established Lichess rating type one in. Off: they play unrated, and their games have no handicap."
-        />
-      )}
-      <div className="space-y-1">
-        <span className="block text-sm font-semibold text-muted">Raising the stakes</span>
-        {raiseStyleOptions(rules).map((r) => (
-          <label key={r.value} className="flex cursor-pointer gap-3 rounded-[3px] p-2 hover:bg-raised/60">
-            <input
-              type="radio"
-              name={raiseName}
-              className="mt-1 size-4 accent-amber"
-              checked={rules.raise === r.value}
-              disabled={disabled}
-              onChange={() => onSave({ raise: r.value })}
-            />
-            <span>
-              <span className="block font-semibold">{r.title}</span>
-              <span className="block text-sm text-muted">{r.body}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-      {rules.raise === 'matched' && (
-        <label className="block space-y-1">
-          <span className="flex min-h-11 items-center justify-between gap-3">
-            <span className="text-[0.95rem] font-semibold">Raises in one war</span>
-            <select
-              className="input w-24"
-              value={rules.raises}
-              disabled={disabled}
-              onChange={(e) => onSave({ raises: Number(e.target.value) })}
-            >
-              {Array.from({ length: MAX_RAISES }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </span>
-          <span className="block text-sm text-muted">
-            {rules.raises === 1
-              ? 'The defender raises once; the attacker meets it or withdraws (the original rule).'
-              : `The attacker can raise again, then the defender, up to ${rules.raises} raises in all. Whoever has raised and then backs down loses the war as declared, without a game: the defender the target, the attacker the stake.`}
-          </span>
-        </label>
-      )}
-      <Toggle
-        checked={rules.redirect === 'nearby'}
-        disabled={disabled}
-        onChange={(nearby) => onSave({ redirect: nearby ? 'nearby' : 'anywhere' })}
-        label="Redirects stay nearby"
-        description="A redirect must border the country attacked, and the war keeps that country's clock. Off: any same-value country bordering the attacker (the original rule)."
-      />
-      <Toggle
-        checked={rules.redirectToken}
-        disabled={disabled}
-        onChange={(redirectToken) => onSave({ redirectToken })}
-        label="Redirects cost a token"
-        description="The defender pays a war token to redirect; the attacker gets it for fighting on."
-      />
-      <Toggle
-        checked={rules.fortify}
-        disabled={disabled}
-        onChange={(fortify) => onSave({ fortify })}
-        label="Fortifying"
-        description={`A war token fortifies a country until the round after next: a war on it needs a stake of ${rules.raisePct}% of its value.`}
-      />
-      <Toggle
-        checked={rules.peaceTerms}
-        disabled={disabled}
-        onChange={(peaceTerms) => onSave({ peaceTerms })}
-        label="Peace terms"
-        description="Either player can offer terms to end a war until its game is over: countries or tokens either way, or nothing, and an accord. Takes the place of tribute."
-      />
-      <Toggle
-        checked={rules.recall}
-        disabled={disabled}
-        onChange={(recall) => onSave({ recall })}
-        label="Calling off"
-        description="The attacker can call a declaration off until the defender answers. The token stays spent."
-      />
-      <details className="rounded-[3px] border border-line px-3 py-2">
-        <summary className="min-h-9 cursor-pointer content-center font-semibold">More war settings</summary>
-        <div className="space-y-2 pt-2">
-          {(
-            [
-              { key: 'stakeFloorPct', label: 'Least stake, as a share of the target', range: [80, 90, 100, 110, 125] },
-              {
-                key: 'raisePct',
-                label: 'Stake a raise or a fortified country demands',
-                range: [110, 125, 150, 175, 200],
-              },
-            ] as const
-          ).map(({ key, label, range }) => (
-            <label key={key} className="flex min-h-11 items-center justify-between gap-3">
-              <span className="text-[0.95rem]">{label}</span>
-              <select
-                className="input w-24"
-                value={rules[key]}
-                disabled={disabled}
-                onChange={(e) => {
-                  const pct = Number(e.target.value);
-                  onSave(key === 'stakeFloorPct' ? withStakeFloor(rules, pct) : { raisePct: pct });
-                }}
-              >
-                {[...new Set([...range, rules[key]])]
-                  .sort((a, b) => a - b)
-                  .map((n) => (
-                    <option key={n} value={n}>
-                      {n}%
-                    </option>
-                  ))}
-              </select>
-            </label>
-          ))}
-          {numbers.map(({ key, label, range }) => (
-            <label key={key} className="flex min-h-11 items-center justify-between gap-3">
-              <span className="text-[0.95rem]">{label}</span>
-              <select
-                className="input w-20"
-                value={rules[key]}
-                disabled={disabled}
-                onChange={(e) => onSave({ [key]: Number(e.target.value) })}
-              >
-                {range.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
+    <dl className="text-sm">
+      {rows.map((s) => (
+        <div
+          key={s.label}
+          className="flex items-baseline justify-between gap-4 border-b border-line py-1.5 last:border-0"
+        >
+          <dt className="text-muted">{s.label}</dt>
+          <dd className="text-right font-semibold">{s.value}</dd>
         </div>
-      </details>
-    </fieldset>
+      ))}
+    </dl>
   );
 }

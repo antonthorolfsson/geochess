@@ -2,10 +2,12 @@ import { DEFAULT_RULES, MISSION_RULES_V4, MISSION_RULES_V6, missionRules, parseR
 import { describe, expect, it } from 'vitest';
 import {
   answerTimeText,
+  changedSettings,
   deadlineRows,
   forRounds,
   handicapLine,
   holdTimeText,
+  keySettings,
   missionPointsMax,
   missionVersionNote,
   objectivesText,
@@ -20,6 +22,7 @@ import {
   selectionTimeText,
   settingsList,
   stakeTable,
+  standardRules,
   timeControlText,
   turnTimeText,
   winningMathText,
@@ -137,6 +140,49 @@ describe('rules in words', () => {
     const names = { attacker: 'Ann', defender: 'Bo' };
     expect(handicapLine(h, 'live', names)).toBe('Bo +40% time, Ann −40% (250 points apart)');
     expect(handicapLine(h, 'correspondence', names)).toBe('Bo +40% time (250 points apart)');
+  });
+
+  it('sums a campaign up in its key settings', () => {
+    expect(keySettings(DEFAULT_RULES)).toEqual([
+      { label: 'Pace', value: 'Correspondence' },
+      { label: 'Time control', value: '1 day per move' },
+      { label: 'Players', value: 'Up to 8' },
+      { label: 'Draft', value: 'Contiguous' },
+      { label: 'Victory', value: 'First to 10 points, with titles' },
+      { label: 'Last round', value: 'Round 25, then the most points win' },
+    ]);
+    // Open-ended campaigns have no last round to give.
+    expect(keySettings(parseRules({})).map((s) => s.label)).toEqual([
+      'Pace',
+      'Time control',
+      'Players',
+      'Draft',
+      'Victory',
+    ]);
+  });
+
+  it('says where a campaign differs from the standard rules at its pace', () => {
+    // A quick start plays the standard rules at either pace.
+    expect(changedSettings(DEFAULT_RULES)).toEqual([]);
+    expect(changedSettings({ ...DEFAULT_RULES, war: { ...DEFAULT_RULES.war, pace: 'live' } })).toEqual([]);
+    const custom = {
+      ...DEFAULT_RULES,
+      maxPlayers: 4,
+      war: { ...DEFAULT_RULES.war, pace: 'live' as const, liveClock: '3+2' as const, draws: 'armageddon' as const },
+    };
+    expect(changedSettings(custom)).toEqual(['Players', 'Time control', 'Draws']);
+    // Open-ended: the mission settings it no longer has aren't listed as changes.
+    expect(changedSettings({ ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, mode: 'open' } })).toEqual([
+      'Victory',
+    ]);
+    // A campaign on older mission rules is compared with the standard rules on its own version.
+    const older = { ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, version: 4 } };
+    expect(standardRules(older).victory.version).toBe(4);
+    expect(changedSettings(older)).toEqual([]);
+    // Stored rules from before the revised war answers differ in each of them.
+    expect(changedSettings(parseRules({ victory: DEFAULT_RULES.victory }))).toEqual(
+      expect.arrayContaining(['Declaring', 'Least stake', 'Raising the stakes', 'Redirects', 'Fortifying']),
+    );
   });
 });
 

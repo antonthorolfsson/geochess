@@ -14,6 +14,8 @@ export const keys = {
   facts: ['facts'] as const,
   /** Mutation key for saving a draft list, so bursts of edits can be told apart from other changes. */
   draftList: (campaignId: string) => ['draft-list', campaignId] as const,
+  /** Mutation key for saving the host's settings, likewise. */
+  settings: (campaignId: string) => ['settings', campaignId] as const,
   game: (gameId: string) => ['game', gameId] as const,
   stats: (campaignId: string) => ['stats', campaignId] as const,
   war: (campaignId: string, warId: string) => ['war', campaignId, warId] as const,

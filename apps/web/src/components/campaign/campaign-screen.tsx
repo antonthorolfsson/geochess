@@ -226,7 +226,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   const { campaign } = model;
   const me = model.me.userId;
   const router = useRouter();
-  // A page open over the map room: an empire's statistics, every empire's compared, or the rules.
+  // A page open over the map room: an empire's statistics, every empire's compared, the rules or the settings.
   const pageSegment = useSelectedLayoutSegment();
   const overPage = pageSegment !== null;
   const { userId: empireOf } = useParams<{ userId?: string }>();
@@ -570,7 +570,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
         ? 'Compare empires · '
         : pageSegment === 'results'
           ? 'Results · '
-          : '';
+          : pageSegment === 'settings'
+            ? 'Settings · '
+            : '';
   useDocumentTitle(`${flag}${page}${campaign.name} · Geo Chess`);
 
   const [initialFrame] = useState(() => model.holdingsByUser.get(me) ?? []);
@@ -918,7 +920,10 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           results={finished ? { href: resultsHref, open: pageSegment === 'results' } : null}
           back={
             overPage
-              ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
+              ? {
+                  href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`,
+                  label: campaign.status === 'lobby' ? 'Back to the lobby' : 'Back to the map',
+                }
               : { href: '/campaigns', label: 'All campaigns' }
           }
           rules={{

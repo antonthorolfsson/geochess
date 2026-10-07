@@ -48,3 +48,9 @@ export function useResultsHref(campaignId: string): string {
   const query = useSearchParams().toString();
   return `/c/${campaignId}/results${query ? `?${query}` : ''}`;
 }
+
+/** The link to the campaign's settings, keeping the address's query like `useEmpireHref`. */
+export function useSettingsHref(campaignId: string): string {
+  const query = useSearchParams().toString();
+  return `/c/${campaignId}/settings${query ? `?${query}` : ''}`;
+}

@@ -1106,6 +1106,108 @@ To rerun: `pnpm sim --scenario baseline,whatif:titles-1,whatif:titles-2,whatif:t
 and `pnpm sim --scenario whatif:titles-1-win9,whatif:titles-1-win11,whatif:titles-1-blind,whatif:titles-2-win12,whatif:titles-2-win14,whatif:titles-2-blind --players 2-8 --paces live --seeds 150 --out titles2`,
 then `pnpm sim:report titles titles2` (the Titles table) or `pnpm sim:report titles --compare baseline`.
 
+## Named regions, harder
+
+_Added 7 October 2026, a what-if, not in the game. Since version 3 the named seas and regions
+need half their countries, at least two: two of four for Northern Passage, three of five for
+Caspian. Two what-ifs ask for more: `sets-plus-one`, one country more, and `sets-all`, every
+country on the list. Both are still revealed only once complete._
+
+Earlier what-ifs on secrets changed a mission after it was dealt. These deal with their own
+numbers (`Variant.missionRules`), as a lobby would: an option that would now take more than seven
+conquests, or whose countries don't hang together on the map, isn't offered, and options show the
+conquests they now take.
+
+| Regions                                                                               | Countries | Today | One more | All             |
+| ------------------------------------------------------------------------------------- | --------- | ----- | -------- | --------------- |
+| Northern Passage, Caribbean Chain, Pacific Passage, Mediterranean Arc, Horn of Africa | 4         | 2     | 3        | 4               |
+| Central Asian Union, Caspian, Andean Spine, Mekong                                    | 5         | 3     | 4        | 5               |
+| Nordic                                                                                | 5         | 3     | 4        | 5 (never dealt) |
+| Black Sea                                                                             | 6         | 3     | 4        | 6               |
+| Gulf Hegemon                                                                          | 8         | 4     | 5        | 8               |
+| Baltic League                                                                         | 9         | 5     | 6        | 9               |
+
+Version 2 asked for about this much (four of four, four of five, five of eight), revealed one step
+before completion; those regions were done 2–12% of the time
+([Secret missions](#4-secret-missions)).
+
+The same seeds, mission rules version 6, dataset 2026.3, a last round of 25, live, 200 campaigns per
+table size from 2 to 8: once with players choosing their secret (`baseline`), once with each
+assigned a different kind that fits them (`secrets`), so every region is measured on equal terms.
+
+**As players choose** (1,400 campaigns each; where split, 2–3 / 4–5 / 6–8 players):
+
+|                                             | Today            | One more         | All              |
+| ------------------------------------------- | ---------------- | ---------------- | ---------------- |
+| Hands with a named region                   | 62%              | 62%              | 60%              |
+| Conquests it shows, on average              | 3.6              | 4.4              | 5.0              |
+| Players taking one                          | 27 / 21 / 22%    | 18 / 12 / 12%    | 18 / 10 / 7%     |
+| Taken: ever complete                        | 28%              | 24%              | 15%              |
+| Taken: scored                               | 21%              | 16%              | 10%              |
+| Holder wins, × fair share (95% CI)          | 1.04 (0.94–1.14) | 1.01 (0.89–1.14) | 0.90 (0.77–1.04) |
+| Players taking a battle secret              | 37%              | 41%              | 42%              |
+| Winners holding a battle secret             | 47 / 38 / 37%    | 56 / 42 / 42%    | 52 / 45 / 44%    |
+| Winners holding a named region              | 24%              | 14%              | 10%              |
+| All secrets completed                       | 26%              | 26%              | 25%              |
+| Median win round                            | 10 / 10 / 9      | 10 / 10 / 9      | 10 / 10 / 9      |
+| Decided on points when the last round ended | 5 / 3 / 1%       | 4 / 3 / 1%       | 5 / 3 / 1%       |
+
+**On equal terms** (each player assigned a different kind that fits them; 1,400 campaigns each,
+about 200–300 holders of each region, so a region's figure is good to about ±4 points):
+
+| Region (countries)        | Today: completed | One more | All              |
+| ------------------------- | ---------------- | -------- | ---------------- |
+| Horn of Africa (4)        | 22%              | 4%       | 5%               |
+| Pacific Passage (4)       | 19%              | 10%      | 6%               |
+| Central Asian Union (5)   | 19%              | 11%      | 5%               |
+| Caribbean Chain (4)       | 16%              | 8%       | 8%               |
+| Mediterranean Arc (4)     | 16%              | 5%       | 2%               |
+| Caspian (5)               | 16%              | 12%      | 3%               |
+| Black Sea (6)             | 14%              | 12%      | 3%               |
+| Mekong (5)                | 11%              | 11%      | 4%               |
+| Northern Passage (4)      | 10%              | 7%       | 4%               |
+| Nordic (5)                | 10%              | 8%       | never dealt      |
+| Gulf Hegemon (8)          | 8%               | 1%       | 0% (100 holders) |
+| Baltic League (9)         | 6%               | 5%       | 8% (133 holders) |
+| Andean Spine (5)          | 5%               | 3%       | 6%               |
+| **All 13**                | **13%**          | **7%**   | **5%**           |
+| Holder wins, × fair share | 0.96             | 0.96     | 0.93             |
+| Every other secret        | 17%              | 18%      | 19%              |
+
+- **Campaigns play as long as today.** The median win round, the share decided on points and the
+  share of all secrets completed don't move. Players who would have taken a region take something
+  else, and complete that as often.
+- **Players stop taking the regions.** The bots take the option that shows the least effort, and a
+  region needing more shows more conquests. Those still taken are the ones a draft already mostly
+  holds: 2.6–2.7 conquests to go in all three.
+- **Battle secrets take their place.** Version 3 brought winners holding a battle secret down from
+  85–90%; one more country puts them back up from 40% to 46% (56% at 2–3 players).
+- **A region is done half as often with one more, a third as often with all**, on equal terms.
+  Those that are done come as soon (median round 8–9), from drafts that held most of the list.
+  The four-country regions lose most: Horn of Africa 22% → 4%, Mediterranean Arc 16% → 5% → 2%.
+  With no choice of which countries to take, the one a neighbour holds hardest decides it, and
+  any country lost breaks the claim (two in three complete positions go on to score, seven in ten
+  today).
+- **A holder still wins about a fair share, which says the secret stops mattering.** A completed
+  region wins 2.5–2.9 times a fair share in every variant. A holder who doesn't finish wins 0.68
+  of a fair share today but 0.79–0.84 when it's harder: they chase it less and play for the public
+  missions and titles. Winners who scored their secret fall from 41% to 35% (one more) and 33%
+  (all) on equal terms.
+- **All of them retires three regions.** Nordic can't be dealt: Iceland lies apart from the other
+  four across the North Atlantic, and the dealer only offers a region whose needed countries
+  hang together. Gulf Hegemon and Baltic League are in 1–2% of hands instead of 5–6%: all eight or
+  nine take more than the dealer's seven conquests from almost any draft.
+
+One more country keeps every region in play but halves how often they're done and moves
+players toward the battle secrets. All of them takes most regions out of the game, much as
+version 2 did. Neither is needed for game length. If holding the region should mean more, the
+cost is a weaker secret for most holders, which a region's points (3 today) could make up; that
+is untested.
+
+To rerun: `pnpm sim --scenario baseline,whatif:sets-plus-one,whatif:sets-all --players 2-8 --paces live --seeds 200 --out sets-chosen`
+and `pnpm sim --scenario secrets,whatif:sets-plus-one-forced,whatif:sets-all-forced --players 2-8 --paces live --seeds 200 --out sets-forced`,
+then `pnpm sim:report sets-chosen --compare baseline` and `pnpm sim:report sets-forced`.
+
 ## Limitations
 
 - **Bots are not your friends.** They are consistent, never tilt, never make deals over chat,
@@ -1121,8 +1223,10 @@ then `pnpm sim:report titles titles2` (the Titles table) or `pnpm sim:report tit
   sensitivity runs.
 - **Time is rounds.** Hosts are assumed to wait out holding times and, live, to start a round
   once its wars are fought. Correspondence wars last 0–2 extra rounds by assumption.
-- **What-ifs can't touch generation.** How targets are picked and how options are dealt is read
-  from the catalog by version, so those changes are marked unvalidated.
+- **Most what-ifs can't touch generation.** How targets are picked and how options are dealt is
+  read from the catalog by version, so those changes are marked unvalidated. Only what-ifs with
+  mission rules of their own (`Variant.missionRules`, from
+  [Named regions, harder](#named-regions-harder) on) deal with their numbers.
 - **One map.** Everything before [A 1–20 value curve](#a-120-value-curve) is on `2026.1`; `2026.2`
   has the same borders and sea lanes with other values. Missions tied to named countries (the named
   regions, the routes, Mare Nostrum, Seven Wonders) depend on how that map's borders and sea lanes

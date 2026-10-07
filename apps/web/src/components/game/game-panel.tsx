@@ -28,6 +28,7 @@ import { keys, newerGame, toBoardGame, useGame, type BoardGame } from '@/lib/que
 import { useNow } from '@/lib/use-now';
 import { countryName, formatClock, outcomeText, playerName, resultText, timeControlText, timeLeft } from '@/lib/wars';
 import { PlayerName } from '../campaign/player-name';
+import { WarOutcomes, WarStakesNote } from '../campaign/war-outcomes';
 import { FullscreenIcon, Notice, Spinner } from '../ui';
 import { Board } from './board';
 
@@ -299,6 +300,7 @@ function GameBoard({
           <h2 className="truncate font-stencil text-2xl leading-tight tracking-wide">
             Battle for {target?.name ?? 'the frontier'}
           </h2>
+          {war && war.status !== 'resolved' && <WarStakesNote model={model} war={war} className="block text-sm" />}
         </div>
         <FullscreenButton on={fullscreen} onClick={onFullscreen} />
         <CloseButton onClose={onClose} />
@@ -893,7 +895,7 @@ function WarContext({
   onOpenWar(warId: string): void;
 }) {
   return (
-    <div className="space-y-1 border-t border-line pt-3 text-sm text-muted">
+    <div className="space-y-3 border-t border-line pt-3 text-sm text-muted">
       <p>
         <strong className="text-paper">{playerName(model, war.attackerId)}</strong> attacks{' '}
         {countryName(model, war.targetId)} ({model.idx.byId.get(war.targetId)?.value}), staking{' '}
@@ -902,6 +904,7 @@ function WarContext({
       <p>
         White {timeControlText(game.timeControl, 'white')}, Black {timeControlText(game.timeControl, 'black')}.
       </p>
+      {war.status !== 'resolved' && <WarOutcomes model={model} war={war} compact heading="What this battle changes" />}
       <button type="button" className="underline underline-offset-2 hover:text-paper" onClick={() => onOpenWar(war.id)}>
         War details
       </button>

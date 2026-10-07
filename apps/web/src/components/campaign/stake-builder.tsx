@@ -10,11 +10,13 @@ import {
   stakeableCountries,
   suggestStake,
   valueOf,
+  warTimeControl,
   type TerritoryId,
 } from '@empire/rules';
 import { useMemo } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
 import { handicapLine } from '@/lib/rules-text';
+import { timeControlText } from '@/lib/wars';
 import { ValueBadge } from '../ui';
 
 export interface StakeDraft {
@@ -84,6 +86,8 @@ export function StakeBuilder({
   const defenderId = board.holdings.get(targetId)?.ownerId;
   const defender = defenderId ? model.membersById.get(defenderId) : undefined;
   const handicap = ratingHandicap(model.campaign.rules.war, model.me.rating?.rating, defender?.rating?.rating);
+  // The attacker plays White; Armageddon, if a draw leads to one, has its own clocks.
+  const clocks = warTimeControl(model.campaign.rules, modifiers, false, handicap);
 
   const remove = (id: TerritoryId) => {
     const rest = new Set(draft.stake.filter((s) => s !== id));
@@ -174,6 +178,12 @@ export function StakeBuilder({
         <p className="text-sm text-muted">
           <span className="label mr-2">Handicap</span>
           {handicapLine(handicap, model.campaign.rules.war.pace, { attacker: 'You', defender: defender.name })}
+        </p>
+      )}
+      {defender && (
+        <p className="text-sm text-muted">
+          <span className="label mr-2">Clocks</span>
+          You {timeControlText(clocks, 'white')} as White, {defender.name} {timeControlText(clocks, 'black')} as Black
         </p>
       )}
       {problem && <p className="text-sm text-amber">{problem}</p>}

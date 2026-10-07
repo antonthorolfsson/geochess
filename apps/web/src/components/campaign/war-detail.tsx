@@ -55,6 +55,7 @@ import { Notice, Spotlight } from '../ui';
 import { PlayerName } from './player-name';
 import { useEmpireHref } from './room-context';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
+import { WarOutcomes, WarStakesNote } from './war-outcomes';
 
 export interface StakePreview {
   targetId: TerritoryId;
@@ -192,7 +193,14 @@ export function WarDetail({
         )}
       </dl>
 
-      <p className="text-[0.95rem]">{warStatusText(model, war)}.</p>
+      <p className="text-[0.95rem]">
+        {warStatusText(model, war)}.
+        <WarStakesNote model={model} war={war} className="block" />
+      </p>
+
+      {war.status !== 'resolved' && !(answering && war.attackerId === me && war.counter?.kind === 'raise') && (
+        <WarOutcomes model={model} war={war} />
+      )}
 
       {war.status === 'declared' && war.defenderId === me && (
         <Spotlight nonce={spotlight} label="Your answer">
@@ -818,6 +826,7 @@ function AttackerReply({
         (draft ? (
           <>
             <StakeBuilder model={model} targetId={war.targetId} opts={opts} draft={draft} onChange={setDraft} />
+            <WarOutcomes model={model} war={war} stake={draft.stake} heading="What this stake could change" />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"

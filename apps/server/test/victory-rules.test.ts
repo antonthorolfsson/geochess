@@ -1,5 +1,10 @@
 import {
+  projectWar,
+  projectedWarOf,
+  scoreStateFrom,
   seededRandom,
+  warBoardFrom,
+  warTransfers,
   type CampaignRules,
   type CampaignRulesInput,
   type CampaignStats,
@@ -9,6 +14,8 @@ import {
   type GameView,
   type PublicMissionSpec,
   type SecretMissionSpec,
+  type WarEnding,
+  type WarOutcome,
   type WarView,
 } from '@empire/rules';
 import { warDataset } from '@empire/rules/testing';
@@ -86,6 +93,8 @@ async function objectives(opts: {
   rules?: CampaignRulesInput;
   /** Minutes to hold a claim, written straight to the stored rules: shorter than the lobby allows. */
   holdMinutes?: number;
+  /** The mission rules version: 4 (missions alone) unless a test plays titles too. */
+  version?: number;
 }) {
   const names = opts.names ?? ['Ann', 'Bo'];
   const clients = await Promise.all(names.map((n) => signIn(server.app, n)));
@@ -120,7 +129,7 @@ async function objectives(opts: {
         victory: {
           ...rules.victory,
           // Missions alone: version 4, the last without titles.
-          version: 4,
+          version: opts.version ?? 4,
           publicMissions: opts.missions,
           holdMinutes: opts.holdMinutes ?? rules.victory.holdMinutes,
         },
@@ -970,5 +979,125 @@ describe('mission history', () => {
     // Renounced in round 3, after it started.
     expect(byId.get(withCy)!.to).toBeGreaterThan(roundStarts[1]!.seq);
     expect(byId.get(withCy)!.from).toBeLessThan(roundStarts[1]!.seq);
+  });
+});
+
+describe("previews of a war's endings", () => {
+  /** What the campaign view lets `viewer` preview of a war, as the browser works it out. */
+  async function preview(s: Awaited<ReturnType<typeof objectives>>, viewer: Client, viewerId: string, warId: string) {
+    const view = await s.view(viewer);
+    const idx = server.app.ctx.datasets.get(view.datasetVersion);
+    const state = scoreStateFrom(view, viewerId, warBoardFrom(view, idx), server.clock.now().getTime())!;
+    const war = view.wars.find((w) => w.id === warId)!;
+    const ending = (outcome: WarOutcome, endReason: WarEnding['endReason']): WarEnding => ({
+      outcome,
+      transfers: warTransfers(war, outcome),
+      endReason,
+    });
+    const [win, winResigned, loss, draw] = projectWar(state, projectedWarOf(war, view.victory!.world), [
+      ending('attacker', 'checkmate'),
+      ending('attacker', 'resignation'),
+      ending('defender', 'checkmate'),
+      ending('held', 'agreement'),
+    ]);
+    return { state, win: win!, winResigned: winResigned!, loss: loss!, draw: draw! };
+  }
+  const summary = (v: CampaignView) => ({
+    points: Object.fromEntries(v.victory!.players.map((p) => [p.userId, p.points])),
+    titles: Object.fromEntries(v.victory!.titles.map((t) => [t.kind, t.holderId])),
+    claims: v.victory!.claims.map((c) => [c.userId, c.missionKey, c.eligibleRound]),
+  });
+
+  it('match what the server scores: a claim started, one broken, and a title kept by a holder only matched', async () => {
+    // Bo holds Largest Population, 7 countries to Ann's 5 (a million people each), and claims two of
+    // A1, B1 and R2 from round 1.
+    const s = await objectives({
+      missions: [{ kind: 'strategic_positions', territories: ['A1', 'B1', 'R2'], need: 2 }],
+      version: 6,
+    });
+    const warId = await s.declare(s.ann, 'B1', 'A1', ['A1']);
+    await s.respond(s.bo, warId, { response: 'accept' });
+    const before = summary(await s.view());
+    expect(before.titles.population).toBe(BO);
+    expect(before.claims).toEqual([[BO, 'p0', 3]]);
+
+    const { win, loss, draw } = await preview(s, s.ann, ANN, warId);
+    // Ann winning B1: her claim starts and Bo's breaks. Six countries each: Bo keeps the title.
+    expect(win.missions.map((m) => [m.userId, m.change, m.eligibleRound])).toEqual([
+      [ANN, 'claims', 3],
+      [BO, 'breaks', undefined],
+    ]);
+    expect(win.titles).toEqual([]);
+    // Bo winning A1 keeps his claim, still waiting for round 3; a draw leaves it waiting too.
+    expect(loss.missions.map((m) => [m.userId, m.change])).toEqual([
+      [ANN, 'setback'],
+      [BO, 'keeps'],
+    ]);
+    expect(draw.missions.map((m) => [m.userId, m.change])).toEqual([[BO, 'keeps']]);
+
+    await s.play(await s.game(await s.war(warId)), SCHOLARS_MATE);
+    const after = summary(await s.view());
+    expect(after).toEqual({
+      points: Object.fromEntries(win.points),
+      titles: { ...before.titles, ...Object.fromEntries(win.titles.map((t) => [t.kind, t.to])) },
+      claims: [[ANN, 'p0', 3]],
+    });
+  });
+
+  it('match what the server scores: a title and a record that win the campaign, without a hidden secret', async () => {
+    // Six countries each: nobody holds Largest Population. Ann's Checkmate Artist is a mate away,
+    // so it's revealed; Bo's Iron Wall is two wins away and stays hidden.
+    const owners = { ...OWNERS, Q2: ANN };
+    const s = await objectives({
+      missions: [{ kind: 'expansion', gain: 50 }],
+      secrets: { [ANN]: { kind: 'checkmate_artist', wins: 1 }, [BO]: { kind: 'iron_wall', wins: 3 } },
+      owners,
+      version: 6,
+    });
+    // Ann has 6 points from missions already.
+    await server.app.ctx.db.insert(missionAwards).values({
+      campaignId: s.id,
+      userId: ANN,
+      missionKey: 'p1',
+      kind: 'regional_power',
+      points: 6,
+      round: 1,
+      awardedAt: server.clock.now(),
+      claimId: null,
+    });
+    const warId = await s.declare(s.ann, 'B1', 'A1', ['A1']);
+    await s.respond(s.bo, warId, { response: 'accept' });
+
+    // Bo sees Ann's revealed secret, and his own hidden one; Ann never sees Bo's.
+    const seenByAnn = await preview(s, s.ann, ANN, warId);
+    expect(seenByAnn.state.missions.filter((m) => m.key === 'secret').map((m) => [m.userId, m.hidden])).toEqual([
+      [ANN, undefined],
+    ]);
+    const { state, win, winResigned, loss } = await preview(s, s.bo, BO, warId);
+    expect(state.missions.filter((m) => m.key === 'secret').map((m) => [m.userId, m.hidden])).toEqual([
+      [ANN, undefined],
+      [BO, true],
+    ]);
+    // A mate: Largest Population and Checkmate Artist take Ann to 10. A resignation: the title alone.
+    expect(win.titles).toEqual([{ kind: 'population', from: null, to: ANN }]);
+    expect(win.missions.map((m) => [m.userId, m.key, m.change])).toEqual([
+      [ANN, 'p0', 'progress'],
+      [ANN, 'secret', 'scores'],
+      [BO, 'p0', 'setback'],
+    ]);
+    expect(win.winners).toEqual([ANN]);
+    expect(winResigned.winners).toEqual([]);
+    expect(winResigned.points.get(ANN)).toBe(7);
+    expect(loss.titles).toEqual([{ kind: 'population', from: null, to: BO }]);
+    expect(loss.winners).toEqual([]);
+    expect(seenByAnn.win.winners).toEqual([ANN]);
+
+    await s.play(await s.game(await s.war(warId)), SCHOLARS_MATE);
+    const v = await s.view();
+    expect(v.status).toBe('finished');
+    expect(v.victory!.result!.winners).toEqual(win.winners);
+    expect(summary(v).points).toEqual(Object.fromEntries(win.points));
+    // The world for previews is only sent while the war is on.
+    expect(v.victory!.world).toBeUndefined();
   });
 });

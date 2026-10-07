@@ -1446,6 +1446,73 @@ skipping always wins; Cleo always accepts.
 
 Tests since: rules 319, data 73, web 157, sim 29, server 223 (801 in all).
 
+**What a battle changes** (2026-10-07, from a GitHub issue: players had to connect several panels
+to see a war's consequences and the victories it could bring). Previews only: no rule, scoring or
+reveal rule changed.
+
+- **Previews score like the server.** In `packages/rules/src/victory/projection.ts`,
+  `projectWar(state, war, endings)` follows `settleVictory`'s order for each ending: titles from the map first
+  (`titleHolders`), then every mission of the two players at war (`evaluateMission` on the world
+  with the transfers made and the war added to the history, `claimBlockers` for the wars still
+  open), then the finish line (`victoryWinners`). Each mission comes out as `scores` (a record, or a
+  claim that has waited long enough and no longer has a war that could break it), `claims`, `keeps`,
+  `breaks`, `progress` or `setback`, with `reveals` for the viewer's own hidden secret; each ending
+  has everyone's points after it, `winners`, and `claimWins` (a claim that would reach the points to
+  win if it scores). `claimsHeldUp` names the pending claims a declaration would hold up.
+- **What the client needs.** `VictoryView.world` (`MissionWorldView`): every player's draft baseline,
+  the mission history, and the event id of each unresolved war's declaration (for Kingslayer), sent
+  only while the campaign is active. All of it is public (bots already get the same, `bots/state.ts`).
+  Optional in the type, since the web and the server deploy separately: without it the previews show
+  the map, titles and points and say missions can't be previewed. `scoreStateFrom(view, viewerId, board, now)`
+  reads a campaign view: public missions for everyone, the viewer's own secret (hidden
+  until revealed) and others' revealed ones; a rival's unrevealed secret isn't in the view, so it is
+  never in a preview, and the preview says it isn't counted. `warBoardFrom(view, idx)` moved from
+  `buildModel` into the rules so the server test builds the same board as the browser.
+- **Checked against the server.** `victory-rules.test.ts`, "previews of a war's endings", projects a
+  real war from the campaign view as the browser does, fights it, and compares the server's points,
+  titles, claims and the win itself; and checks Ann's preview never holds Bo's hidden secret.
+- **Endings in words** (`apps/web/src/lib/outcomes.ts`). `warOutlook(model, war, { stake })` lists
+  the game's endings on the terms as they stand: win, loss, and a draw by the campaign's rule (the
+  defender holds; an Armageddon to come, with Black's share of the time and the draw going to Black;
+  or a drawn Armageddon going to the attacker). Then the other ways it can end now (withdrawing,
+  backing down: yielded or forfeited, accepting tribute, the viewer's own peace offers, which only
+  the two players ever see), what could still change before the game (raises, redirects, tribute,
+  peace terms, calling it off, silence), and why it's provisional (other unresolved wars, hidden
+  secrets). A stake still to be chosen (a raise to meet) says what it must reach rather than
+  guessing. A win is scored as one by resignation; where the winner has Checkmate Artist, a mate is
+  scored too ("Won by checkmate, also:"). `outcomeLines` words a projection from the viewer's side,
+  telling mission points ("kept for good"), title points ("while you lead, and it can be lost again")
+  and claims ("a claim, not points yet") apart.
+- **Where it shows.** `WarOutcomes` (`components/campaign/war-outcomes.tsx`) in the declaration form
+  ("What declaring could change", under a terms block: the war token, the least stake and why,
+  fortification included, the truce and locks after, and the turn it takes), the attacker's answer
+  to a raise (with the stake being built), every unresolved war's details, and the board's war
+  context. `WarStakesNote` ("★ Could win the campaign for Bo", or "Could set up a winning claim for
+  …") beside wars in the war room, your games, a war's details, a country caught up in a war, and
+  under the board's heading. The stake builder adds both clocks as they'd be (`warTimeControl`, with
+  the handicap). On phones, and on the board, mission progress and what could still change fold
+  away, so an ending stays a few lines.
+- **Missions panel.** The race says what kind each player's points are ("7 kept · 2 from titles · +2
+  claimed, not yet scored"); a claim lists what it waits for, ticked off (its round, everyone's turns
+  or the holding time, and each war that could break it, with what in that war would:
+  `claimThreat`), and what happens next (`claimSteps`).
+- **Checked in the browser** (dev server on a fresh database, Chromium at 1440 × 900 and 390 × 844,
+  scripted): "Outcome Check", Ann hosting Bo and Cy, round 1: Bo's war on Japan being played, Cy's
+  declaration on Russia waiting for Ann, and Ann's turn. Ann's declaration on Iran (terms, clocks,
+  each ending, what could still change, provisional notes), Cy's war in Ann's answer, the board for
+  Japan, the war room on a phone, and the missions panel. Then, with points added in the database
+  (Bo 8, Cy 9), the war room, the war and the board showed "Could win the campaign for Cy", Ann's "If
+  you lose: Cy wins the campaign, with 10 points" and Cy's "You win the campaign"; and with Czechia
+  taken out of Ann's baseline, the server started her claim and the panel listed what it waits for.
+  No sideways scroll and no console errors at either size.
+
+Tests since: rules 333 (`victory/projection.test.ts`), data 73, web 168 (`lib/outcomes.test.ts`), sim 29,
+server 225 (828 in all).
+
+Defaults taken (not asked; easy to change): the wording; scoring a win as a resignation, with a mate
+only where Checkmate Artist is at stake; folding progress on phones and the board; the "Could set up
+a winning claim" note; previews for spectators as well as the two players.
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1880,14 +1947,14 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                          |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                                                                                  |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`          |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `projection`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                                            |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                                                                    |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                                                                                                                            |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `notifications.tsx`                                           |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `outcomes.ts` (what a war could change, in words), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

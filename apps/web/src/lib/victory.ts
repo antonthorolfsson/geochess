@@ -1,6 +1,10 @@
 import {
   durationText,
+  missionComplete,
   missionName,
+  openWarOf,
+  possibleTransfers,
+  withTransfers,
   missionRequirement,
   SEASON_MEASURE_NAMES,
   joinWords,
@@ -21,7 +25,8 @@ import {
 } from '@empire/rules';
 import type { CampaignModel } from './campaign';
 import { formatAreaCompact, formatCount, formatInt, formatUsd } from './format';
-import { timeLeft } from './wars';
+import { previewState } from './outcomes';
+import { countryName, playerName, timeLeft } from './wars';
 
 /** A mission as someone plays it: public missions belong to everyone, a secret one to its player. */
 export interface PlayedMission {
@@ -156,6 +161,85 @@ export function claimTiming(model: CampaignModel, claim: ClaimView, now: number)
         ? `At least ${timeLeft(eligibleAt - now)} more to hold.`
         : null;
   return { round: when, hold, held: 'The holding time has passed.', blockers, roundDue };
+}
+
+/** One thing a claim waits for, and whether it's done. */
+export interface ClaimStep {
+  done: boolean;
+  text: string;
+}
+
+/**
+ * What in a war that holds a claim up would break it, as the rules see it: the shortest ways the
+ * war could end (`possibleTransfers`) that leave the mission incomplete by themselves. "if Germany
+ * goes to Bo"; empty when only another war's result alongside it could, or it can't be worked out.
+ */
+export function claimThreat(model: CampaignModel, claim: ClaimView, war: WarView): string {
+  const state = previewState(model);
+  const played = findMission(model, claim.userId, claim.missionKey);
+  if (!state?.missionsKnown || !played || war.status === 'resolved') return '';
+  const breaking = possibleTransfers(model.board, openWarOf(war))
+    .filter((t) => t.length > 0 && !missionComplete(withTransfers(state.world, t), claim.userId, played.mission.spec))
+    .sort((a, b) => a.length - b.length);
+  if (breaking.length === 0) return 'only together with another war’s result';
+  const ways = breaking.slice(0, 2).map((t) => {
+    const lost = t.filter((x) => x.from === claim.userId);
+    const moved = lost.length > 0 ? lost : t;
+    const names = moved.map((x) => countryName(model, x.territoryId));
+    const list = names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    const to = moved[0]!.to === model.me.userId ? 'you' : playerName(model, moved[0]!.to);
+    return `if ${list} ${moved.length === 1 ? 'goes' : 'go'} to ${to}`;
+  });
+  return `${ways.join(', or ')}${breaking.length > 2 ? ', among other ways' : ''}`;
+}
+
+/**
+ * Why a claim hasn't scored yet, step by step: its round, everyone's turns (or the holding time),
+ * and each war that could still break it, with what in that war would. `next` says what happens
+ * once they're all met.
+ */
+export function claimSteps(model: CampaignModel, claim: ClaimView, now: number): { steps: ClaimStep[]; next: string } {
+  const timing = claimTiming(model, claim, now);
+  const { round } = model.campaign;
+  const steps: ClaimStep[] = [
+    timing.roundDue
+      ? { done: true, text: `Round ${claim.eligibleRound} has started.` }
+      : { done: false, text: `Round ${claim.eligibleRound} has to start: it’s round ${round} now.` },
+    timing.hold === null ? { done: true, text: timing.held } : { done: false, text: timing.hold },
+  ];
+  if (timing.blockers.length === 0) {
+    steps.push({ done: true, text: 'No war underway could break it.' });
+  }
+  for (const war of timing.blockers) {
+    const threat = claimThreat(model, claim, war);
+    steps.push({
+      done: false,
+      text: `The war for ${countryName(model, war.targetId)} has to end without breaking it${threat ? `: it would break ${threat}` : ''}.`,
+    });
+  }
+  const mine = claim.userId === model.me.userId;
+  const next = steps.every((s) => s.done)
+    ? 'Everything is met: it scores with the next change to the campaign.'
+    : `It scores the moment the last of these is met, if the position still holds then. ${mine ? 'Until then it isn’t points: keep the position held.' : 'Until then it isn’t points: break the position first and it doesn’t score.'}`;
+  return { steps, next };
+}
+
+/**
+ * A player's points by kind: mission points (kept for good), title points (lost with the lead),
+ * and what pending claims would add if they score (not points yet).
+ */
+export function pointsBreakdown(
+  model: CampaignModel,
+  userId: string,
+): { missions: number; titles: number; claimed: number } {
+  const victory = model.campaign.victory;
+  const player = victoryPlayer(model, userId);
+  if (!victory || !player) return { missions: 0, titles: 0, claimed: 0 };
+  const missions = player.awards.reduce((sum, a) => sum + a.points, 0);
+  const claimed = victory.claims
+    .filter((c) => c.userId === userId)
+    .reduce((sum, c) => sum + (findMission(model, userId, c.missionKey)?.mission.points ?? 0), 0);
+  return { missions, titles: player.titles.length * victory.titlePoints, claimed };
 }
 
 /** Claims by other players: positions the viewer has until the claim scores to break. */

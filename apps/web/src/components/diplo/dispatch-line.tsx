@@ -278,7 +278,9 @@ export function DispatchLine({
       const winners = event.payload.winners.map((id) => name(id));
       return (
         <strong className="font-stencil text-lg tracking-wide text-amber">
-          {event.payload.seasonEnd && 'The last round is over. '}
+          {event.payload.endedEarly
+            ? 'The host ended the campaign. '
+            : event.payload.seasonEnd && 'The last round is over. '}
           {winners.length > 1
             ? `${winners.slice(0, -1).join(', ')} and ${winners.at(-1)} share the victory.`
             : `${winners[0]} wins the campaign.`}

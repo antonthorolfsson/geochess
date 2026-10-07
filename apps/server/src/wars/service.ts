@@ -964,6 +964,23 @@ export async function nextRound(ctx: AppContext, campaignId: string, userId: str
 }
 
 /**
+ * The host ends an Objectives campaign now, on points as they stand, as at the end of its last
+ * round (see `endSeason`): wars underway are called off. An open-ended campaign has no points to
+ * end on; the host can delete it instead.
+ */
+export async function endCampaign(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+  await mutate(ctx, campaignId, async (scope) => {
+    requireHost(scope, userId, 'end the campaign');
+    requireActive(scope);
+    if (scope.campaign.rules.victory.mode !== 'objectives') {
+      throw conflict('An open-ended campaign has no points to end on. Delete it instead.', 'open-ended');
+    }
+    const last = lastRoundOf(scope.campaign.rules);
+    await endSeason(ctx, scope, { early: last === null || scope.campaign.round < last });
+  });
+}
+
+/**
  * Answers declarations and counter-offers whose time ran out: a silent defender accepts the war as
  * declared; a silent attacker gets no war (a raise or redirect is withdrawn, a tribute accepted).
  * Silence on a raise after raising is backing down: the defender yields the target, the attacker

@@ -1,6 +1,7 @@
 import {
   seededRandom,
   type CampaignStats,
+  type CampaignSummary,
   type CampaignView,
   type Dataset,
   type FeedPage,
@@ -698,5 +699,73 @@ describe('the size of the table', () => {
       expect(drawn).not.toContain('mare_nostrum');
     }
     expect((await ann.post(`/api/campaigns/${id}/draft/start`)).status).toBe(200);
+  });
+});
+
+describe('ending early', () => {
+  /** Three players at war in round 1, every secret mission chosen. */
+  async function atWar() {
+    const t = await table();
+    expect((await t.ann.post(`/api/campaigns/${t.id}/draft/start`)).status).toBe(200);
+    expect((await t.ann.post(`/api/campaigns/${t.id}/draft/end`)).status).toBe(200);
+    for (const c of [t.ann, t.bo, t.cy]) {
+      const options = (await t.view(c)).mySecret!.options!;
+      expect((await c.post(`/api/campaigns/${t.id}/secret`, { optionId: options[0]!.id })).status).toBe(200);
+    }
+    expect(await t.view()).toMatchObject({ status: 'active', round: 1 });
+    return t;
+  }
+
+  it('lets the host end the campaign on points before the last round, and deletes it a week later', async () => {
+    const { ann, bo, id, view } = await atWar();
+    expect((await bo.post(`/api/campaigns/${id}/end`)).status).toBe(403);
+    const socket = await listen(server.app, bo);
+    expect((await ann.post(`/api/campaigns/${id}/end`)).status).toBe(200);
+    const done = await view(bo);
+    expect(done).toMatchObject({ status: 'finished', round: 1 });
+    expect(done.victory!.result).toMatchObject({ round: 1, seasonEnd: true, endedEarly: true });
+    expect(done.victory!.result!.winners).toHaveLength(1);
+    expect(done.events.at(-1)).toMatchObject({
+      type: 'campaign.won',
+      payload: { seasonEnd: true, endedEarly: true },
+    });
+    await tick();
+    const ending = server.notices.filter((n) => n.tag === `victory:${id}`);
+    expect(ending).toHaveLength(3);
+    expect(ending[0]!.body).toMatch(/^The host ended Grand Strategy in round 1, and the most points won/);
+    expect((await ann.post(`/api/campaigns/${id}/end`)).body).toMatchObject({ error: { code: 'not-active' } });
+
+    // Kept a week from the end, for the results, then deleted for everyone without a notice.
+    const deleteAt = Date.parse(done.deleteAt!);
+    expect(deleteAt).toBe(Date.parse(done.victory!.result!.finishedAt) + 7 * 24 * HOUR);
+    const listed = (await bo.get<CampaignSummary[]>('/api/campaigns')).body.find((c) => c.id === id);
+    expect(listed?.deleteAt).toBe(done.deleteAt);
+    const notices = server.notices.length;
+    server.clock.advance(deleteAt - server.clock.now().getTime() - 60_000);
+    await server.runDue();
+    expect((await bo.get(`/api/campaigns/${id}`)).status).toBe(200);
+    server.clock.advance(60_000);
+    await server.runDue();
+    await tick();
+    socket.close();
+    expect((await bo.get(`/api/campaigns/${id}`)).status).toBe(404);
+    expect(socket.messages).toContainEqual({ type: 'campaign.deleted', campaignId: id });
+    // Other campaigns' deadlines passed in that week too: only this campaign's notices count.
+    expect(server.notices.slice(notices).filter((n) => n.url.includes(id) || n.tag?.includes(id))).toEqual([]);
+  });
+
+  it('is only for an Objectives campaign at war', async () => {
+    const { ann, id } = await table();
+    expect((await ann.post(`/api/campaigns/${id}/end`)).body).toMatchObject({ error: { code: 'not-active' } });
+    const open = await ann.post<{ id: string }>('/api/campaigns', {
+      name: 'Open Ended',
+      rules: { victory: { mode: 'open' } },
+    });
+    await server.app.ctx.db.update(campaigns).set({ status: 'active', round: 1 }).where(eq(campaigns.id, open.body.id));
+    expect((await ann.post(`/api/campaigns/${open.body.id}/end`)).body).toMatchObject({
+      error: { code: 'open-ended' },
+    });
+    // The host can still delete it.
+    expect((await ann.del(`/api/campaigns/${open.body.id}`)).status).toBe(200);
   });
 });

@@ -274,6 +274,12 @@ export const DEFAULT_RULES: CampaignRules = parseRules({
 export const lastRoundOf = (rules: CampaignRules): number | null =>
   rules.victory.mode === 'objectives' ? rules.victory.lastRound : null;
 
+/**
+ * How long a finished campaign is kept, with its results and statistics, before it is deleted for
+ * everyone. The host can delete it sooner.
+ */
+export const FINISHED_CAMPAIGN_KEPT_DAYS = 7;
+
 export const campaignNameSchema = z
   .string()
   .trim()

@@ -89,47 +89,53 @@ export const loginTokens = pgTable('login_tokens', {
 export const CAMPAIGN_STATUSES = ['lobby', 'draft', 'selection', 'active', 'finished'] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
-export const campaigns = pgTable('campaigns', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  hostId: text('host_id')
-    .notNull()
-    .references(() => users.id),
-  rules: jsonb('rules').$type<CampaignRules>().notNull(),
-  /** The dataset snapshot this campaign plays on. */
-  datasetVersion: text('dataset_version').notNull(),
-  status: text('status', { enum: CAMPAIGN_STATUSES }).notNull().default('lobby'),
-  round: integer('round').notNull().default(0),
-  inviteCode: text('invite_code').notNull().unique(),
-  /** First-round pick order, set when the draft starts. */
-  draftOrder: jsonb('draft_order').$type<string[]>(),
-  /** Index of the next draft pick. */
-  pickIndex: integer('pick_index').notNull().default(0),
-  createdAt: createdAt(),
-  draftStartedAt: timestamp('draft_started_at', { withTimezone: true }),
-  startedAt: timestamp('started_at', { withTimezone: true }),
-  /** When the current round started (from victory missions on; claims time their holding from it). */
-  roundStartedAt: timestamp('round_started_at', { withTimezone: true }),
-  /** While secret missions are being chosen: when unchosen ones are assigned. */
-  selectionDeadline: timestamp('selection_deadline', { withTimezone: true }),
-  finishedAt: timestamp('finished_at', { withTimezone: true }),
-  /**
-   * Declaring in turns, where the rules have it: the current round's order (null: no turns this
-   * round), who has passed, whose turn it is (null with an order: declaring is over for the round)
-   * and when that turn passes on its own.
-   */
-  turnOrder: jsonb('turn_order').$type<string[]>(),
-  turnPassed: jsonb('turn_passed').$type<string[]>().notNull().default([]),
-  turnUserId: text('turn_user_id'),
-  turnDeadline: timestamp('turn_deadline', { withTimezone: true }),
-  /**
-   * The last round whose declaring ran to its end (everyone passed or had nothing to do), or null
-   * if none has: claims held by turns wait for a round after theirs to get here.
-   */
-  turnsEndedRound: integer('turns_ended_round'),
-  /** Who holds each title (mission rules version 5 on), from round 1; `settleVictory` keeps it current. */
-  titles: jsonb('titles').$type<TitleHolders>().notNull().default({}),
-});
+export const campaigns = pgTable(
+  'campaigns',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    hostId: text('host_id')
+      .notNull()
+      .references(() => users.id),
+    rules: jsonb('rules').$type<CampaignRules>().notNull(),
+    /** The dataset snapshot this campaign plays on. */
+    datasetVersion: text('dataset_version').notNull(),
+    status: text('status', { enum: CAMPAIGN_STATUSES }).notNull().default('lobby'),
+    round: integer('round').notNull().default(0),
+    inviteCode: text('invite_code').notNull().unique(),
+    /** First-round pick order, set when the draft starts. */
+    draftOrder: jsonb('draft_order').$type<string[]>(),
+    /** Index of the next draft pick. */
+    pickIndex: integer('pick_index').notNull().default(0),
+    createdAt: createdAt(),
+    draftStartedAt: timestamp('draft_started_at', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    /** When the current round started (from victory missions on; claims time their holding from it). */
+    roundStartedAt: timestamp('round_started_at', { withTimezone: true }),
+    /** While secret missions are being chosen: when unchosen ones are assigned. */
+    selectionDeadline: timestamp('selection_deadline', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** A finished campaign is deleted for everyone at this time (see `deleteFinishedCampaigns`). */
+    deleteAt: timestamp('delete_at', { withTimezone: true }),
+    /**
+     * Declaring in turns, where the rules have it: the current round's order (null: no turns this
+     * round), who has passed, whose turn it is (null with an order: declaring is over for the round)
+     * and when that turn passes on its own.
+     */
+    turnOrder: jsonb('turn_order').$type<string[]>(),
+    turnPassed: jsonb('turn_passed').$type<string[]>().notNull().default([]),
+    turnUserId: text('turn_user_id'),
+    turnDeadline: timestamp('turn_deadline', { withTimezone: true }),
+    /**
+     * The last round whose declaring ran to its end (everyone passed or had nothing to do), or null
+     * if none has: claims held by turns wait for a round after theirs to get here.
+     */
+    turnsEndedRound: integer('turns_ended_round'),
+    /** Who holds each title (mission rules version 5 on), from round 1; `settleVictory` keeps it current. */
+    titles: jsonb('titles').$type<TitleHolders>().notNull().default({}),
+  },
+  (t) => [index('campaigns_delete_at').on(t.deleteAt)],
+);
 
 export const members = pgTable(
   'members',

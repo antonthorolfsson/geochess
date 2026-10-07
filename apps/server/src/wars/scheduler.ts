@@ -1,3 +1,4 @@
+import { deleteFinishedCampaigns } from '../campaigns/service';
 import type { AppContext } from '../context';
 import { lapseProposals } from '../diplomacy/accords';
 import { runVictoryDeadlines } from '../victory/scheduler';
@@ -12,7 +13,8 @@ const POLL_MS = 5_000;
 /**
  * Everything due by now: unanswered declarations and counter-offers, turns to declare nobody
  * took, flag-falls, half-settled games, accord proposals and peace offers nobody answered, secret
- * missions not chosen in time, claims whose holding time is up, and anything a bot still has to do.
+ * missions not chosen in time, claims whose holding time is up, anything a bot still has to do, and
+ * finished campaigns whose time to be kept is up.
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
@@ -22,6 +24,7 @@ export async function runDueWork(ctx: AppContext): Promise<void> {
   await lapsePeaceOffers(ctx);
   await runVictoryDeadlines(ctx);
   await ctx.bots.sweep();
+  await deleteFinishedCampaigns(ctx);
 }
 
 /**

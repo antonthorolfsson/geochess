@@ -35,6 +35,7 @@ import { AwardCeremonies } from '../victory/award-ceremony';
 import { Finale, useFinale } from '../victory/finale';
 import { MissionsPanel, type MissionFocus } from '../victory/missions-panel';
 import { usePageVisible } from '../victory/score-effects';
+import { CampaignControls } from './campaign-controls';
 import { CountrySearch } from './country-search';
 import { DraftPanel, DraftStatus, Standings } from './draft-panel';
 import { EmpirePanel } from './empire-panel';
@@ -126,6 +127,12 @@ function CampaignScreenInner({ id, children }: { id: string; children?: ReactNod
     [campaign.data, user, mapData.data],
   );
 
+  // The host deleted it, or a finished campaign's time ran out, while it was open.
+  const [deleted, setDeleted] = useState(false);
+  useServerMessages((message) => {
+    if (message.type === 'campaign.deleted' && message.campaignId === id) setDeleted(true);
+  });
+
   // A refetch that fails (a slow or dropped connection) keeps the room on what it last read; the
   // next push, focus or reconnect reads it again. Only a campaign that's gone, or one never read, stops it.
   const campaignGone = campaign.error instanceof ApiError && campaign.error.status === 404;
@@ -134,6 +141,16 @@ function CampaignScreenInner({ id, children }: { id: string; children?: ReactNod
     (mapData.data ? null : mapData.error) ??
     (me.data ? null : me.error);
   const notMember = Boolean(campaign.data && user && mapData.data && !model);
+  if (deleted) {
+    return (
+      <CenteredMessage>
+        <Notice tone="info">This campaign has been deleted.</Notice>
+        <Link href="/campaigns" className="btn btn-ghost mt-4">
+          All campaigns
+        </Link>
+      </CenteredMessage>
+    );
+  }
   if (error || notMember) {
     const gone = notMember || campaignGone;
     return (
@@ -748,6 +765,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     <div className="space-y-6 p-4">
       <WarsPanel model={model} onOpenWar={showWar} onOpenGame={openGame} />
       <Standings model={model} />
+      <CampaignControls model={model} />
     </div>
   );
   const diploPanel = (

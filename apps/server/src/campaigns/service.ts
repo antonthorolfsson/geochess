@@ -18,11 +18,12 @@ import {
   type DatasetIndex,
   type TerritoryId,
 } from '@empire/rules';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, lte } from 'drizzle-orm';
 import { botDraftPick } from '../bots/draft';
+import { isBotId } from '../bots/ids';
 import { deleteBotUsers } from '../bots/lobby';
 import type { AppContext } from '../context';
-import { campaigns, holdings, members } from '../db/schema';
+import { campaigns, games, holdings, members } from '../db/schema';
 import { startRoundForAccords } from '../diplomacy/accords';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { LICHESS_FRESH_MS, freezeRatings, refreshLichessRatings } from '../ratings/service';
@@ -181,20 +182,69 @@ export async function removeMember(
   });
 }
 
-export async function deleteCampaign(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+/**
+ * Deletes a campaign for everyone, whatever its stage, with everything in it: the host's choice, or
+ * the scheduler's (`userId` null) once a finished campaign's time is up. Its games are locked
+ * first, as a campaign change that stops them does, so a move being saved finishes before the
+ * campaign goes. Members are told over the socket; when the host deletes it, the other players
+ * get a notice too.
+ */
+export async function deleteCampaign(ctx: AppContext, campaignId: string, userId: string | null): Promise<void> {
   await ctx.locks.run(campaignId, async () => {
-    const memberIds = await ctx.db.transaction(async (tx) => {
+    const deleted = await ctx.db.transaction(async (tx) => {
       const [c] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).for('update');
       if (!c) throw notFound('Campaign not found.');
-      if (c.hostId !== userId) throw forbidden('Only the host can delete the campaign.');
+      if (userId === null) {
+        if (c.status !== 'finished' || c.deleteAt === null || c.deleteAt > ctx.now()) return null;
+      } else if (c.hostId !== userId) {
+        throw forbidden('Only the host can delete the campaign.');
+      }
       const rows = await tx.select({ userId: members.userId }).from(members).where(eq(members.campaignId, campaignId));
+      const gameRows = await tx
+        .select({ id: games.id })
+        .from(games)
+        .where(eq(games.campaignId, campaignId))
+        .for('update');
       await tx.delete(campaigns).where(eq(campaigns.id, campaignId));
       const memberIds = rows.map((r) => r.userId);
       await deleteBotUsers(tx, memberIds);
-      return memberIds;
+      const host = userId === null ? null : await userName(tx, userId);
+      return { name: c.name, host, memberIds, gameIds: gameRows.map((g) => g.id) };
     });
-    ctx.hub.send(memberIds, { type: 'campaign.deleted', campaignId });
+    if (!deleted) return;
+    for (const id of deleted.gameIds) ctx.timers.clear(`flag:${id}`);
+    ctx.hub.send(deleted.memberIds, { type: 'campaign.deleted', campaignId });
+    if (deleted.host === null) {
+      ctx.log.info({ campaignId }, 'deleted a finished campaign');
+      return;
+    }
+    for (const id of deleted.memberIds) {
+      if (id === userId || isBotId(id)) continue;
+      const notice = {
+        userId: id,
+        title: 'Campaign deleted',
+        body: `${deleted.host} deleted ${deleted.name}.`,
+        url: '/campaigns',
+        tag: `deleted:${campaignId}`,
+      };
+      void ctx.notifier.send(notice).catch((err: unknown) => ctx.log.error({ err }, 'could not send a notice'));
+    }
   });
+}
+
+/** Deletes every finished campaign whose time is up (`FINISHED_CAMPAIGN_KEPT_DAYS` after it ended). */
+export async function deleteFinishedCampaigns(ctx: AppContext): Promise<void> {
+  const due = await ctx.db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(and(eq(campaigns.status, 'finished'), lte(campaigns.deleteAt, ctx.now())));
+  for (const { id } of due) {
+    try {
+      await deleteCampaign(ctx, id, null);
+    } catch (err) {
+      ctx.log.error({ err, campaignId: id }, 'could not delete a finished campaign');
+    }
+  }
 }
 
 export async function updateMembership(

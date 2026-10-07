@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   breakdownOf,
   campaignTotals,
+  deletionText,
   finaleSeen,
   finaleText,
   honorsOf,
@@ -166,6 +167,28 @@ describe('the finale', () => {
       place: null,
     });
     expect(finaleText(season, 'bo', nameOf).place).toBe('You finished 2nd with 6 victory points.');
+  });
+
+  it('says when the host ended it before the last round', () => {
+    const early = result({
+      winners: ['ann'],
+      seasonEnd: true,
+      endedEarly: true,
+      tiebreak: 'realWorld',
+      round: 8,
+      standings: [standing('ann', 4), standing('bo', 2)],
+    });
+    expect(finaleText(early, 'bo', nameOf)).toMatchObject({
+      label: 'Campaign over · round 8',
+      line: 'The host ended the campaign in round 8, and the most points won.',
+      place: 'You finished 2nd with 2 victory points.',
+    });
+  });
+
+  it('says when a finished campaign is deleted', () => {
+    expect(deletionText('2026-10-14T12:00:00Z')).toBe(
+      'The campaign and its results are deleted for everyone on Wednesday 14 October.',
+    );
   });
 
   it('is remembered once it has played', () => {

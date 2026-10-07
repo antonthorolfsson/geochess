@@ -1513,6 +1513,49 @@ Defaults taken (not asked; easy to change): the wording; scoring a win as a resi
 only where Checkmate Artist is at stake; folding progress on phones and the board; the "Could set up
 a winning claim" note; previews for spectators as well as the two players.
 
+**Ending and deleting campaigns** (2026-10-07, GitHub issue #49: "Make it possible to delete/end
+ongoing campaigns. Delete a finished campaign automatically.").
+
+- **Deleting at any stage.** `DELETE /api/campaigns/:id` was only offered in the lobby; the host can
+  now delete a campaign in the draft, while secret missions are chosen, at war and once it's over,
+  from a **Campaign** section at the foot of the draft panel, the Missions panel (choosing secrets)
+  and the war room. `deleteCampaign` (`campaigns/service.ts`) still works outside `mutate()` (there
+  is nothing left to log to), but now locks the campaign's games before deleting it, as a campaign
+  change that stops games does, so a move being saved finishes first; everything else goes by the
+  foreign keys' cascades. Flag timers are cleared, bots' users deleted, every member gets
+  `campaign.deleted`, and the other players get a notice ("Campaign deleted", "Ann deleted War
+  Room.", opening `/campaigns`). A screen open on it says "This campaign has been deleted." instead of
+  the generic not-found. Bots, schedulers and a move that lands in the same moment find the
+  campaign gone and stop (logged, never a crash).
+- **Ending early, on points.** `POST /api/campaigns/:id/end` (`endCampaign` in `wars/service.ts`):
+  the host of an Objectives campaign at war ends it now, exactly as moving on from the last round
+  does (`endSeason` with `early`): missions brought up to date, then the most points, then the
+  tiebreak; wars underway are called off. The result and `campaign.won` carry `endedEarly` beside
+  `seasonEnd`, so the finale, results page, Missions panel, dispatches and the ending notice say the
+  host ended it ("The host ended the campaign in round 8") rather than "round 8, the last". Refused for open-ended
+  campaigns (`open-ended`: no points to end on; delete instead) and before round 1 (`not-active`).
+  In the last round the war room's Next round already reads **End the campaign**, so the section
+  offers only Delete there.
+- **Finished campaigns are deleted automatically** `FINISHED_CAMPAIGN_KEPT_DAYS` (7) after they end:
+  `finishCampaign` sets `campaigns.delete_at` (migration `0015_delete_finished`, indexed), and
+  `deleteFinishedCampaigns` in the scheduler's `runDueWork` deletes what's due, with no notice
+  (players were told when it ended). Campaigns already finished when the migration runs get the full
+  week from then, not from when they ended. `deleteAt` is on `CampaignView` and `CampaignSummary`:
+  the campaigns list says "Kept until 14 Oct", and the results page, the Missions panel's results
+  and the host's section give the day. The rules guide's "The last round" says both.
+- **Checked in the browser** (dev server, Chromium, scripted, Ann hosting Bo and a bot): the war
+  room's section at 1440 × 1000, ending in round 1 of 25 (the confirm, the finale's "The host ended
+  the campaign in round 1, and the most points won."), the results page and list with the deletion
+  day, the finished war room's Delete, the host back at `/campaigns` and Bo's phone showing the
+  deleted notice; the draft panel's Delete at 390 × 844.
+
+Defaults taken (not asked; easy to change): a week's grace before automatic deletion (the issue
+asked for deletion, and an immediate one would take the finale and results with it); the host
+alone ends or deletes, without a vote; a host's deletion notifies the other players but the
+automatic one doesn't; open-ended campaigns can only be deleted, never ended.
+
+Tests since: rules 333, data 73, web 170, sim 29, server 229 (834 in all).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1962,7 +2005,7 @@ API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
 `…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,
-`/api/campaigns/:id/round/next`, `/api/games/:gameId` and `…/{move,resign,draw}`,
+`/api/campaigns/:id/round/next`, `/api/campaigns/:id/end`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
 `/api/campaigns/:id/stats`, `/api/campaigns/:id/secret` (choose), `/api/campaigns/:id/victory/missions` (the host's four) and
 `…/missions/:slot/reroll`, `/api/campaigns/:id/victory/proceed`,

@@ -10,6 +10,7 @@ import { useCampaignStats } from '@/lib/queries';
 import {
   breakdownOf,
   campaignTotals,
+  deletionText,
   finaleText,
   honorsOf,
   placesOf,
@@ -160,6 +161,7 @@ function ResultsHeader({
             <strong className="font-bold text-paper">{text.who}</strong> {text.line}
             {text.place && ` ${text.place}`}
           </p>
+          {campaign.deleteAt && <p className="text-sm text-muted">{deletionText(campaign.deleteAt)}</p>}
         </div>
         <span
           className={`stamp stamp-hd mt-3 mr-1 ${text.outcome === 'defeat' ? 'stamp-red' : ''} ${still ? '' : 'stamp-slam'}`}

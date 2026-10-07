@@ -22,6 +22,7 @@ import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { awardKey } from '@/lib/ceremony';
 import { keys } from '@/lib/queries';
+import { deletionText } from '@/lib/results';
 import { useNow } from '@/lib/use-now';
 import {
   claimSteps,
@@ -38,6 +39,7 @@ import {
 } from '@/lib/victory';
 import { countryName, playerName, timeLeft } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
+import { CampaignControls } from '../campaign/campaign-controls';
 import { PlayerName } from '../campaign/player-name';
 import { useEmpireHref, useResultsHref } from '../campaign/room-context';
 import { Notice } from '../ui';
@@ -81,6 +83,7 @@ export function MissionsPanel(props: PanelProps) {
       <PublicMissions {...props} />
       {atWar && <RevealedSecrets {...props} />}
       <ScoringNote model={model} />
+      {campaign.status === 'selection' && <CampaignControls model={model} />}
     </div>
   );
 }
@@ -672,17 +675,19 @@ function FinalResults({ model, result }: PanelProps & { result: VictoryResultVie
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)} share the victory` : `${names[0]} wins`;
   const iWon = result.winners.includes(model.me.userId);
   const [first] = result.standings;
-  const how = result.seasonEnd
-    ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${tiebreakClause(result)}. `
-    : iWon && names.length === 1
-      ? `You reached ${first?.points ?? 0} points. `
-      : '';
+  const how = result.endedEarly
+    ? `The host ended the campaign in round ${result.round}, so the most points won${tiebreakClause(result)}. `
+    : result.seasonEnd
+      ? `Nobody reached ${victory.pointsToWin} points by the end of round ${result.round}, the last, so the most points won${tiebreakClause(result)}. `
+      : iWon && names.length === 1
+        ? `You reached ${first?.points ?? 0} points. `
+        : '';
   return (
     <section aria-labelledby="results-heading" className="space-y-4">
       <div className="rounded-[3px] border border-amber/70 bg-amber/10 p-4">
         <div className="label text-amber">
           Campaign over · round {result.round}
-          {result.seasonEnd && ', the last'}
+          {result.seasonEnd && !result.endedEarly && ', the last'}
         </div>
         <h2 id="results-heading" className="font-stencil text-3xl leading-tight tracking-wide">
           {iWon && names.length === 1 ? 'Victory' : headline}
@@ -690,6 +695,7 @@ function FinalResults({ model, result }: PanelProps & { result: VictoryResultVie
         <p className="text-[0.95rem]">
           {how}
           The map shows the empires as they ended. Every secret mission is now revealed.
+          {model.campaign.deleteAt && ` ${deletionText(model.campaign.deleteAt)}`}
         </p>
         <Link href={resultsHref} className="btn btn-amber btn-sm mt-3">
           See the results

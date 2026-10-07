@@ -164,6 +164,7 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
         datasetVersion: c.datasetVersion,
         inviteCode: c.inviteCode,
         createdAt: c.createdAt.toISOString(),
+        deleteAt: c.deleteAt?.toISOString() ?? null,
         members: memberRows.map(({ joinedAt, botLevel, rating, claimedRating, lichessRatings, ...m }) => ({
           ...m,
           joinedAt: joinedAt.toISOString(),
@@ -246,6 +247,7 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
     attention: attention.get(c.id) ?? 0,
     unread: unread.get(c.id) ?? 0,
     createdAt: c.createdAt.toISOString(),
+    deleteAt: c.deleteAt?.toISOString() ?? null,
   }));
 }
 

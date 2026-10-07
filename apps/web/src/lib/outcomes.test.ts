@@ -98,6 +98,7 @@ function view(opts: { wars?: WarView[]; rules?: CampaignRules; victory?: Partial
     datasetVersion: 'test',
     inviteCode: 'code',
     createdAt: '2026-01-01T00:00:00.000Z',
+    deleteAt: null,
     members: [member('ann', 0), member('bo', 3), member('cy', 5)],
     holdings: { E: 'ann', A: 'ann', B: 'bo', C: 'bo', D: 'cy' },
     draft: null,

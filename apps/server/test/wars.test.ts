@@ -2,7 +2,7 @@ import type { CampaignRulesInput, CampaignSummary, CampaignView, GameView, WarVi
 import { warDataset } from '@empire/rules/testing';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { campaigns, holdings, members } from '../src/db/schema';
+import { campaigns, games, holdings, members, wars } from '../src/db/schema';
 import { ORIGINAL_ANSWERS, listen, signIn, startTestServer, tick, type Client, type TestServer } from './helpers';
 
 /**
@@ -454,5 +454,35 @@ describe('rounds, locks and truces', () => {
     expect((await declare('B7', 'A6', ['A6'])).status).toBe(201);
     await ann.post(`/api/campaigns/${id}/round/next`);
     expect((await declare('B2', 'B5', ['B5'])).status).toBe(201);
+  });
+});
+
+describe('deleting the campaign', () => {
+  it('lets the host delete it in the middle of a war, games and all, and tells the players', async () => {
+    const { ann, bo, id, declare, respond, war, game, play } = await setup();
+    const declared = await declare('B5', 'A4', ['A4']);
+    expect((await respond(declared.body.id, { response: 'accept' })).status).toBe(200);
+    const g = await game(await war(declared.body.id));
+    await play(g, ['e2e4']);
+
+    expect((await bo.del(`/api/campaigns/${id}`)).status).toBe(403);
+    const socket = await listen(server.app, bo);
+    expect((await ann.del(`/api/campaigns/${id}`)).status).toBe(200);
+    await tick();
+    socket.close();
+    expect(socket.messages.at(-1)).toEqual({ type: 'campaign.deleted', campaignId: id });
+    const told = server.notices.filter((n) => n.tag === `deleted:${id}`);
+    expect(told).toEqual([
+      { userId: BO, title: 'Campaign deleted', body: 'Ann deleted War Room.', url: '/campaigns', tag: `deleted:${id}` },
+    ]);
+
+    expect((await bo.get(`/api/campaigns/${id}`)).status).toBe(404);
+    expect((await bo.get(`/api/games/${g.id}`)).status).toBe(404);
+    expect((await bo.post(`/api/games/${g.id}/move`, { uci: 'e7e5', ply: 1 })).status).toBe(404);
+    expect((await bo.get<CampaignSummary[]>('/api/campaigns')).body.some((c) => c.id === id)).toBe(false);
+    const db = server.app.ctx.db;
+    expect(await db.select().from(wars).where(eq(wars.campaignId, id))).toEqual([]);
+    expect(await db.select().from(games).where(eq(games.campaignId, id))).toEqual([]);
+    await server.runDue();
   });
 });

@@ -130,6 +130,8 @@ export const api = {
   fortify: (id: string, territoryId: string) =>
     request<{ untilRound: number }>('POST', `/campaigns/${id}/fortify`, { territoryId }),
   nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
+  /** The host ends an Objectives campaign before its last round, on points. */
+  endCampaign: (id: string) => request('POST', `/campaigns/${id}/end`),
   /** Pass the turn: your own, or (the host) whoever's it is. */
   passTurn: (id: string, userId: string) => request('POST', `/campaigns/${id}/turn/pass`, { userId }),
 

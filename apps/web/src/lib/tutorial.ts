@@ -82,6 +82,7 @@ export function tutorialCampaign(): CampaignView {
     datasetVersion: TUTORIAL_DATASET,
     inviteCode: '',
     createdAt: '',
+    deleteAt: null,
     members: SAMPLE_EMPIRES.map((e) => ({ ...e.member, tokens: 1 })),
     holdings: Object.fromEntries(SAMPLE_EMPIRES.flatMap((e) => e.countries.map((id) => [id, e.member.userId]))),
     draft: null,

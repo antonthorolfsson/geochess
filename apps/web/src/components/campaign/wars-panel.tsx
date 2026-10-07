@@ -12,6 +12,7 @@ import { countryName, playerName, timeLeft, warStatusText } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
 import { NotificationsToggle } from '../notifications';
 import { Notice } from '../ui';
+import { WarStakesNote } from './war-outcomes';
 
 /** Round, tokens and every war: what needs an answer, games to play, and the rest. */
 export function WarsPanel({
@@ -296,6 +297,7 @@ function WarList({
                   <span className="font-normal text-muted tabular-nums">({target?.value})</span>
                 </span>
                 <span className="block truncate text-sm text-muted">{warStatusText(model, war)}</span>
+                {war.status !== 'resolved' && <WarStakesNote model={model} war={war} className="block text-sm" />}
               </span>
             </button>
           </li>
@@ -348,6 +350,7 @@ function YourGames({ model, onOpenGame }: { model: CampaignModel; onOpenGame(gam
                 <span className="block truncate text-sm text-muted">
                   vs {playerName(model, war.attackerId === me ? war.defenderId : war.attackerId)}
                 </span>
+                <WarStakesNote model={model} war={war} className="block text-sm" />
               </span>
               <span className={`text-sm font-bold ${myMove ? 'text-amber' : 'text-muted'}`}>
                 {label}

@@ -17,6 +17,7 @@ import {
   reachableWithin,
   renunciationAgainst,
   reservesAllowed,
+  stakeFloor,
   stakeableCountries,
   stakeableFromRound,
   truceBetween,
@@ -28,11 +29,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
+import { proposedWar } from '@/lib/outcomes';
 import { keys } from '@/lib/queries';
 import { playerName, tokensText, turnWaitText, warStatusText } from '@/lib/wars';
 import { Notice, ValueBadge } from '../ui';
 import { StakeBuilder, initialStake, stakeProblem, type StakeDraft, type StakeOptions } from './stake-builder';
 import type { StakePreview } from './war-detail';
+import { WarOutcomes, WarStakesNote } from './war-outcomes';
 
 /**
  * The war side of a country's panel: the war it's caught up in, why it can't be attacked, or a
@@ -68,6 +71,7 @@ export function WarAction({
       <div className="flex items-center gap-3 rounded-[3px] border border-grease/60 bg-grease/10 px-3 py-2">
         <p className="min-w-0 flex-1 text-[0.95rem]">
           <strong>Caught up in a war.</strong> {warStatusText(model, war)}.
+          <WarStakesNote model={model} war={war} className="block text-sm" />
         </p>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpenWar(war.id)}>
           View war
@@ -223,29 +227,29 @@ function DeclareForm({
     onSettled: () => queryClient.invalidateQueries({ queryKey: keys.campaign(model.campaign.id) }),
   });
 
-  if (!draft) return <Notice tone="error">No stake can be built against {territory.name} right now.</Notice>;
+  const war = useMemo(
+    () => (draft ? proposedWar(model, territory.id, draft, kept) : null),
+    [model, territory.id, draft, kept],
+  );
+
+  if (!draft || !war) return <Notice tone="error">No stake can be built against {territory.name} right now.</Notice>;
   const problem =
     stakeProblem(model, territory.id, draft, opts) ??
     ((rejection) => rejection && RESERVE_REJECTION_MESSAGES[rejection])(
       checkReserves(model.board, model.me.userId, draft.launchId, draft.stake, kept),
     );
-  const defender = playerName(model, model.owners.get(territory.id)!);
-  const until = fortifiedUntil(model.board, territory.id);
 
   return (
     <div className="space-y-4 rounded-[3px] border border-grease/60 p-3">
-      <div>
+      <div className="space-y-2">
         <div className="font-stencil text-xl tracking-wide text-[#ef7b72]">Declare war on {territory.name}</div>
-        <p className="text-sm text-muted">
-          Stake at least {opts.minValue}
-          {until ? ` (it's fortified until round ${until} starts)` : ''}: if {defender} wins the game, they take the
-          stake. Costs 1 of your {model.tokens} war {model.tokens === 1 ? 'token' : 'tokens'}.
-        </p>
+        <DeclarationTerms model={model} territory={territory} minValue={opts.minValue} />
       </div>
       <StakeBuilder model={model} targetId={territory.id} opts={opts} draft={draft} onChange={setDraft} />
       {reservesAllowed(model.campaign.rules) && (
         <Reserves model={model} territory={territory} draft={draft} reserves={kept} onChange={setReserves} />
       )}
+      <WarOutcomes model={model} war={war} heading="What declaring could change" />
       <div className="flex gap-2">
         <button
           type="button"
@@ -261,6 +265,55 @@ function DeclareForm({
       </div>
       {declare.error && <Notice tone="error">{errorMessage(declare.error)}</Notice>}
     </div>
+  );
+}
+
+/**
+ * What declaring costs and binds you to, before any stake is chosen: the war token, the least
+ * stake (and why, if the target is fortified), and what follows the war whatever its result.
+ */
+function DeclarationTerms({
+  model,
+  territory,
+  minValue,
+}: {
+  model: CampaignModel;
+  territory: Territory;
+  minValue: number;
+}) {
+  const { rules } = model.campaign;
+  const defender = playerName(model, model.owners.get(territory.id)!);
+  const until = fortifiedUntil(model.board, territory.id);
+  const base = stakeFloor(rules, territory.value);
+  const { truceRounds, lockRounds } = rules.war;
+  const rounds = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
+  const after = [
+    truceRounds > 0 &&
+      `a truce with ${defender} for ${rounds(truceRounds)} once it ends (unless the war is called off or withdrawn)`,
+    lockRounds > 0 && `countries that change hands can be staked again ${rounds(lockRounds)} later`,
+  ].filter(Boolean);
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+      <dt className="label pt-0.5">Cost</dt>
+      <dd className="text-muted">
+        {model.tokens === 1 ? 'Your last war token' : `1 of your ${tokensText(model.tokens)}`}, spent however the war
+        ends
+        {model.turns ? '; declaring also takes your turn' : ''}.
+      </dd>
+      <dt className="label pt-0.5">Least stake</dt>
+      <dd className="text-muted">
+        <strong className="text-paper tabular-nums">{minValue}</strong>
+        {until
+          ? `: ${territory.name} is fortified until round ${until} starts, so ${rules.war.raisePct}% of its ${territory.value} (${base} otherwise).`
+          : `: ${rules.war.stakeFloorPct}% of ${territory.name}’s ${territory.value}. If ${defender} wins the game, they take the whole stake.`}
+      </dd>
+      {after.length > 0 && (
+        <>
+          <dt className="label pt-0.5">After</dt>
+          <dd className="text-muted">{`${after.join('; ')}.`.replace(/^./, (c) => c.toUpperCase())}</dd>
+        </>
+      )}
+    </dl>
   );
 }
 

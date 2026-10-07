@@ -77,9 +77,12 @@ when starting new work.**
   that. Every player sees points move as an award ceremony, built from the pushed `title.changed`
   and `mission.awarded` events (`apps/web/src/lib/ceremony.ts`, played by `award-ceremony.tsx` in
   `components/victory/`): anything new that moves points needs an event they understand (the
-  stats' victory points by round add up the same two events). When a campaign is won, each player
-  sees its ending once (`finale.tsx`, after any ceremony still playing), then the results page
-  (`/c/[id]/results`, `results-screen.tsx`, logic in `apps/web/src/lib/results.ts`).
+  stats' victory points by round add up the same two events). Previews of what a war would change
+  (titles, missions, points, the campaign won) score with `projectWar` (`victory/projection.ts`) on
+  the public mission world the campaign view carries (`VictoryView.world`), never with scoring of
+  their own; `apps/web/src/lib/outcomes.ts` only picks the endings and words them. When a campaign
+  is won, each player sees its ending once (`finale.tsx`, after any ceremony still playing), then
+  the results page (`/c/[id]/results`, `results-screen.tsx`, logic in `apps/web/src/lib/results.ts`).
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and

@@ -6,12 +6,15 @@ import {
   ACCORD_MAX_ROUNDS,
   ACCORD_MIN_ROUNDS,
   accordBetween,
+  accordsInForce,
   renunciationAgainst,
+  renunciationsFrom,
   type Accord,
   type Renunciation,
 } from './diplomacy';
 import type { UserId } from './draft';
 import { bordersAny, getTerritory, reachableWithin, type DatasetIndex } from './graph';
+import type { CampaignView } from './protocol';
 
 /** Who holds a country, and the round they got it in (0 for countries drafted at the start). */
 export interface Holding {
@@ -173,6 +176,32 @@ export interface WarBoard {
   accords: readonly Accord[];
   /** Accords renounced this round: the breaker can't declare war on the former partner yet. */
   renunciations: readonly Renunciation[];
+}
+
+/**
+ * What the war rules see in a campaign view: who holds what (with when it was won and any
+ * fortification), the unresolved wars, truces, and the accords in force and renounced this round.
+ * The client previews with it; the server builds its own from the database (`loadBoard`).
+ */
+export function warBoardFrom(
+  view: Pick<CampaignView, 'rules' | 'round' | 'holdings' | 'acquired' | 'fortified' | 'wars' | 'truces' | 'accords'>,
+  idx: DatasetIndex,
+): WarBoard {
+  return {
+    idx,
+    rules: view.rules,
+    round: view.round,
+    holdings: new Map(
+      Object.entries(view.holdings).map(([id, ownerId]) => [
+        id,
+        { ownerId, acquiredRound: view.acquired[id] ?? 0, fortifiedUntil: view.fortified[id] ?? null },
+      ]),
+    ),
+    wars: view.wars.filter((w) => w.status !== 'resolved').map(activeWar),
+    truces: view.truces,
+    accords: accordsInForce(view.accords, view.round),
+    renunciations: renunciationsFrom(view.accords, view.round),
+  };
 }
 
 /**

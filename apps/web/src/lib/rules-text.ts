@@ -1,5 +1,6 @@
 import {
   CURRENT_MISSION_RULES,
+  DEFAULT_RULES,
   MATCHED_RAISE_MIN_PCT,
   MAX_VALUE,
   MISSIONS,
@@ -339,6 +340,39 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Truce after a war', value: war.truceRounds === 0 ? 'None' : plural(war.truceRounds, 'round') },
     { label: 'Lock on won countries', value: war.lockRounds === 0 ? 'None' : plural(war.lockRounds, 'round') },
   ];
+}
+
+/** The settings a campaign is summed up by, in this order, before the rest (`settingsList`). */
+const KEY_SETTINGS = ['Pace', 'Time control', 'Players', 'Draft', 'Victory', 'Last round'];
+
+/** The few settings that sum a campaign up: its pace and clocks, the table, the draft and how it's won. */
+export function keySettings(rules: CampaignRules): { label: string; value: string }[] {
+  const listed = settingsList(rules);
+  return KEY_SETTINGS.flatMap((label) => listed.filter((s) => s.label === label));
+}
+
+/**
+ * The standard rules, what a quick start plays, at the campaign's pace and on its own mission rules
+ * version and missions: what a campaign's settings are compared with.
+ */
+export function standardRules(rules: CampaignRules): CampaignRules {
+  return {
+    ...DEFAULT_RULES,
+    war: { ...DEFAULT_RULES.war, pace: rules.war.pace },
+    victory: {
+      ...DEFAULT_RULES.victory,
+      version: rules.victory.version,
+      publicMissions: rules.victory.publicMissions,
+    },
+  };
+}
+
+/** The settings (`settingsList` labels) where a campaign differs from the standard rules at its pace. */
+export function changedSettings(rules: CampaignRules): string[] {
+  const standard = new Map(settingsList(standardRules(rules)).map((s) => [s.label, s.value]));
+  return settingsList(rules)
+    .filter((s) => standard.get(s.label) !== s.value)
+    .map((s) => s.label);
 }
 
 /** How the campaign's defenders raise the stakes, in a few words. */

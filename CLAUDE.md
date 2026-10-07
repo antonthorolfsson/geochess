@@ -112,8 +112,10 @@ when starting new work.**
   reference, since APIs differ from older versions (async `params`, `proxy.ts`, Turbopack default).
   Pages are thin server components that hand off to client screens in `src/components/`. The
   campaign screen lives in `app/c/[id]/layout.tsx`, so pages under it (an empire's statistics,
-  every empire compared) open over the map room without resetting it; they read it with
-  `useCampaignRoom()`. Phones and portrait tablets get tabs along the bottom; from 1024 pixels
+  every empire compared, the host's settings) open over the map room without resetting it; they
+  read it with `useCampaignRoom()`. A new campaign is a quick start (the standard rules, choosing
+  only the pace) or advanced, which goes straight to the settings page (`/c/[id]/settings`,
+  `settings-screen.tsx`); the lobby sums the settings up and links there. Phones and portrait tablets get tabs along the bottom; from 1024 pixels
   `roomLayout()` (`lib/room-layout.ts`) keeps three columns only while the map keeps its width,
   folding the left one into a rail that opens it over the map, and widens a game's column so the
   board comes first. Panels keep their state when they're hidden, folded or switched away from.

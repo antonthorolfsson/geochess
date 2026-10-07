@@ -12,7 +12,10 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 
 - Sign in with Lichess (OAuth with PKCE, no registration needed), by emailed link, or, in
   development, by name.
-- Invite-only campaigns: create one, share the invite link, pick your empire color, set the rules.
+- Invite-only campaigns: create one, share the invite link, pick your empire color. A quick start
+  plays the standard rules and asks only for the pace (correspondence or live); an advanced one opens
+  every setting on a page of its own, away from the map, which the host can come back to from the
+  lobby until the draft starts.
 - The map: Natural Earth shapes rendered with d3-geo, pinch and pan zoom, ownership shown as
   translucent colors with hatching, tappable dots for microstates, sea lanes, country search.
 - The country dataset: game values 1–20 from blended real-world data, land borders and sea lanes,

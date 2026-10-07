@@ -1235,7 +1235,8 @@ or read the whole rulebook before it showed them the game).
   the landing page, which no longer needs the hook.
 - **What a visitor sees** (`components/landing/`): the emblem and the pitch, **Start a campaign**
   (`/login?next=/new`, so the usual sign-in goes straight on to the new campaign form; `/new` for a
-  player), **See a sample campaign** (an anchor to `#sample`; there is no guest demo) and "Already
+  player), **See a sample campaign** (an anchor to `#sample`; since 2026-10-07 also **Try the
+  tutorial**, see the guest tutorial below) and "Already
   playing? Sign in" ("Signed in as …" and **Your campaigns** for a player). Then a sample campaign on the real `WorldMap` and chessground `Board`, labelled as
   sample data on the map, on the board's panel and in its caption; three illustrated steps (draft,
   battle, missions and titles); the battle for Italy worked through (the stake, what each side
@@ -1252,9 +1253,9 @@ or read the whole rulebook before it showed them the game).
   there: update the sample or the example's prose then.
 - **`WorldMap`'s `still`**: no controls, inert, and nothing on it takes the pointer (`.map-still`), so
   the page scrolls over the sample map with a wheel or a finger. The sample board leaves out its
-  coordinates. **Follow-up, not fixed:** on every board they come out in paper white, unreadable on
-  the light squares, because chessground puts `orientation-white` on the same element as
-  `.board-theme`, so `globals.css`'s `.board-theme .orientation-white …` rules have never matched.
+  coordinates. (On every other board they came out in paper white, unreadable on the light squares:
+  chessground puts `orientation-white` on the same element as `.board-theme`, so `globals.css`'s
+  `.board-theme .orientation-white …` rules never matched. Fixed with the guest tutorial.)
 - **Header**: signed out, every page but sign-in itself offers **Sign in**, coming back to the page
   afterwards (`?next=`). The landing page runs wider than the usual column, and the header with it
   (`AppHeader`'s `wide`).
@@ -1380,6 +1381,70 @@ labels; the drawer stays open while you pick countries or wars from it, but "Sho
 extra calls to action from 768 pixels.
 
 Tests since: rules 319, data 73, web 140, sim 29, server 223 (784 in all).
+
+**The guest tutorial** (2026-10-07, from a GitHub issue: visitors couldn't try the game's loop
+before signing in). `/tutorial`, prerendered as static HTML, linked from the landing page's hero
+(**Try the tutorial**) and under its sample campaign (**Fight this battle yourself**).
+
+- **What it is.** The landing page's sample campaign (four empires on dataset 2026.3, round 6),
+  played from the moment before Ada declares war on Italy, with the visitor as Ada. An intro, five
+  steps and a finish: **your empire** (select one of your countries, on the map or from the
+  holdings; the mission is shown with its progress), **a target** (the 26 attackable countries
+  outlined as the Targets toggle does; any country picked says whether it can be attacked and
+  why not, by `checkTarget`; Italy is the one the mission needs; found by name with the
+  production `CountrySearch` too), **the stake** (how the war can end, each outcome previewable on
+  the map, then the production `StakeBuilder` at the floor, France and Andorra for 14; "Declare
+  war"; Cleo accepts), **the battle** (a mate in two on the production `Board`, `PlayerStrip` and
+  `TypedMove`: Cleo's one legal reply comes by itself, another legal move is taken back with a word
+  on why, two hints, and **Skip the battle**, which says first what skipping does and then plays
+  the win), and **what changed** (the map before the war, then after it, with a toggle; Italy
+  moving from Cleo to Ada; both empires' countries and value; the mission complete, a claim
+  staked, scoring in round 8). The finish offers **Start your own campaign** (`/login?next=/new`,
+  or `/new` signed in), playing again, the rules and the home page.
+- **Labelled sample throughout**: the header (`TUTORIAL` and a Sample stamp, which narrow phones
+  drop), the map's caption, the intro's notice and the battle's "Sample war game".
+- **Nothing leaves the browser.** No account, campaign, message, rating or notification is made,
+  and the only request is the usual `GET /api/me`. The campaign is a `CampaignView` built locally
+  (`tutorialCampaign()` in `lib/tutorial.ts`) and read through the campaign screen's own
+  `buildModel()`, so targets, stakes, clock modifiers, outcomes (`warTransfers`, `afterGame`) and
+  mission progress (`evaluateMission`) all come from the rules package; there is no second engine.
+  The place reached is kept in this tab's session storage (`geochess.tutorial`), read back through
+  `restoreTutorial()`, which starts afresh from anything the rules couldn't have reached (a stake
+  under the floor, moves off the winning line, a later step without the earlier ones done). A new
+  tab starts at the intro; blocked storage only loses the place on a reload.
+- **The scenario, checked** by `lib/tutorial.test.ts` (17 tests): the whole map held, Ada's turn
+  with a war token, Italy legal and other countries refused for the right reasons, the starting
+  stake at exactly the floor, each outcome's transfers, a mission the generator could deal under
+  the current mission rules (Strategic Positions on Germany, Egypt, Spain, Italy and Türkiye: five
+  positions worth 3 to 15 within four steps of Italy, at least two apart, over four subregions,
+  three to hold with one won since the draft; Ada holds Germany and Spain), and the chess: from
+  `2r3k1/1b3ppp/p7/4p3/4P3/Pq2BN1P/1P1R1PP1/3R2K1 w - - 0 27` a search proves 27. Rd8+ is the only
+  mate in two, 27… Rxd8 the only reply and 28. Rxd8# the only mate. The tutorial has no history, so
+  the mission's baseline (holdings when the draft ended) is the prepared map. **A rule change that
+  breaks the tutorial fails there**: update the scenario or its prose then.
+- **Layout.** Phones and portrait tablets: the map on top (hidden for the battle), the step below
+  with its buttons along the bottom. From 1024 pixels the step is a column beside the map, and in
+  the battle the board gets a column of its own, as big as the height allows, with the rest beside
+  it. Each step frames its part of the map; focus goes to the step's heading as it opens.
+- **Reuse.** `EmpirePanel`'s body is now `EmpireSummary` (the tutorial has no statistics pages to
+  link to), and `game-panel.tsx` exports `PlayerStrip` and `TypedMove`. The board coordinates now
+  read on both colors of square, the right way up and flipped (`globals.css`).
+- **Checked in the browser** (dev server, Chromium, scripted): the whole signed-out journey at
+  1280 × 800 by mouse and at 390 × 844 by touch (tapping countries on the map, moves on the board),
+  a wrong move, a refused typed move, hints, the scripted reply, reloads at the stake and mid-battle,
+  the result's change, and **Start your own campaign** through dev sign-in to `/new`, with no
+  request but `GET /api/me` before signing in and no console errors; at 1024 × 768 by keyboard
+  alone with reduced motion (typed moves, the losing preview, the before and after toggle);
+  Skip the battle; Start over (cancelled and confirmed); Exit and back in the same tab (resumes), a
+  new tab (starts afresh) and blocked storage; and every step at 320 × 640, 844 × 390, 768 × 1024
+  and 1440 × 900 with no sideways overflow.
+
+Defaults taken (not asked; easy to change): the tutorial reuses the landing page's sample rather
+than a smaller made-up world; Strategic Positions as its mission; session storage (a tab's life)
+rather than local storage; Start over asks first; going back is allowed until war is declared;
+skipping always wins; Cleo always accepts.
+
+Tests since: rules 319, data 73, web 157, sim 29, server 223 (801 in all).
 
 ### Victory defaults taken while building (not asked; easy to change)
 
@@ -1815,14 +1880,14 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                      |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                        |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`         |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                          |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                                                                                  |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `notifications.tsx` |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`          |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

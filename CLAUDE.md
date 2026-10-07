@@ -111,6 +111,11 @@ when starting new work.**
   `roomLayout()` (`lib/room-layout.ts`) keeps three columns only while the map keeps its width,
   folding the left one into a rail that opens it over the map, and widens a game's column so the
   board comes first. Panels keep their state when they're hidden, folded or switched away from.
+- The guest tutorial (`/tutorial`, `components/tutorial/`) plays the landing page's sample campaign
+  in the browser alone: a `CampaignView` built in `lib/tutorial.ts`, read through `buildModel()`,
+  with the production map, board and stake builder. It must never call the API beyond `/api/me`.
+  `lib/tutorial.test.ts` checks its target, stake, outcomes, mission and chess line against the
+  rules, so a rule change that breaks it fails there.
 - Local database is embedded PGlite (`apps/server/.data/`), so no setup is needed; set
   `DATABASE_URL` for Postgres.
 - Production is https://geochess.xyz and deploys on every push to `main`: the web app on Vercel,

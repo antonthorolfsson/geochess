@@ -265,16 +265,21 @@
   font-weight: 700;
   font-size: 11px;
 }
-.board-theme .orientation-white .ranks :nth-child(odd),
-.board-theme .orientation-white .files :nth-child(even),
-.board-theme .orientation-black .ranks :nth-child(even),
-.board-theme .orientation-black .files :nth-child(odd) {
+/*
+ * Coordinates in the colour of the other squares, so each reads on its own square. Chessground puts
+ * the orientation on the board's own element, and numbers ranks 1 to 8 and files a to h whichever
+ * way up the board is: white's a1 and black's h8, at the bottom left, are dark.
+ */
+.board-theme.orientation-white .ranks :nth-child(even),
+.board-theme.orientation-white .files :nth-child(even),
+.board-theme.orientation-black .ranks :nth-child(odd),
+.board-theme.orientation-black .files :nth-child(odd) {
   color: #5c6440;
 }
-.board-theme .orientation-white .ranks :nth-child(even),
-.board-theme .orientation-white .files :nth-child(odd),
-.board-theme .orientation-black .ranks :nth-child(odd),
-.board-theme .orientation-black .files :nth-child(even) {
+.board-theme.orientation-white .ranks :nth-child(odd),
+.board-theme.orientation-white .files :nth-child(odd),
+.board-theme.orientation-black .ranks :nth-child(even),
+.board-theme.orientation-black .files :nth-child(even) {
   color: #eeeadd;
 }
 

@@ -1,4 +1,5 @@
 import {
+  FINISHED_CAMPAIGN_KEPT_DAYS,
   SECRET_MISSION_KEY,
   compareSeason,
   heldBy,
@@ -38,16 +39,20 @@ export interface Finish {
   winners: string[];
   /** Nobody reached the points to win: the last round is over and the most points won. */
   seasonEnd?: boolean;
+  /** With `seasonEnd`: the host ended the campaign before its last round. */
+  endedEarly?: boolean;
 }
+
+const KEPT_MS = FINISHED_CAMPAIGN_KEPT_DAYS * 24 * 60 * 60_000;
 
 /**
  * The host moves on from the season's last round: the campaign ends instead of starting another.
  * Missions are brought up to date first, in case something done at the last moment (a game just
  * ended, a claim's time just up) scores, which could still take someone to the points to win. Then
  * the most points win, then the campaign's tiebreak (`seasonMeasures`); players level on all of it
- * share the victory.
+ * share the victory. With `early`, the host ends the campaign before its last round, the same way.
  */
-export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<void> {
+export async function endSeason(ctx: AppContext, scope: MutationScope, { early = false } = {}): Promise<void> {
   const mark = { campaign: scope.campaign, events: scope.log.events.length };
   try {
     // A savepoint, as for every change (see `mutate()`): a fault in scoring still lets the season end.
@@ -70,7 +75,14 @@ export async function endSeason(ctx: AppContext, scope: MutationScope): Promise<
       { points: points.get(id) ?? 0, measures: seasonMeasures(world.idx, heldBy(world.owners, id), tiebreak) },
     ]),
   );
-  await finishCampaign(ctx, scope, { players, world, points, winners: seasonWinners(standings), seasonEnd: true });
+  await finishCampaign(ctx, scope, {
+    players,
+    world,
+    points,
+    winners: seasonWinners(standings),
+    seasonEnd: true,
+    ...(early && { endedEarly: true }),
+  });
 }
 
 const listNames = (names: string[]) =>
@@ -81,7 +93,8 @@ const listNames = (names: string[]) =>
  * mission is revealed; unfinished wars are cancelled (nothing changes hands, and they count as
  * neither won nor lost) and their games stopped, moves kept; tokens held back as tribute, or paid
  * for a counter the attacker hadn't answered, go back; pending claims, accord proposals and peace
- * offers lapse. The results are written once: a second call is a no-op.
+ * offers lapse. The results are written once: a second call is a no-op. The campaign is kept for
+ * `FINISHED_CAMPAIGN_KEPT_DAYS`, then deleted (`deleteFinishedCampaigns`).
  */
 export async function finishCampaign(
   ctx: AppContext,
@@ -93,12 +106,14 @@ export async function finishCampaign(
   const now = ctx.now();
   const round = campaign.round;
   const seasonEnd = finish.seasonEnd ?? false;
+  const early = seasonEnd && (finish.endedEarly ?? false);
   const tiebreak = campaign.rules.victory.tiebreak;
   const placeholder: VictoryResultView = {
     winners: finish.winners,
     round,
     finishedAt: now.toISOString(),
     seasonEnd,
+    ...(early && { endedEarly: true }),
     tiebreak,
     standings: [],
     holdings: {},
@@ -166,20 +181,30 @@ export async function finishCampaign(
     round,
     finishedAt: now.toISOString(),
     seasonEnd,
+    ...(early && { endedEarly: true }),
     tiebreak,
     standings,
     holdings: Object.fromEntries(owners),
   };
   await tx.update(campaignResults).set({ snapshot }).where(eq(campaignResults.campaignId, campaign.id));
-  await tx
-    .update(campaigns)
-    .set({ status: 'finished', finishedAt: now, turnUserId: null, turnDeadline: null })
-    .where(eq(campaigns.id, campaign.id));
-  scope.campaign = { ...campaign, status: 'finished', finishedAt: now, turnUserId: null, turnDeadline: null };
+  const ended = {
+    status: 'finished' as const,
+    finishedAt: now,
+    deleteAt: new Date(now.getTime() + KEPT_MS),
+    turnUserId: null,
+    turnDeadline: null,
+  };
+  await tx.update(campaigns).set(ended).where(eq(campaigns.id, campaign.id));
+  scope.campaign = { ...campaign, ...ended };
   await scope.log.add(
     {
       type: 'campaign.won',
-      payload: { winners: finish.winners, points: Object.fromEntries(finish.points), ...(seasonEnd && { seasonEnd }) },
+      payload: {
+        winners: finish.winners,
+        points: Object.fromEntries(finish.points),
+        ...(seasonEnd && { seasonEnd }),
+        ...(early && { endedEarly: true }),
+      },
     },
     null,
     round,
@@ -200,9 +225,11 @@ export async function finishCampaign(
             ? 'You share the victory'
             : 'Victory'
           : `${winnerNames} ${shared ? 'share the victory' : 'won'}`,
-        body: seasonEnd
-          ? `${campaign.name} is over: round ${round} was its last, and the most points won. Every secret mission is now revealed.`
-          : `${campaign.name} is over after round ${round}. Every secret mission is now revealed.`,
+        body: early
+          ? `The host ended ${campaign.name} in round ${round}, and the most points won. Every secret mission is now revealed.`
+          : seasonEnd
+            ? `${campaign.name} is over: round ${round} was its last, and the most points won. Every secret mission is now revealed.`
+            : `${campaign.name} is over after round ${round}. Every secret mission is now revealed.`,
         url: resultsUrl(campaign.id),
         tag: `victory:${campaign.id}`,
       },

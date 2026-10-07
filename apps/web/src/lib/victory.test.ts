@@ -64,6 +64,7 @@ function view(victory: Partial<VictoryView>, overrides: Partial<CampaignView> = 
     datasetVersion: 'test',
     inviteCode: 'code',
     createdAt: '2026-01-01T00:00:00.000Z',
+    deleteAt: null,
     members: [member('ann', 0), member('bo', 3), member('cy', 5)],
     holdings: { A: 'ann', B: 'bo', C: 'ann', D: 'cy', E: 'bo', F: 'cy' },
     draft: null,

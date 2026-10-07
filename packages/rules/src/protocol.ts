@@ -219,9 +219,13 @@ export type CampaignEvent =
     }
   /**
    * The campaign is won (by several players when they tie) and over: by reaching the points to win,
-   * or with `seasonEnd`, on points (then value) when the last round ended.
+   * or with `seasonEnd`, on points (then the tiebreak) when the last round ended, or when the host
+   * ended the campaign before it (`endedEarly`).
    */
-  | { type: 'campaign.won'; payload: { winners: string[]; points: Record<string, number>; seasonEnd?: boolean } };
+  | {
+      type: 'campaign.won';
+      payload: { winners: string[]; points: Record<string, number>; seasonEnd?: boolean; endedEarly?: boolean };
+    };
 
 export type CampaignEventType = CampaignEvent['type'];
 
@@ -285,6 +289,8 @@ export interface CampaignView {
   datasetVersion: string;
   inviteCode: string;
   createdAt: string;
+  /** A finished campaign: when it is deleted for everyone (`FINISHED_CAMPAIGN_KEPT_DAYS` after it ended). */
+  deleteAt: string | null;
   members: MemberView[];
   /** Owner of every claimed territory. */
   holdings: Record<TerritoryId, string>;
@@ -415,6 +421,8 @@ export interface VictoryResultView {
    * tiebreak) won. Unset in results stored before seasons existed.
    */
   seasonEnd?: boolean;
+  /** With `seasonEnd`: the host ended the campaign before its last round, on points as they stood. */
+  endedEarly?: boolean;
   /** What decided between players level on points. Unset in results stored before 2026-10-02. */
   tiebreak?: SeasonTiebreak;
   /**
@@ -889,6 +897,8 @@ export interface CampaignSummary {
   /** Private messages the viewer hasn't read. */
   unread: number;
   createdAt: string;
+  /** A finished campaign: when it is deleted for everyone (`FINISHED_CAMPAIGN_KEPT_DAYS` after it ended). */
+  deleteAt: string | null;
 }
 
 export interface InvitePreview {

@@ -7,6 +7,7 @@ import {
   BOT_LEVELS,
   CORRESPONDENCE_HOURS,
   DEFAULT_RULES,
+  FINISHED_CAMPAIGN_KEPT_DAYS,
   FORTIFY_COST,
   FORTIFY_ROUNDS,
   HANDICAP_CAP_PCT,
@@ -1313,8 +1314,8 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
       <Section id="ending" title="Winning">
         <p>
           This campaign is open-ended: no victory points, missions or titles, and no fixed end. Play for as long as your
-          group likes. The standings rank empires by total value, and every empire's page keeps its history, war record
-          and chess profile.
+          group likes; when you&apos;re done, the host deletes the campaign. The standings rank empires by total value,
+          and every empire's page keeps its history, war record and chess profile.
         </p>
       </Section>
     );
@@ -1562,6 +1563,11 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             position has to be complete {last > 2 ? `by round ${last - 2}` : 'before round 1'} to score in time.
           </p>
         )}
+        <p>
+          The host can also end the campaign sooner, at the foot of the war room: it ends the same way, on points as
+          they stand. Once a campaign is over, everyone has {FINISHED_CAMPAIGN_KEPT_DAYS} days to look over the results,
+          and then it is deleted for everyone.
+        </p>
       </Part>
     </Section>
   );

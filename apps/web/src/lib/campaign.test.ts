@@ -37,6 +37,7 @@ function campaign(overrides: Partial<CampaignView> = {}): CampaignView {
     datasetVersion: 'test',
     inviteCode: 'code',
     createdAt: '2026-01-01T00:00:00.000Z',
+    deleteAt: null,
     members: [member('ann', 0), member('bo', 3)],
     holdings: {},
     draft: { order: ['ann', 'bo'], pickIndex: 0, totalPicks: 6, round: 1, currentPicker: 'ann' },

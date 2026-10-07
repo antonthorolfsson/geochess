@@ -69,7 +69,10 @@ when starting new work.**
   `campaigns.turns_ended_round`); stored campaigns and campaigns without turns hold for a time
   instead. `settleVictory()` runs inside every `mutate()` (titles, reveals, claims, awards,
   the finish). A campaign's last round (`rules.victory.lastRound`) ends it on points when the host
-  moves on from it (`endSeason`). A player's secret mission and options are private until
+  moves on from it (`endSeason`), or sooner when the host ends it (`endCampaign`, `endedEarly`). A
+  finished campaign is deleted `FINISHED_CAMPAIGN_KEPT_DAYS` after it ends (`campaigns.delete_at`,
+  `deleteFinishedCampaigns` in the scheduler); the host can delete one at any stage (`deleteCampaign`,
+  which locks its games first). A player's secret mission and options are private until
   `mission.revealed`: never put them in events, pushes, notices or another player's view before
   that. Every player sees points move as an award ceremony, built from the pushed `title.changed`
   and `mission.awarded` events (`apps/web/src/lib/ceremony.ts`, played by `award-ceremony.tsx` in

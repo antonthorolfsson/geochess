@@ -156,6 +156,21 @@ describe('bots in the lobby', () => {
   });
 });
 
+describe('bots in a campaign at war', () => {
+  it('go, user and all, when the host deletes the campaign in the middle of a game', async () => {
+    const { id, ann, bot, declare, game, move } = await atWar();
+    const g = await game(await declare());
+    expect((await move(g, 'e2e4')).status).toBe(200);
+    expect((await ann.del(`/api/campaigns/${id}`)).status).toBe(200);
+    // Whatever the bot was about to do finds the campaign gone.
+    await server.bots();
+    await server.runDue();
+    const db = server.app.ctx.db;
+    expect(await db.select().from(users).where(eq(users.id, bot))).toEqual([]);
+    expect(await db.select().from(games).where(eq(games.campaignId, id))).toEqual([]);
+  });
+});
+
 describe('bots in the draft', () => {
   it('pick at once when their turn comes, legally, until the map is full', async () => {
     const { id, ann, view, addBot } = await lobby();

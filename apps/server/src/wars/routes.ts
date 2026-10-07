@@ -5,7 +5,7 @@ import type { AppContext } from '../context';
 import { parse } from '../lib/http';
 import { gameAction, gameView, overTheBoardAction, playMove } from './games';
 import { answerPeace, proposePeace, withdrawPeace } from './peace';
-import { declareWar, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
+import { declareWar, endCampaign, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
 import { passTurn } from './turns';
 import { warView } from './views';
 
@@ -146,6 +146,13 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.post('/api/campaigns/:id/round/next', async (req) => {
     const user = requireUser(req);
     await nextRound(ctx, parse(campaignParams, req.params).id, user.id);
+    return { ok: true };
+  });
+
+  /** The host ends an Objectives campaign before its last round, on points. */
+  app.post('/api/campaigns/:id/end', async (req) => {
+    const user = requireUser(req);
+    await endCampaign(ctx, parse(campaignParams, req.params).id, user.id);
     return { ok: true };
   });
 

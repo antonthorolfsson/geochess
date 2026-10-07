@@ -6,7 +6,7 @@ import {
   type VictoryResultView,
 } from '@empire/rules';
 import { chessResults, leaderOf, resultsPlayed, score, warResults, type Leader } from './compare';
-import { ordinal } from './format';
+import { formatDay, ordinal } from './format';
 import { tiebreakClause } from './victory';
 
 /**
@@ -23,6 +23,10 @@ const pointsText = (n: number) => plural(n, 'victory point');
 export function listNames(names: readonly string[]): string {
   return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
+
+/** When a finished campaign goes for everyone, said on its results. */
+export const deletionText = (deleteAt: string) =>
+  `The campaign and its results are deleted for everyone on ${formatDay(deleteAt)}.`;
 
 // ---------------------------------------------------------------------------------------------
 // Places and points
@@ -103,13 +107,15 @@ export function finaleText(
   const shared = result.winners.length > 1;
   const top = result.standings.find((s) => result.winners.includes(s.userId))?.points ?? 0;
   const mine = result.standings.find((s) => s.userId === viewerId);
-  const round = `round ${result.round}${result.seasonEnd ? ', the last' : ''}`;
+  const round = `round ${result.round}${result.seasonEnd && !result.endedEarly ? ', the last' : ''}`;
   const label = `${won && shared ? 'Shared victory' : 'Campaign over'} · ${round}`;
   const others = result.winners.filter((id) => id !== viewerId).map(nameOf);
   const winners = listNames(result.winners.map(nameOf));
 
   let line: string;
-  if (result.seasonEnd) {
+  if (result.endedEarly) {
+    line = `The host ended the campaign in round ${result.round}, and the most points won${tiebreakClause(result)}.`;
+  } else if (result.seasonEnd) {
     line = `Round ${result.round} was the last, and the most points won${tiebreakClause(result)}.`;
   } else if (won) {
     line = `${shared ? `You and ${listNames(others)}` : 'You'} reached ${pointsText(top)} in round ${result.round}.`;

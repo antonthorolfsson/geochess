@@ -12,6 +12,7 @@ import { DispatchLine } from '../diplo/dispatch-line';
 import { EmpireSwatch } from '../hatch';
 import { Notice } from '../ui';
 import { PointsCounter, useReorderSlide } from '../victory/score-effects';
+import { CampaignControls } from './campaign-controls';
 import { DraftListSection } from './draft-list';
 import { PlayerName } from './player-name';
 import { RemainingCountries } from './remaining-countries';
@@ -167,6 +168,7 @@ export function DraftPanel({
       {model.upcoming.length > 0 && <UpNext model={model} />}
       <Standings model={model} />
       <Dispatches model={model} onSelect={onSelect} onOpenWar={onOpenWar} />
+      <CampaignControls model={model} />
     </div>
   );
 }

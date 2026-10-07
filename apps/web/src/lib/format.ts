@@ -20,6 +20,11 @@ export const formatWhole = (n: number | null) => (n === null ? '—' : wholeNumb
 export const formatTwh = (n: number | null) =>
   n === null ? '—' : `${n >= 100 ? wholeNumber.format(n) : threeDigits.format(n)} TWh`;
 
+const longDay = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const shortDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+/** A day in the weeks ahead, in the viewer's time zone: "Tuesday 14 October", or "14 Oct" `short`. */
+export const formatDay = (iso: string, { short = false } = {}) => (short ? shortDay : longDay).format(new Date(iso));
+
 export function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;

@@ -35,6 +35,7 @@ export function DiploPanel({
   spotlight,
   onSelect,
   onOpenWar,
+  active = true,
 }: {
   model: CampaignModel;
   view: DiploView;
@@ -48,6 +49,11 @@ export function DiploPanel({
   spotlight?: { id: string; nonce: number } | null;
   onSelect(id: TerritoryId): void;
   onOpenWar(warId: string): void;
+  /**
+   * On screen. The panel can stay mounted while hidden (another section or tab is up, or its drawer
+   * is closed), and only marks messages read while it's showing.
+   */
+  active?: boolean;
 }) {
   const unread = useUnread(model.campaign.id);
   const proposals = model.proposalsToMe;
@@ -78,10 +84,12 @@ export function DiploPanel({
         </button>
       )}
       <div className="min-h-0 flex-1">
-        {view === 'dispatches' && <DispatchFeed model={model} onSelect={onSelect} onOpenWar={onOpenWar} />}
+        {view === 'dispatches' && (
+          <DispatchFeed model={model} onSelect={onSelect} onOpenWar={onOpenWar} active={active} />
+        )}
         {view === 'messages' &&
           (chatWith ? (
-            <ConversationThread key={chatWith} model={model} peerId={chatWith} onBack={onCloseChat} />
+            <ConversationThread key={chatWith} model={model} peerId={chatWith} onBack={onCloseChat} active={active} />
           ) : (
             <Conversations model={model} onOpen={onOpenChat} />
           ))}

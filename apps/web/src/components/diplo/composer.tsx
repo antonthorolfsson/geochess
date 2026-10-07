@@ -1,7 +1,7 @@
 'use client';
 
 import { MESSAGE_MAX } from '@empire/rules';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { errorMessage } from '@/lib/api';
 import { useMediaQuery } from '@/lib/use-media-query';
 
@@ -9,11 +9,30 @@ import { useMediaQuery } from '@/lib/use-media-query';
 const MAX_HEIGHT = 160;
 
 /**
- * A message box pinned under a conversation. Enter sends on a keyboard (Shift+Enter for a new
- * line); on touch screens Enter makes a new line and the button sends.
+ * Messages being written, by `draftKey`, kept in memory until sent: one survives its box closing
+ * (another view, tab or layout, or the drawer it's in folding away) and is there when it opens again.
  */
-export function Composer({ placeholder, onSend }: { placeholder: string; onSend(body: string): Promise<unknown> }) {
-  const [text, setText] = useState('');
+const drafts = new Map<string, string>();
+
+/**
+ * A message box pinned under a conversation. Enter sends on a keyboard (Shift+Enter for a new
+ * line); on touch screens Enter makes a new line and the button sends. `draftKey` names the
+ * conversation, and the player writing in it, for keeping what's been written so far.
+ */
+export function Composer({
+  draftKey,
+  placeholder,
+  onSend,
+}: {
+  draftKey: string;
+  placeholder: string;
+  onSend(body: string): Promise<unknown>;
+}) {
+  const [text, setText] = useState(() => drafts.get(draftKey) ?? '');
+  useEffect(() => {
+    if (text) drafts.set(draftKey, text);
+    else drafts.delete(draftKey);
+  }, [draftKey, text]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);

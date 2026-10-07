@@ -37,10 +37,13 @@ export function DispatchFeed({
   model,
   onSelect,
   onOpenWar,
+  active,
 }: {
   model: CampaignModel;
   onSelect(id: TerritoryId): void;
   onOpenWar(warId: string): void;
+  /** On screen, so the channel's newest messages count as read. */
+  active: boolean;
 }) {
   const campaignId = model.campaign.id;
   const [filter, setFilter] = useState<FeedFilter>('all');
@@ -63,7 +66,7 @@ export function DispatchFeed({
     null,
     newestMessage?.kind === 'message' ? newestMessage.message.id : null,
     summary.data?.channelUnread ?? 0,
-    chatting,
+    chatting && active,
   );
 
   const remove = async (message: MessageView) => {
@@ -142,6 +145,7 @@ export function DispatchFeed({
 
       {chatting && (
         <Composer
+          draftKey={`${model.me.userId}\n${campaignId}\n`}
           placeholder="Message everyone"
           onSend={async (body) => {
             const message = await api.sendMessage(campaignId, { body });

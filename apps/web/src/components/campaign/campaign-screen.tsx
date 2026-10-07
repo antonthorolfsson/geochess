@@ -3,13 +3,24 @@
 import { missionName, type CampaignStatus, type TerritoryId } from '@empire/rules';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import type { Topology } from 'topojson-specification';
 import { ApiError, errorMessage } from '@/lib/api';
 import { buildModel, nextAnswer, type CampaignModel } from '@/lib/campaign';
 import { useCampaign, useMapData, useMe, useWar } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
+import { CAMPAIGN_WIDTH, RAIL_WIDTH, roomLayout } from '@/lib/room-layout';
 import { useDocumentTitle } from '@/lib/use-document-title';
+import { useElementSize } from '@/lib/use-element-size';
 import { useFullscreen } from '@/lib/use-fullscreen';
 import { useIsDesktop } from '@/lib/use-media-query';
 import { useMyGames } from '@/lib/use-my-games';
@@ -18,7 +29,7 @@ import { countryName, outcomeText, playerName, stakedByRaises } from '@/lib/wars
 import { DiploPanel, useUnread, type DiploView } from '../diplo/diplo-panel';
 import { GamePanel } from '../game/game-panel';
 import { WorldMap, type MapWar, type MapWarFocus } from '../map/world-map';
-import { Notice, SegmentTabs, Spinner } from '../ui';
+import { Notice, SegmentTabs, Spinner, type SegmentTab } from '../ui';
 import { StandInBanner } from './stand-in';
 import { AwardCeremonies } from '../victory/award-ceremony';
 import { Finale, useFinale } from '../victory/finale';
@@ -75,6 +86,11 @@ const MAIN_LABEL: Record<CampaignStatus, string> = {
   active: 'Wars',
   finished: 'Wars',
 };
+/** The desktop's left column, which the rail's buttons open over the map when it's folded. */
+const CAMPAIGN_PANEL_ID = 'campaign-panel';
+
+/** What the header's calls to action lead to, most pressing first. */
+type ActionKind = 'pick' | 'mission' | 'move' | 'turn' | 'answer';
 
 /**
  * A campaign: the map room, with any page opened over it (an empire's statistics) as `children`,
@@ -249,26 +265,53 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (overPage) exitFull();
   }, [overPage, exitFull]);
 
+  // Desktop: the left column stays open beside the map only while the map keeps its room
+  // (`roomLayout`); otherwise it folds into a rail along the edge, whose buttons open it over the map
+  // as a drawer. An open game takes the width its board needs, so the board comes first.
+  const [roomRef, room] = useElementSize(() =>
+    typeof window === 'undefined'
+      ? { width: 1440, height: 848 }
+      : { width: window.innerWidth, height: window.innerHeight - 52 },
+  );
+  const layout = roomLayout(room.width, room.height, Boolean(panels.gameId));
+  const rail = isDesktop && !layout.campaignColumn;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Back in columns, the drawer starts closed next time, so a game folding the column leaves the map clear.
+  useEffect(() => {
+    if (!rail) setDrawerOpen(false);
+  }, [rail]);
+  const railRef = useRef(rail);
+  useLayoutEffect(() => {
+    railRef.current = rail;
+  });
+  /** Shows a section of the left column, opening it over the map if it's folded into the rail. */
+  const showSide = useCallback((next: Side) => {
+    setSide(next);
+    if (railRef.current) setDrawerOpen(true);
+  }, []);
+
   // A conversation or accord in the address (a notification, the back button) opens Diplo on it.
   const { chatWith, accordId } = panels;
   useEffect(() => {
     if (!chatWith) return;
     setDiploView('messages');
     setTab('diplo');
-    setSide('diplo');
-  }, [chatWith]);
+    showSide('diplo');
+  }, [chatWith, showSide]);
   useEffect(() => {
     if (!accordId) return;
     setDiploView('accords');
     setTab('diplo');
-    setSide('diplo');
-  }, [accordId]);
+    showSide('diplo');
+  }, [accordId, showSide]);
   const changeDiploView = (view: DiploView) => {
     if (view !== 'messages' && chatWith) panels.set('chat', null);
     if (view !== 'accords' && accordId) panels.set('accord', null);
     setDiploView(view);
   };
-  // Leaving Diplo drops its address, so a notification for the same conversation opens it again.
+  // Leaving Diplo (or closing the drawer it's in, see `closeDrawer`) drops its address, so a
+  // notification for the same conversation opens it again. A game folding the column away isn't
+  // leaving it: the conversation is still open when the column comes back.
   const diploShown = isDesktop ? side === 'diplo' : tab === 'diplo';
   const wasDiploShown = useRef(diploShown);
   useEffect(() => {
@@ -308,9 +351,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   useEffect(() => {
     if (!missionsLinked || !objectives) return;
     setTab('missions');
-    setSide(campaign.status === 'selection' ? 'main' : 'missions');
+    showSide(campaign.status === 'selection' ? 'main' : 'missions');
     panels.set('missions', null);
-  }, [missionsLinked, objectives, campaign.status, panels]);
+  }, [missionsLinked, objectives, campaign.status, panels, showSide]);
 
   // A mission called out on the map, recomputed as the campaign changes (and dropped if it
   // stops being one the viewer may see).
@@ -353,7 +396,36 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const openGame = useCallback((gameId: string) => panels.set('game', gameId), [panels]);
+  // The open game's panel, and what had focus when it opened: closing the board puts focus back
+  // there (a game card in the war room, say), if it's still there to take it.
+  const gameRef = useRef<HTMLElement | null>(null);
+  const gameOpener = useRef<HTMLElement | null>(null);
+  const closingGame = useRef(false);
+  const openGame = useCallback(
+    (gameId: string) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && !gameRef.current?.contains(active)) {
+        gameOpener.current = active;
+      }
+      panels.set('game', gameId);
+    },
+    [panels],
+  );
+  const closeGame = () => {
+    closingGame.current = true;
+    panels.set('game', null);
+  };
+  const { gameId: openGameId } = panels;
+  useLayoutEffect(() => {
+    if (openGameId) return;
+    const opener = gameOpener.current;
+    const closed = closingGame.current;
+    gameOpener.current = null;
+    closingGame.current = false;
+    const active = document.activeElement;
+    if (!closed || !opener || (active && active !== document.body)) return;
+    if (opener.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true });
+  }, [openGameId]);
 
   // Intel reports: wars declared on me, answers I'm owed, battles starting and ending. Missions
   // scored and titles changing hands play as award ceremonies instead (`AwardCeremonies`), and the
@@ -510,12 +582,16 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     setSelected(id);
     if (id && panels.warId) panels.set('war', null);
   };
-  /** Calls a mission out on the map, framing its targets; phones switch to the map to show it. */
+  /**
+   * Calls a mission out on the map, framing its targets; phones switch to the map to show it, and a
+   * drawer over the map closes.
+   */
   const [fit, setFit] = useState<{ ids: TerritoryId[]; nonce: number } | null>(null);
   const showMission = (focus: MissionFocus) => {
     setMissionFocus(focus);
     setSelected(null);
     if (!isDesktop) setTab('map');
+    else if (rail && drawerOpen) closeDrawer();
     const spec = focus.kind === 'option' ? focus.spec : findMission(model, focus.ownerId, focus.key)?.mission.spec;
     const progress = focus.kind === 'mission' ? progressOf(model, focus.ownerId ?? me, focus.key) : undefined;
     const overlay = spec ? missionOverlay(model, spec, progress) : null;
@@ -559,7 +635,6 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     setFit({ ids: [...mapWarFocus.attacker, ...mapWarFocus.defender], nonce: Date.now() });
   }, [mapWarFocus, isDesktop]);
   const closeWar = () => panels.set('war', null);
-  const closeGame = () => panels.set('game', null);
   const openChat = (userId: string) => panels.set('chat', userId);
   const closeChat = () => panels.set('chat', null);
   /** From a dispatch: on phones the war opens in the Wars tab. */
@@ -568,9 +643,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     if (!isDesktop) setTab('wars');
   };
 
-  // The header's call to action takes the player to it: the draft, the mission options, a game
-  // waiting for a move, the war room on their turn to declare, or what needs an answer (the soonest deadline first), which lights up.
-  // Pressing again moves on to the next game or answer.
+  // The header's calls to action take the player to what they name: the draft, the mission options,
+  // a game waiting for a move, the war room on their turn to declare, or what needs an answer (the
+  // soonest deadline first), which lights up. Pressing again moves on to the next game or answer.
   const [spotlight, setSpotlight] = useState<{ id: string; nonce: number } | null>(null);
   const lastAnswer = useRef<string | null>(null);
   // The light is for that press, not for the next time the war or proposal is opened by hand.
@@ -579,32 +654,48 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     const timer = setTimeout(() => setSpotlight(null), 3000);
     return () => clearTimeout(timer);
   }, [spotlight]);
-  const act = () => {
-    if (model.myTurn || mustChoose) {
+  const act = (kind: ActionKind) => {
+    if (kind === 'pick' || kind === 'mission' || kind === 'turn') {
       if (overPage) router.push(`/c/${campaign.id}`);
-      if (isDesktop) setSide('main');
-      else setTab(model.myTurn ? 'draft' : 'missions');
+      if (isDesktop) showSide('main');
+      else setTab(kind === 'pick' ? 'draft' : kind === 'mission' ? 'missions' : 'wars');
       return;
     }
-    if (myMoves > 0) {
+    if (kind === 'move') {
       const moves = myGames.filter((g) => g.myMove);
       const next = moves[(moves.findIndex((g) => g.gameId === panels.gameId) + 1) % moves.length];
       if (next) openGame(next.gameId);
-      return;
-    }
-    if (declareTurn) {
-      if (overPage) router.push(`/c/${campaign.id}`);
-      if (isDesktop) setSide('main');
-      else setTab('wars');
       return;
     }
     const next = nextAnswer(model.answers, lastAnswer.current);
     if (!next) return;
     lastAnswer.current = next.id;
     setSpotlight({ id: next.id, nonce: Date.now() });
-    if (next.kind === 'accord') panels.set('accord', next.id);
-    else showWarFromDiplo(next.id);
+    if (next.kind === 'accord') {
+      // Diplo opens on the accords in this same render, so the proposal is there to light up.
+      setDiploView('accords');
+      if (isDesktop) showSide('diplo');
+      else setTab('diplo');
+      panels.set('accord', next.id);
+    } else showWarFromDiplo(next.id);
   };
+  const actions: HeaderAction[] = model.me.bot
+    ? []
+    : [
+        ...(model.myTurn ? [{ kind: 'pick' as const, label: 'Your pick', title: 'Go to the draft' }] : []),
+        ...(mustChoose
+          ? [{ kind: 'mission' as const, label: 'Choose mission', title: 'Go to your mission options' }]
+          : []),
+        ...(myMoves > 0
+          ? [{ kind: 'move' as const, label: 'Your move', title: 'Open the next game waiting for your move' }]
+          : []),
+        ...(declareTurn
+          ? [{ kind: 'turn' as const, label: 'Your turn', title: 'Go to the war room to declare war or pass' }]
+          : []),
+        ...(answers > 0
+          ? [{ kind: 'answer' as const, label: 'Answer needed', title: 'Show the next thing waiting for your answer' }]
+          : []),
+      ];
 
   const fortifiedIds = useMemo(() => Object.keys(model.campaign.fortified), [model.campaign.fortified]);
   const mapWars: MapWar[] = useMemo(
@@ -644,6 +735,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   );
   const gamePanel = panels.gameId && (
     <GamePanel
+      ref={gameRef}
       model={model}
       gameId={panels.gameId}
       onClose={closeGame}
@@ -670,6 +762,11 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       spotlight={spotlight}
       onSelect={flyTo}
       onOpenWar={showWarFromDiplo}
+      // It stays mounted while hidden, but only reads messages (and marks them read) on screen: not
+      // in a closed drawer, under a page or a phone's board, or behind a full-screen map or board.
+      active={
+        diploShown && (!rail || drawerOpen) && !overPage && !mapFull && !gameFull && (isDesktop || !panels.gameId)
+      }
     />
   );
   const missionsPanel = objectives && (
@@ -691,7 +788,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     ) : (
       <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />
     );
-  const sides = [
+  const sides: SegmentTab<Side>[] = [
     {
       id: 'main' as const,
       label: MAIN_LABEL[campaign.status],
@@ -703,54 +800,192 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       : []),
     { id: 'diplo' as const, label: 'Diplo', badge: diploNeedsMe || unread.channel, alert: diploNeedsMe > 0 },
   ];
+  const shownSide: Side = sides.some((s) => s.id === side) ? side : 'main';
+  const sideContent: Record<Side, ReactNode> = { main: leftPanel, missions: missionsPanel, diplo: diploPanel };
+  const phoneTab = (id: Tab): ReactNode =>
+    ({
+      map: null,
+      lobby: <LobbyPanel model={model} onSelect={flyTo} onShowOnMap={showMission} />,
+      // An open war shows in this tab while it's up, and over the map otherwise.
+      wars: (tab === 'wars' && warPanel) || warRoom,
+      draft: <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />,
+      missions: missionsPanel,
+      diplo: diploPanel,
+      empire: <EmpirePanel model={model} onSelect={flyTo} />,
+    })[id];
+  // Phones: the sheet over the map, which another tab covers without unmounting it.
+  const sheetPanel = tab === 'wars' ? territoryPanel : (warPanel ?? territoryPanel);
+
+  // The left column's sections and the phone's tabs mount the first time they show, then stay
+  // mounted, hidden while another shows: a message being written, a form half filled in and a
+  // scroll position all survive switching away and back, and opening and closing the drawer.
+  const showing = isDesktop ? `side:${shownSide}` : `tab:${tab}`;
+  const [seen, setSeen] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    setSeen((s) => (s.has(showing) ? s : new Set(s).add(showing)));
+  }, [showing]);
+  const mounted = (key: string) => key === showing || seen.has(key);
+
+  // The rail: each button opens its section over the map, or closes it if it's the one open. Opened
+  // from the rail, the drawer takes focus; closed, focus goes back to its button.
+  const campaignRef = useRef<HTMLElement>(null);
+  const railButtons = useRef(new Map<Side, HTMLButtonElement>());
+  const drawerTitle = useRef<HTMLHeadingElement>(null);
+  const [drawerFocus, setDrawerFocus] = useState(0);
+  useEffect(() => {
+    if (drawerFocus) drawerTitle.current?.focus({ preventScroll: true });
+  }, [drawerFocus]);
+  const pickSide = (next: Side) => {
+    if (drawerOpen && shownSide === next) {
+      closeDrawer();
+      return;
+    }
+    setSide(next);
+    setDrawerOpen(true);
+    setDrawerFocus((n) => n + 1);
+  };
+  function closeDrawer() {
+    if (campaignRef.current?.contains(document.activeElement)) {
+      railButtons.current.get(shownSide)?.focus({ preventScroll: true });
+    }
+    setDrawerOpen(false);
+    // Closing Diplo is leaving it, as switching away is.
+    if (shownSide === 'diplo') {
+      if (chatWith) panels.set('chat', null);
+      if (accordId) panels.set('accord', null);
+    }
+  }
+  const onDrawerKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    e.preventDefault();
+    closeDrawer();
+  };
+  // Whatever folds the column away (a game opening beside the map) doesn't lose the keyboard's place:
+  // focus goes to the game, or to the rail.
+  const campaignHidden = rail && !drawerOpen;
+  const focusInCampaign = useRef(false);
+  useLayoutEffect(() => {
+    if (!campaignHidden || !focusInCampaign.current) return;
+    focusInCampaign.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && !campaignRef.current?.contains(active)) return;
+    (gameRef.current ?? railButtons.current.get(shownSide))?.focus({ preventScroll: true });
+  }, [campaignHidden, shownSide]);
+
+  // A drawer open over the map: framing keeps clear of it, and so do the map's controls (the search
+  // on one row and the toggles under it, if need be), unless the map beside it is too narrow for
+  // them, when they wait hidden under it.
+  const mapWidth = room.width - (rail ? RAIL_WIDTH : CAMPAIGN_WIDTH) - layout.detailsWidth;
+  const drawerOverMap = rail && drawerOpen && !mapFull;
+  const controlsBeside = drawerOverMap && mapWidth - CAMPAIGN_WIDTH >= 240;
+  const controlsHidden = drawerOverMap && !controlsBeside;
+  // Another tab or a game covers the map (phones), or the board fills the screen: nothing under it
+  // takes focus meanwhile.
+  const mapCovered = (!isDesktop && (tab !== 'map' || Boolean(gamePanel))) || gameFull;
+  // Full screen, the map or the board covers the columns too.
+  const behindFull = mapFull || gameFull;
 
   return (
     // Clipped, not hidden: a hidden overflow can still be scrolled, and focusing something that
     // overflows it (a visually hidden input) would scroll the whole room off screen. Out of reach
     // while the campaign's ending plays over it.
     <div className="flex h-dvh flex-col overflow-clip" inert={finale.playing}>
-      <CampaignHeader
-        model={model}
-        connected={connected}
-        myMoves={myMoves}
-        answers={answers}
-        mustChoose={mustChoose}
-        declareTurn={declareTurn}
-        onAct={act}
-        results={finished ? { href: resultsHref, open: pageSegment === 'results' } : null}
-        back={
-          overPage
-            ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
-            : { href: '/campaigns', label: 'All campaigns' }
-        }
-        rules={{
-          // Like links to empire pages, this keeps the query, so a panel open underneath stays as it was.
-          href: `/c/${campaign.id}/rules${panels.query ? `?${panels.query}` : ''}`,
-          open: pageSegment === 'rules',
-        }}
-      />
-      <StandInBanner model={model} />
+      {/* Full screen, the map or the board covers these too: out of reach until it closes. */}
+      <div className="contents" inert={behindFull}>
+        <CampaignHeader
+          model={model}
+          connected={connected}
+          actions={actions}
+          onAct={act}
+          results={finished ? { href: resultsHref, open: pageSegment === 'results' } : null}
+          back={
+            overPage
+              ? { href: `/c/${campaign.id}${panels.query ? `?${panels.query}` : ''}`, label: 'Back to the map' }
+              : { href: '/campaigns', label: 'All campaigns' }
+          }
+          rules={{
+            // Like links to empire pages, this keeps the query, so a panel open underneath stays as it was.
+            href: `/c/${campaign.id}/rules${panels.query ? `?${panels.query}` : ''}`,
+            open: pageSegment === 'rules',
+          }}
+        />
+        <StandInBanner model={model} />
+      </div>
 
-      <div className="relative flex min-h-0 flex-1">
+      <div ref={roomRef} className="relative flex min-h-0 flex-1">
+        {rail && (
+          <CampaignRail
+            sides={sides}
+            open={drawerOpen ? shownSide : null}
+            onPick={pickSide}
+            buttonRef={(id, el) => {
+              if (el) railButtons.current.set(id, el);
+              else railButtons.current.delete(id);
+            }}
+            inert={overPage || behindFull}
+          />
+        )}
+        {/* The left column, or the drawer the rail opens over the map: one element either way, so
+            folding and unfolding it keeps everything in it as it was. */}
         {isDesktop && (
           <aside
-            className="flex w-[340px] shrink-0 flex-col border-r border-line"
+            ref={campaignRef}
+            id={CAMPAIGN_PANEL_ID}
             aria-label="Campaign"
-            inert={overPage}
+            inert={overPage || campaignHidden || behindFull}
+            data-open={rail ? drawerOpen : undefined}
+            onKeyDown={rail ? onDrawerKey : undefined}
+            onFocus={() => {
+              focusInCampaign.current = true;
+            }}
+            onBlur={(e) => {
+              if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) focusInCampaign.current = false;
+            }}
+            className={`flex flex-col pb-[env(safe-area-inset-bottom)] ${
+              rail
+                ? 'campaign-drawer absolute inset-y-0 z-20 border-r border-line-strong bg-gunmetal shadow-[12px_0_32px_rgba(0,0,0,0.45)]'
+                : 'shrink-0 border-r border-line'
+            }`}
+            style={{ width: CAMPAIGN_WIDTH, left: rail ? RAIL_WIDTH : undefined }}
           >
-            <SegmentTabs<Side>
-              label="Campaign"
-              value={sides.some((s) => s.id === side) ? side : 'main'}
-              onChange={setSide}
-              tabs={sides}
-            />
-            {side === 'diplo' ? (
-              <div className="min-h-0 flex-1">{diploPanel}</div>
-            ) : side === 'missions' && sides.some((s) => s.id === 'missions') ? (
-              <div className="min-h-0 flex-1 overflow-y-auto">{missionsPanel}</div>
+            {rail ? (
+              <div className="flex shrink-0 items-center border-b border-line pl-4">
+                <h2
+                  ref={drawerTitle}
+                  tabIndex={-1}
+                  className="min-w-0 flex-1 truncate text-[0.78rem] font-bold tracking-[0.1em] uppercase outline-none"
+                >
+                  {sides.find((s) => s.id === shownSide)?.label}
+                </h2>
+                <button
+                  type="button"
+                  onClick={closeDrawer}
+                  aria-label={`Close ${sides.find((s) => s.id === shownSide)?.label ?? 'the panel'}`}
+                  title="Close (Esc)"
+                  className="flex size-11 shrink-0 items-center justify-center text-lg text-muted hover:text-paper"
+                >
+                  ✕
+                </button>
+              </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto">{leftPanel}</div>
+              <SegmentTabs<Side> label="Campaign" value={shownSide} onChange={setSide} tabs={sides} />
             )}
+            <div className="relative min-h-0 flex-1">
+              {sides.map(
+                (s) =>
+                  mounted(`side:${s.id}`) && (
+                    <div
+                      key={s.id}
+                      className={`absolute inset-0 ${s.id === 'diplo' ? 'flex flex-col' : 'overflow-y-auto'} ${
+                        s.id === shownSide ? '' : 'invisible'
+                      }`}
+                      inert={s.id !== shownSide}
+                    >
+                      {sideContent[s.id]}
+                    </div>
+                  ),
+              )}
+            </div>
           </aside>
         )}
 
@@ -768,6 +1003,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             initialFrame={initialFrame}
             topInset={controlsBottom}
             bottomInset={isDesktop ? 0 : sheetHeight}
+            leftInset={drawerOverMap ? CAMPAIGN_WIDTH : 0}
+            covered={mapCovered}
             listed={model.draftListOpen ? model.campaign.myDraftList : undefined}
             fortified={fortifiedIds}
             wars={mapWars}
@@ -786,12 +1023,17 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             }}
           />
 
+          {/* The search and toggles wrap onto two rows rather than run under the zoom buttons. */}
           <div
             ref={controlsRef}
-            className="pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2"
+            className={`pointer-events-none absolute top-3 right-[4.25rem] left-3 flex max-w-lg flex-col gap-2 ${
+              controlsHidden ? 'invisible' : ''
+            }`}
+            style={controlsBeside ? { left: 12 + CAMPAIGN_WIDTH } : undefined}
+            inert={mapCovered || controlsHidden}
           >
-            <div className="flex items-start gap-2">
-              <div className="pointer-events-auto flex-1">
+            <div className="flex flex-wrap items-start gap-2">
+              <div className="pointer-events-auto min-w-32 flex-1">
                 <CountrySearch idx={model.idx} onPick={flyTo} />
               </div>
               {campaign.status === 'active' && (
@@ -826,16 +1068,21 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           </div>
 
           {/* Phones: a sheet over the map for the selected country or war, or the campaign at a glance.
-              A country's sheet stays low, so the map above keeps room to show it. */}
-          {!isDesktop && tab === 'map' && (
-            <div ref={sheetRef} className="absolute inset-x-0 bottom-0">
-              {warPanel || territoryPanel ? (
+              A country's sheet stays low, so the map above keeps room to show it. Other tabs cover it
+              without unmounting it, so a stake being built is still there on the way back. */}
+          {!isDesktop && (
+            <div
+              ref={sheetRef}
+              className={`absolute inset-x-0 bottom-0 ${tab === 'map' ? '' : 'invisible'}`}
+              inert={mapCovered}
+            >
+              {sheetPanel ? (
                 <div
                   className={`sheet-in overflow-y-auto rounded-t-md border-t border-line-strong bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.4)] ${
-                    warPanel ? 'max-h-[58dvh]' : 'max-h-[42dvh]'
+                    sheetPanel === warPanel ? 'max-h-[58dvh]' : 'max-h-[42dvh]'
                   }`}
                 >
-                  {warPanel ?? territoryPanel}
+                  {sheetPanel}
                 </div>
               ) : (
                 <MapFooter model={model} onOpen={(t) => setTab(t)} />
@@ -843,15 +1090,28 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             </div>
           )}
 
-          {/* Phones: other tabs cover the map (which stays mounted to keep its zoom). */}
-          {!isDesktop && tab !== 'map' && (
-            <div className={`absolute inset-0 bg-gunmetal ${tab === 'diplo' ? 'flex flex-col' : 'overflow-y-auto'}`}>
-              {tab === 'lobby' && <LobbyPanel model={model} onSelect={flyTo} onShowOnMap={showMission} />}
-              {tab === 'wars' && (warPanel ?? warRoom)}
-              {tab === 'draft' && <DraftPanel model={model} onSelect={flyTo} onOpenWar={showWar} />}
-              {tab === 'missions' && missionsPanel}
-              {tab === 'diplo' && diploPanel}
-              {tab === 'empire' && <EmpirePanel model={model} onSelect={flyTo} />}
+          {/* Phones: other tabs cover the map (which stays mounted to keep its zoom), each mounted the
+              first time it's opened and kept, hidden, while another is up. */}
+          {!isDesktop && (
+            <div
+              className={`absolute inset-0 bg-gunmetal ${tab === 'map' ? 'invisible' : ''}`}
+              inert={tab === 'map' || Boolean(gamePanel)}
+            >
+              {tabs.map(
+                (t) =>
+                  t.id !== 'map' &&
+                  mounted(`tab:${t.id}`) && (
+                    <div
+                      key={t.id}
+                      className={`absolute inset-0 ${t.id === 'diplo' ? 'flex flex-col' : 'overflow-y-auto'} ${
+                        tab === t.id ? '' : 'invisible'
+                      }`}
+                      inert={tab !== t.id}
+                    >
+                      {phoneTab(t.id)}
+                    </div>
+                  ),
+              )}
             </div>
           )}
 
@@ -870,11 +1130,14 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           )}
         </main>
 
+        {/* A country, a war or your empire; or the game, as wide as its board needs to fill the height. */}
         {isDesktop && (
           <aside
-            className={`shrink-0 overflow-y-auto border-l border-line ${gamePanel && !gameFull ? 'w-[460px]' : 'w-[360px]'}`}
+            className="shrink-0 overflow-y-auto border-l border-line pb-[env(safe-area-inset-bottom)]"
+            style={{ width: layout.detailsWidth }}
             aria-label="Details"
-            inert={overPage}
+            // Full screen, the map covers it; the board, though, fills the screen from inside it.
+            inert={overPage || mapFull}
           >
             {mapFull ? (
               <EmpirePanel model={model} onSelect={flyTo} />
@@ -920,6 +1183,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
           className="grid shrink-0 border-t border-line bg-gunmetal pb-[env(safe-area-inset-bottom)]"
           style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           aria-label="Sections"
+          inert={behindFull}
         >
           {tabs.map((t) => {
             const alert =
@@ -982,13 +1246,74 @@ function MapToggle({ pressed, onClick, children }: { pressed: boolean; onClick()
   );
 }
 
+/** A call to action in the header: something waiting on the player. */
+interface HeaderAction {
+  kind: ActionKind;
+  label: string;
+  title: string;
+}
+
+/**
+ * The left column folded into a strip along the room's edge: a button per section, each opening its
+ * section over the map (or closing it), with the same counts as the column's tabs.
+ */
+function CampaignRail({
+  sides,
+  open,
+  onPick,
+  buttonRef,
+  inert,
+}: {
+  sides: SegmentTab<Side>[];
+  /** The section open over the map, if any. */
+  open: Side | null;
+  onPick(side: Side): void;
+  buttonRef(side: Side, el: HTMLButtonElement | null): void;
+  inert: boolean;
+}) {
+  return (
+    <nav
+      aria-label="Campaign"
+      inert={inert}
+      className="relative z-30 flex shrink-0 flex-col border-r border-line bg-gunmetal pb-[env(safe-area-inset-bottom)]"
+      style={{ width: RAIL_WIDTH }}
+    >
+      {sides.map((s) => {
+        const expanded = open === s.id;
+        return (
+          <button
+            key={s.id}
+            ref={(el) => buttonRef(s.id, el)}
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={CAMPAIGN_PANEL_ID}
+            onClick={() => onPick(s.id)}
+            className={`relative flex min-h-16 flex-col items-center justify-center gap-1 border-b border-line px-1 text-[0.66rem] font-bold tracking-[0.06em] uppercase ${
+              expanded ? 'bg-panel text-paper' : 'text-faint hover:text-muted'
+            }`}
+          >
+            {expanded && <span className="absolute inset-y-2 right-0 w-0.5 bg-amber" aria-hidden="true" />}
+            <span className="max-w-full truncate">{s.label}</span>
+            {s.badge ? (
+              <span
+                className={`min-w-5 rounded-full px-1.5 text-center text-[0.7rem] leading-5 tracking-normal tabular-nums ${
+                  s.alert ? 'bg-amber text-gunmetal' : 'bg-raised text-paper'
+                }`}
+              >
+                {s.badge}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function CampaignHeader({
   model,
   connected,
-  myMoves,
-  answers,
-  mustChoose,
-  declareTurn,
+  actions,
   onAct,
   back,
   rules,
@@ -996,14 +1321,13 @@ function CampaignHeader({
 }: {
   model: CampaignModel;
   connected: boolean;
-  myMoves: number;
-  answers: number;
-  /** A secret mission is waiting to be chosen. */
-  mustChoose: boolean;
-  /** It's the player's turn to declare war (or fortify, or pass). */
-  declareTurn: boolean;
+  /**
+   * What's waiting on the player, most pressing first: the first is always shown, the rest from
+   * tablet width up, so a turn to declare or an answer due isn't hidden behind a move to make.
+   */
+  actions: HeaderAction[];
   /** Takes the player to whatever the call to action names. */
-  onAct(): void;
+  onAct(kind: ActionKind): void;
   /** Where the arrow leads: all campaigns, or back to the map from a page over it. */
   back: { href: string; label: string };
   /** The rules page, always a tap away; `open` while it's showing. */
@@ -1029,21 +1353,6 @@ function CampaignHeader({
         : 'Finished',
   }[campaign.status];
   const wars = model.activeWars.length;
-  // The call to action, most pressing first. Pressing it goes there. A bot standing in for the
-  // player answers and moves for them.
-  const action = model.me.bot
-    ? null
-    : model.myTurn
-      ? { label: 'Your pick', title: 'Go to the draft' }
-      : mustChoose
-        ? { label: 'Choose mission', title: 'Go to your mission options' }
-        : myMoves > 0
-          ? { label: 'Your move', title: 'Open the next game waiting for your move' }
-          : declareTurn
-            ? { label: 'Your turn', title: 'Go to the war room to declare war or pass' }
-            : answers > 0
-              ? { label: 'Answer needed', title: 'Show the next thing waiting for your answer' }
-              : null;
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-line bg-gunmetal px-2 pt-[env(safe-area-inset-top)]">
       <Link
@@ -1064,22 +1373,30 @@ function CampaignHeader({
         </span>
       )}
       {wars > 0 && (
-        <span className="text-sm font-bold tracking-wider text-[#ef7b72] uppercase">
+        <span className="shrink-0 text-sm font-bold tracking-wider whitespace-nowrap text-[#ef7b72] uppercase">
           {wars} {wars === 1 ? 'war' : 'wars'} ⚑
         </span>
       )}
-      {action && (
+      {/* Pressing one goes there. A bot standing in for the player answers and moves for them. */}
+      {actions.map((action, i) => (
         <button
+          key={action.kind}
           type="button"
-          onClick={onAct}
+          onClick={() => onAct(action.kind)}
           title={action.title}
-          className="group flex min-h-11 shrink-0 items-center"
+          className={`group min-h-11 shrink-0 items-center ${i === 0 ? 'flex' : 'hidden md:flex'}`}
         >
-          <span className="rounded-[3px] bg-amber px-2 py-1 text-sm font-bold tracking-wider whitespace-nowrap text-gunmetal uppercase group-hover:bg-[#efb940]">
+          <span
+            className={`rounded-[3px] border-2 border-amber px-2 py-0.5 text-sm font-bold tracking-wider whitespace-nowrap uppercase ${
+              i === 0
+                ? 'bg-amber text-gunmetal group-hover:border-[#efb940] group-hover:bg-[#efb940]'
+                : 'text-amber group-hover:bg-amber/15'
+            }`}
+          >
             {action.label}
           </span>
         </button>
-      )}
+      ))}
       {results && !results.open && (
         <Link
           href={results.href}

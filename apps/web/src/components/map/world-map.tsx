@@ -41,6 +41,8 @@ export interface WorldMapProps {
   topInset?: number;
   /** Height in CSS pixels hidden behind a bottom sheet; framing and panning keep clear of it. */
   bottomInset?: number;
+  /** Width in CSS pixels hidden behind a panel open over the map's left side; framing and panning keep clear of it. */
+  leftInset?: number;
   /** The player's draft list, marked on the map with its order. */
   listed?: readonly TerritoryId[];
   /** Fortified countries, marked with a rampart under their label. */
@@ -64,6 +66,8 @@ export interface WorldMapProps {
    * controls, and nothing to click, drag, zoom or focus, so the page scrolls over it.
    */
   still?: boolean;
+  /** Something covers the whole map for now (a phone's other tabs, a game): nothing on it takes focus. */
+  covered?: boolean;
 }
 
 export interface MissionOverlayProps {
@@ -126,6 +130,7 @@ export function WorldMap(props: WorldMapProps) {
     initialFrame,
     topInset = 0,
     bottomInset = 0,
+    leftInset = 0,
     listed = [],
     fortified = [],
     wars = [],
@@ -135,6 +140,7 @@ export function WorldMap(props: WorldMapProps) {
     fit = null,
     fullscreen,
     still = false,
+    covered = false,
   } = props;
   const geo = useMemo(() => buildGeometry(topo, dataset), [topo, dataset]);
   const patternPrefix = svgId(useId());
@@ -171,12 +177,16 @@ export function WorldMap(props: WorldMapProps) {
 
   const vb = useMemo(() => viewBoxFor(size.width, size.height, geo.H), [size, geo.H]);
 
-  /** The part of the view box that isn't hidden behind the controls along the top or a bottom sheet. */
+  /**
+   * The part of the view box that isn't hidden behind the controls along the top, a bottom sheet or a
+   * panel open over the left side.
+   */
   const visibleBox = useCallback((): [number, number, number, number] => {
     const top = Math.min(topInset / pxPerUnitRef.current, vb[3] * 0.2);
     const bottom = Math.min(bottomInset / pxPerUnitRef.current, vb[3] * 0.7);
-    return [vb[0], vb[1] + top, vb[2], vb[3] - top - bottom];
-  }, [topInset, bottomInset, vb]);
+    const left = Math.min(leftInset / pxPerUnitRef.current, vb[2] * 0.7);
+    return [vb[0] + left, vb[1] + top, vb[2] - left, vb[3] - top - bottom];
+  }, [topInset, bottomInset, leftInset, vb]);
 
   /** Keeps markers, labels and hatching the same size on screen at any zoom. */
   const applyScreenScale = useCallback(() => {
@@ -251,7 +261,7 @@ export function WorldMap(props: WorldMapProps) {
   );
 
   // Pan and zoom limits apply to the unobstructed part of the map, so a country can always be
-  // brought out from under the controls or a bottom sheet.
+  // brought out from under the controls, a bottom sheet or a panel.
   useEffect(() => {
     const [vx, vy, vw, vh] = visibleBox();
     zoomRef.current?.extent([
@@ -458,7 +468,7 @@ export function WorldMap(props: WorldMapProps) {
     <div
       ref={wrapperRef}
       className={`relative h-full w-full overflow-hidden bg-gunmetal ${still ? 'map-still' : ''}`}
-      inert={still}
+      inert={still || covered}
     >
       <svg
         ref={svgRef}

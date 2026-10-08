@@ -4,7 +4,7 @@ import { lapseProposals } from '../diplomacy/accords';
 import { runVictoryDeadlines } from '../victory/scheduler';
 import { armAllFlags, flagOverdueGames } from './games';
 import { lapsePeaceOffers } from './peace';
-import { expireResponses } from './service';
+import { advanceScheduledRounds, expireResponses } from './service';
 import { expireTurns } from './turns';
 
 /** How often the server looks for deadlines that have passed. Live flag-falls have their own timers. */
@@ -13,8 +13,9 @@ const POLL_MS = 5_000;
 /**
  * Everything due by now: unanswered declarations and counter-offers, turns to declare nobody
  * took, flag-falls, half-settled games, accord proposals and peace offers nobody answered, secret
- * missions not chosen in time, claims whose holding time is up, anything a bot still has to do, and
- * finished campaigns whose time to be kept is up.
+ * missions not chosen in time, claims whose holding time is up, rounds whose scheduled time is up
+ * (after everything due within them), anything a bot still has to do, and finished campaigns whose
+ * time to be kept is up.
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
   await expireResponses(ctx);
@@ -23,6 +24,7 @@ export async function runDueWork(ctx: AppContext): Promise<void> {
   await lapseProposals(ctx);
   await lapsePeaceOffers(ctx);
   await runVictoryDeadlines(ctx);
+  await advanceScheduledRounds(ctx);
   await ctx.bots.sweep();
   await deleteFinishedCampaigns(ctx);
 }

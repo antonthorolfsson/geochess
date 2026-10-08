@@ -129,7 +129,10 @@ export const api = {
     request('POST', `/campaigns/${id}/wars/${warId}/peace/${offerId}/withdraw`),
   fortify: (id: string, territoryId: string) =>
     request<{ untilRound: number }>('POST', `/campaigns/${id}/fortify`, { territoryId }),
-  nextRound: (id: string) => request('POST', `/campaigns/${id}/round/next`),
+  /** Ends `round`: refused if the campaign has moved on since (a schedule got there first). */
+  nextRound: (id: string, round: number) => request('POST', `/campaigns/${id}/round/next`, { round }),
+  pauseSchedule: (id: string) => request('POST', `/campaigns/${id}/schedule/pause`),
+  resumeSchedule: (id: string) => request('POST', `/campaigns/${id}/schedule/resume`),
   /** The host ends an Objectives campaign before its last round, on points. */
   endCampaign: (id: string) => request('POST', `/campaigns/${id}/end`),
   /** Pass the turn: your own, or (the host) whoever's it is. */

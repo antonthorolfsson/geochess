@@ -63,7 +63,13 @@ export function CampaignSettingsScreen() {
     if (!confirm('Put every setting back to the standard rules? The pace and the missions stay as they are.')) return;
     const standard = standardRules(campaign.rules);
     const { publicMissions: _missions, version: _version, ...victory } = standard.victory;
-    save.mutate({ maxPlayers: standard.maxPlayers, draft: standard.draft, war: standard.war, victory });
+    save.mutate({
+      maxPlayers: standard.maxPlayers,
+      draft: standard.draft,
+      war: standard.war,
+      victory,
+      rounds: standard.rounds,
+    });
   };
 
   return (

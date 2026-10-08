@@ -238,6 +238,7 @@ export function feedShows(filter: FeedFilter, item: FeedItem): boolean {
       return (
         type.startsWith('war.') ||
         type === 'round.started' ||
+        type.startsWith('schedule.') ||
         type === 'country.fortified' ||
         type === 'turn.passed' ||
         type === 'turns.ended'

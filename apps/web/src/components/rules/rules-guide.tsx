@@ -39,6 +39,7 @@ import {
   missionSummary,
   refillTokens,
   reservesAllowed,
+  roundProgression,
   stakeFloor,
   topValueOf,
   type CampaignRules,
@@ -443,7 +444,10 @@ function StartToFinish({ rules, standard }: { rules: CampaignRules; standard: bo
           Round 1 starts{' '}
           {rules.victory.mode === 'objectives' ? 'once everyone has a secret mission' : 'the moment the draft ends'},
           and everyone gets {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves
-          in rounds, and the host starts each one.
+          in rounds,{' '}
+          {roundProgression(rules) === 'scheduled'
+            ? `each ${hoursText(rules.rounds.hours)} long: the next starts by itself when one has run its time, unless the host starts it sooner or pauses the schedule.`
+            : `and the host starts each one${standard ? ' (or, in a correspondence campaign, a schedule the host chose)' : ''}.`}
           {rules.victory.mode === 'objectives' &&
             missionRules(rules.victory.version).titles &&
             ' The titles go to whoever leads the table on population, land, GDP and military might.'}
@@ -474,6 +478,9 @@ function StartToFinish({ rules, standard }: { rules: CampaignRules; standard: bo
 function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolean }) {
   const { war } = rules;
   const answer = answerTimeText(rules, standard);
+  const scheduled = roundProgression(rules) === 'scheduled';
+  const length = hoursText(rules.rounds.hours);
+  const last = lastRoundOf(rules);
   const battle = standard ? (
     <>
       One game of chess, with the attacker playing White: a move a day or so in correspondence campaigns, blitz in live
@@ -497,18 +504,32 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
   const steps: { title: string; who: string; text: ReactNode }[] = [
     {
       title: 'The round begins',
-      who: 'Host',
+      who: scheduled ? 'On schedule' : 'Host',
       text: (
         <>
-          The host presses <UI>Next round</UI>. Everyone gains {warTokens(war.tokensPerRound)}, up to {war.tokenCap}.{' '}
+          {scheduled ? (
+            <>The round before has run its {length}, or the host started this one sooner.</>
+          ) : (
+            <>
+              The host presses <UI>Next round</UI>.
+            </>
+          )}{' '}
+          Everyone gains {warTokens(war.tokensPerRound)}, up to {war.tokenCap}.{' '}
           {countdown[0]!.toUpperCase() + countdown.slice(1)} count down, and every accord that held through the whole of
           the last round earns both partners {REPUTATION_PER_ROUND} reputation.
-          {lastRoundOf(rules) !== null && (
-            <>
-              {' '}
-              After round {lastRoundOf(rules)}, the campaign’s last, the host presses <UI>End the campaign</UI> instead.
-            </>
-          )}
+          {last !== null &&
+            (scheduled ? (
+              <>
+                {' '}
+                When round {last}, the campaign’s last, has run its time, the campaign ends instead; the host can end it
+                sooner with <UI>End the campaign</UI>.
+              </>
+            ) : (
+              <>
+                {' '}
+                After round {last}, the campaign’s last, the host presses <UI>End the campaign</UI> instead.
+              </>
+            ))}
         </>
       ),
     },
@@ -594,11 +615,16 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
     },
     {
       title: 'The next round',
-      who: 'Host',
+      who: scheduled ? 'On schedule' : 'Host',
       text: (
         <>
-          When the group is ready, the host starts the next round. There's no timer. Unfinished wars carry on into it,
-          and unused tokens are kept.
+          {scheduled
+            ? `When the round's ${length} are up, the next starts by itself, ready or not. The host can start it sooner, or pause the schedule, and the round then keeps the time it has left.`
+            : `When the group is ready, the host starts the next round. There's no timer${standard ? ', unless a correspondence campaign chose a schedule' : ''}.`}{' '}
+          The war room says what the round is still waiting for. Unfinished wars carry on into the next round as they
+          stand, deadlines and clocks too, and their countries stay locked. Unused tokens carry over, up to{' '}
+          {war.tokenCap}
+          {war.turns ? ', and anyone still to declare loses the rest of their turns for the round' : ''}.
         </>
       ),
     },
@@ -1496,13 +1522,14 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             <li>
               every player has had their turns to declare war in a round since: declaring is over for that round,
               everyone having passed or run out of things to declare with (whoever has no war tokens and nothing to do
-              is passed over). A host who starts the next round early can&apos;t cut this short: the claim waits for a
-              round whose turns run their course;
+              is passed over). A round that ends before its turns are over, at the host&apos;s word or on a schedule,
+              can&apos;t cut this short: the claim waits for a round whose turns run their course;
             </li>
           ) : (
             <li>
-              at least {holdTimeText(rules, standard)} have passed since the next round started, so a host can&apos;t
-              rush the rounds (the host can make this time longer in the lobby, never shorter);
+              at least {holdTimeText(rules, standard)} have passed since the next round started, so rounds that start
+              quickly, at the host&apos;s word or on a schedule, can&apos;t rush it (the host can make this time longer
+              in the lobby, never shorter);
             </li>
           )}
           <li>you have held it the whole time; and</li>
@@ -1557,9 +1584,13 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
         ) : (
           <p>
             Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. If nobody
-            has reached {points.toWin} by the time the host moves on from it, the campaign ends as if someone had won,
-            and {seasonEndText(rules)}. Players level on all of it share the victory. Points count as they stand then:{' '}
-            {titles ? 'titles held at that moment count, but ' : ''}claims still waiting to score don&apos;t, so a
+            has reached {points.toWin}{' '}
+            {roundProgression(rules) === 'scheduled'
+              ? `by the time its ${hoursText(rules.rounds.hours)} are up (the war room shows when, and the host can pause the schedule)`
+              : 'by the time the host moves on from it'}
+            , the campaign ends as if someone had won, and {seasonEndText(rules)}. Players level on all of it share the
+            victory. Wars still underway then are called off, with nothing changing hands. Points count as they stand
+            then: {titles ? 'titles held at that moment count, but ' : ''}claims still waiting to score don&apos;t, so a
             position has to be complete {last > 2 ? `by round ${last - 2}` : 'before round 1'} to score in time.
           </p>
         )}

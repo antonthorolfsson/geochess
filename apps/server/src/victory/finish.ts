@@ -193,6 +193,8 @@ export async function finishCampaign(
     deleteAt: new Date(now.getTime() + KEPT_MS),
     turnUserId: null,
     turnDeadline: null,
+    nextRoundAt: null,
+    roundPausedAt: null,
   };
   await tx.update(campaigns).set(ended).where(eq(campaigns.id, campaign.id));
   scope.campaign = { ...campaign, ...ended };

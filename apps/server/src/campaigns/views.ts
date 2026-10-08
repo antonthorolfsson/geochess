@@ -2,6 +2,7 @@ import {
   draftRoundOf,
   parseRules,
   pickerAt,
+  roundProgression,
   totalDraftPicks,
   type CampaignSummary,
   type CampaignView,
@@ -30,6 +31,7 @@ import { notFound } from '../lib/errors';
 import { seatRating } from '../ratings/service';
 import { victoryViews } from '../victory/views';
 import { owingAnswer, relevantWars, trucesFrom, type GameRow } from '../wars/board';
+import { pausedRemainingMs } from '../wars/schedule';
 import { peaceOffersFor, toWarView } from '../wars/views';
 
 const RECENT_EVENTS = 150;
@@ -204,6 +206,16 @@ export async function campaignView(ctx: AppContext, campaignId: string, viewerId
                 passed: c.turnPassed,
               }
             : null,
+        schedule:
+          c.status === 'active' && roundProgression(c.rules) === 'scheduled'
+            ? {
+                roundStartedAt: c.roundStartedAt?.toISOString() ?? null,
+                nextRoundAt: c.roundPausedAt ? null : (c.nextRoundAt?.toISOString() ?? null),
+                paused: c.roundPausedAt
+                  ? { since: c.roundPausedAt.toISOString(), remainingMs: pausedRemainingMs(c) }
+                  : null,
+              }
+            : null,
         victory,
         mySecret,
       };
@@ -248,6 +260,8 @@ export async function listCampaigns(ctx: AppContext, userId: string): Promise<Ca
     unread: unread.get(c.id) ?? 0,
     createdAt: c.createdAt.toISOString(),
     deleteAt: c.deleteAt?.toISOString() ?? null,
+    // Set only while a schedule runs (see `scheduleRound`).
+    nextRoundAt: c.status === 'active' && !c.roundPausedAt ? (c.nextRoundAt?.toISOString() ?? null) : null,
   }));
 }
 

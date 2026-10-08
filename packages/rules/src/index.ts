@@ -11,6 +11,7 @@ export * from './handicap';
 export * from './openings';
 export * from './over-the-board';
 export * from './protocol';
+export * from './rounds';
 export * from './stats';
 export * from './turns';
 export * from './victory';

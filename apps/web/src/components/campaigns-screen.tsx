@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
-import { formatDay } from '@/lib/format';
+import { formatDay, formatWhen } from '@/lib/format';
 import { keys, useCampaigns, useMe } from '@/lib/queries';
 import { AppHeader } from './app-header';
 import { EmpireSwatch } from './hatch';
@@ -86,6 +86,9 @@ function Dashboard({ user }: { user: SessionUser }) {
                       {STATUS_LABEL[c.status]} · {c.memberCount} of {c.maxPlayers} players
                       {c.hostId === user.id ? ' · You host' : ''}
                       {c.deleteAt && ` · Kept until ${formatDay(c.deleteAt, { short: true })}`}
+                      {c.status === 'active' &&
+                        c.nextRoundAt &&
+                        ` · Round ${c.round} ends ${formatWhen(c.nextRoundAt)}`}
                     </span>
                   </span>
                   {needsYou && (

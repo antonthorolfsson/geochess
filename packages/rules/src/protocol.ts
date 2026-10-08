@@ -58,8 +58,15 @@ export type CampaignEvent =
       type: 'draft.ended';
       payload: { unclaimed: number; autoPicked?: number; picks?: { userId: string; territoryId: TerritoryId }[] };
     }
-  /** A round started. `order` is who takes their turn when, in campaigns that declare war in turns. */
-  | { type: 'round.started'; payload: { round: number; order?: string[] } }
+  /**
+   * A round started: the host started it, or (`scheduled`, with no actor) the round before ran its
+   * scheduled time. `order` is who takes their turn when, in campaigns that declare war in turns.
+   */
+  | { type: 'round.started'; payload: { round: number; order?: string[]; scheduled?: boolean } }
+  /** The host paused the round schedule: the round keeps the `remainingMs` it had left until they resume it. */
+  | { type: 'schedule.paused'; payload: { remainingMs: number } }
+  /** The host resumed the round schedule: the round ends by itself at `nextRoundAt`. */
+  | { type: 'schedule.resumed'; payload: { nextRoundAt: string } }
   /**
    * A player passed: they're done declaring war and fortifying for the round. `auto` when their
    * time ran out; the host passing a turn for them is logged with the host as the actor.
@@ -319,6 +326,12 @@ export interface CampaignView {
    * until the campaign's first round starts.
    */
   turns: TurnsView | null;
+  /**
+   * Rounds on a schedule (`roundProgression`), while the war is on: when this round ends by itself,
+   * or that the host has paused the schedule. Null where the host starts each round. Unset from
+   * servers older than 2026-10-08.
+   */
+  schedule?: RoundScheduleView | null;
   /** Victory missions and points, in Objectives campaigns; null in open-ended ones. Public. */
   victory: VictoryView | null;
   /** The viewer's own secret mission (or options to choose from). Private: nobody else sees it. */
@@ -340,6 +353,28 @@ export interface TurnsView {
 /** Passing a turn: your own, or (the host) the player whose turn it is. */
 export interface PassTurnInput {
   userId: string;
+}
+
+/** A round schedule, as it stands. */
+export interface RoundScheduleView {
+  /** When the current round started. */
+  roundStartedAt: string | null;
+  /**
+   * When the round ends by itself and the next one starts (in the last round, when the campaign
+   * ends on points); null while the schedule is paused.
+   */
+  nextRoundAt: string | null;
+  /** While the host has the schedule paused: since when, and the time the round had left then, which it keeps. */
+  paused: { since: string; remainingMs: number } | null;
+}
+
+/**
+ * The host ends the round: the next one starts, or after the last, the campaign ends. `round` is
+ * the round the host means to end, so a request that crosses a scheduled start can't end the new
+ * round too; old clients leave it out.
+ */
+export interface NextRoundInput {
+  round?: number;
 }
 
 /** A mission a campaign plays with: public ones are keyed by slot (`p0`…), a secret one `secret`. */
@@ -558,7 +593,7 @@ export interface SendMessageInput {
 
 /**
  * The activity feed: dispatches (the event log) and the campaign channel in one timeline.
- * - `wars`: war dispatches and round starts.
+ * - `wars`: war dispatches, round starts and the round schedule.
  * - `accords`: accords and reputation.
  * - `chat`: the campaign channel.
  */
@@ -907,6 +942,12 @@ export interface CampaignSummary {
   createdAt: string;
   /** A finished campaign: when it is deleted for everyone (`FINISHED_CAMPAIGN_KEPT_DAYS` after it ended). */
   deleteAt: string | null;
+  /**
+   * Rounds on a schedule: when the current round ends by itself (in the last round, the campaign).
+   * Null where the host starts each round, and while the schedule is paused. Unset from servers
+   * older than 2026-10-08.
+   */
+  nextRoundAt?: string | null;
 }
 
 export interface InvitePreview {

@@ -133,8 +133,18 @@ export const campaigns = pgTable(
     turnsEndedRound: integer('turns_ended_round'),
     /** Who holds each title (mission rules version 5 on), from round 1; `settleVictory` keeps it current. */
     titles: jsonb('titles').$type<TitleHolders>().notNull().default({}),
+    /**
+     * Rounds on a schedule (`roundProgression`): when the current round ends by itself and the next
+     * starts (after the last round, when the campaign ends). Null where the host starts each round.
+     */
+    nextRoundAt: timestamp('next_round_at', { withTimezone: true }),
+    /**
+     * While the host has the schedule paused, since when: the round keeps the time it had left
+     * (`next_round_at` less this) until the host resumes it.
+     */
+    roundPausedAt: timestamp('round_paused_at', { withTimezone: true }),
   },
-  (t) => [index('campaigns_delete_at').on(t.deleteAt)],
+  (t) => [index('campaigns_delete_at').on(t.deleteAt), index('campaigns_next_round_at').on(t.nextRoundAt)],
 );
 
 export const members = pgTable(

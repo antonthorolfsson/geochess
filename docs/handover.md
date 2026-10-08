@@ -1614,6 +1614,85 @@ settings page read only.
 Tests since: rules 333, data 73, web 172 (`keySettings`, `changedSettings`), sim 29, server 229
 (836 in all).
 
+**Round progression: readiness and scheduled rounds** (2026-10-08, the user's request: "Players may
+not understand what the round is waiting for, and correspondence campaigns depend on the host
+advancing them"). Not deployed.
+
+- **Rules.** `rules.rounds` (`roundRulesSchema` in `config.ts`): `progression` `manual` | `scheduled`
+  and `hours` (`ROUND_HOURS`: 1, 2, 3, 5 or 7 days, 3 by default). Absent means `manual`, so every
+  stored campaign keeps its host-started rounds (production's included), and `DEFAULT_RULES` is
+  manual too: a schedule is opt-in. `roundProgression(rules)` is `scheduled` only in a
+  correspondence campaign; `roundsIssue` refuses a schedule for a live one, and switching a
+  scheduled lobby to live puts rounds back to `manual` (`mergeRules`), like the holding times.
+- **The round's end, whoever causes it.** `moveOn` (`wars/service.ts`) is the old `nextRound` body,
+  shared by the host (`nextRound`) and the schedule (`advanceScheduledRounds`), so a scheduled
+  start is exactly a host's: tokens refill (unused ones carry over, up to the cap), truces, locks
+  and accords count down, turns start again from the top of the new order (anyone still to declare
+  loses the rest of their turns), wars carry on with their deadlines and clocks, and their countries
+  stay locked. After the last round it calls `endSeason`, as the host's End the campaign does: wars
+  underway are cancelled, claims not yet scored lapse. Claims keep their protections because
+  nothing new touches them: one held through turns still needs a round whose declaring runs its
+  course (`turns_ended_round`), one held for a time its `eligibleAt`. `round.started` from the
+  schedule has no actor and `scheduled: true`; the host's is unchanged (the parity test replays it).
+- **Scheduling** (`wars/schedule.ts`, migration `0016_round_schedule`). `campaigns.next_round_at`
+  is when the round ends by itself, set by `scheduleRound` at every round start (round 1 in
+  `openCampaign`) from the round's actual start, and cleared when the campaign finishes. The
+  scheduler's `advanceScheduledRounds` (after the other deadlines in `runDueWork`) starts one round
+  per due campaign per sweep, re-checking status, round, pause and time under the campaign lock, so
+  a sweep run twice, a second server or the host pressing at the same moment can't start two; and
+  since each round is timed from when it actually started, a server back after an outage starts one
+  round, not one per round missed. The host's `POST …/round/next` now names the round it ends
+  (`{ round }`, optional for old clients): a press that crosses a scheduled start gets 409
+  `round-moved-on` rather than ending the new round. The host can start the next round sooner; the
+  schedule then times the new one from then.
+- **Pause and resume** (`POST …/schedule/pause` and `…/resume`, the host's, scheduled campaigns
+  only): `campaigns.round_paused_at`; the round keeps the time it had left (`pausedRemainingMs`)
+  and ends that long after resuming. Turns, answers, games and claims' holding times keep their own
+  clocks meanwhile. A round the host starts while paused stays paused with its whole length to
+  come. Logged as `schedule.paused` (`remainingMs`) and `schedule.resumed` (`nextRoundAt`), under
+  the Wars feed filter.
+- **Notices.** When the last round starts on a schedule, everyone is told when the campaign ends
+  ("ends on points when this round's 3 days are up") and what that does to wars and claims. Other
+  round starts still aren't notified (the first turn is).
+- **Readiness** (`roundReadiness` in `rounds.ts`, `turnsToCome` in `turns.ts`, with tests): what a
+  round waits for, telling blockers from what carries on. Blockers are turns still to be taken,
+  and in the last round wars underway (called off) and claims that could still score
+  (`last-chance`). Outside the last round, answers due and battles carry into the next round and
+  never hold it up. Each claim gets what the round's end means for it (`claimAtRoundEnd`:
+  `scores`, `delayed` by unfinished turns, `waits`, `last-chance`, `too-late`).
+- **Web.** The war room's round block says when the round ends ("Round 5 starts by itself Sat 10
+  Oct, 18:00 (in 1d 6h)", paused, or the host's call; in the last round when the campaign ends on
+  points, and what that does), then a "Before round 5" box: what it's waiting for, declaring
+  (whose turn, then who), what the round's end does to turns not taken, the wars carrying on, and
+  claims waiting to score; in the last round, "Before the campaign ends" with the wars and claims
+  its end cuts short. The host gets Pause schedule / Resume schedule beside Next round, and every
+  confirm says what it does (`lib/readiness.ts`). The settings page offers Rounds (correspondence
+  only) and a Round length; `settingsList` and the lobby's key settings gain "Rounds"; the
+  campaigns list shows when a scheduled round ends; dispatches say "began on schedule", paused and
+  resumed; the rules guide's start-to-finish, round steps, claims, last round and deadlines follow
+  the campaign's progression.
+- **Checked in the browser** (dev server on a fresh database, Chromium at 1440 × 900 and 390 × 844,
+  scripted): "Schedule Check" (Ann hosting Bo and Cy, scheduled, 3 days, a war fought and a
+  declaration waiting), "Last Round Check" (last round 2, round 2 with a war waiting) and "Rounds
+  Lobby" (the settings page). Pause, resume and Next round from the war room with their confirms,
+  the dispatches, the settings switching to live and back, and, with the round's end moved 40
+  seconds ahead in the database and the dev server restarted, the real scheduler starting round 2
+  while the war room was open (it updated without a reload: tokens, the new order, the wars carried
+  on). No console errors, no sideways scroll.
+
+Defaults taken (not asked; easy to change): round lengths of one to seven days, three as the first
+offered (the turn and answer windows are a day, so nothing shorter); a schedule only for
+correspondence; a schedule that doesn't wait for declaring, as the host's press never did; a
+paused round keeping exactly the time it had left (no minimum on resuming); the host can still
+start rounds early; the last round ends the campaign on its own (the host chose the schedule and
+the last round, and everyone is told when it starts); one round on recovery after an outage, timed
+from then.
+
+Tests since: rules 347 (`rounds.test.ts`), data 73, web 183 (`lib/readiness.test.ts`), sim 29,
+server 246 (`test/schedule.test.ts`: scheduled starts, duplicate sweeps and a second server, an
+outage, pause and resume, claims held by turns and by time, the last round, stored and live
+campaigns staying manual).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -1651,7 +1730,7 @@ Numbers quoted come from simulating 30 full contiguous drafts per player count o
 | Topic         | Decision                                                                                                                                                                                                                                                                                                                                                         |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pace          | A campaign setting: live or correspondence for every war. Time controls are stored per game, so a per-war choice can come later.                                                                                                                                                                                                                                 |
-| Rounds        | Advance only when the host presses "Next round". No round timers. Rounds refill tokens and count down locks and truces; response windows and move deadlines are in hours.                                                                                                                                                                                        |
+| Rounds        | Advance only when the host presses "Next round". No round timers. Rounds refill tokens and count down locks and truces; response windows and move deadlines are in hours. Since 2026-10-08 a correspondence campaign can opt into rounds on a schedule instead.                                                                                                  |
 | Tokens        | 1 per round. Unused tokens carry over up to 3; tribute can take a player past 3. Declaring costs 1.                                                                                                                                                                                                                                                              |
 | Unclaimed     | "End draft" auto-drafts the rest (draft lists first, then the most valuable), so the map is always full. No annexing.                                                                                                                                                                                                                                            |
 | Stake         | The launching country plus connected countries of the attacker's, worth at least 80% of the target (rounded up). No upper cap. Raise demands at least 125% (rounded up). With the strict 80–125% window only 44–51% of bordering enemy countries were attackable; this gives 85–91%. New campaigns since 2026-10-04: 110%, and 150% against a fortified country. |
@@ -2053,7 +2132,7 @@ Smaller follow-ups, none blocking:
 | `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `projection`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                                                                                 |
 | `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                                                                                                         |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members)                                                                                                                                                                                                                 |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members), `0012_over_the_board`, `0013_titles`, `0014_turns_ended_round`, `0015_delete_finished`, `0016_round_schedule` (`campaigns.next_round_at`, `round_paused_at`)                                                   |
 | `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, settings page and fields, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `new-campaign-screen.tsx` (quick start or advanced), `notifications.tsx` |
 | `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `outcomes.ts` (what a war could change, in words), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                      |
 
@@ -2063,7 +2142,7 @@ API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,
 `/api/campaigns/:id/draft/{start,pick,autopick,end,list}`,
 `/api/campaigns/:id/wars` (declare), `/api/campaigns/:id/wars/:warId` (read) and `…/{respond,reply,recall,peace}`,
 `…/peace/:offerId/{answer,withdraw}`, `/api/campaigns/:id/fortify`,
-`/api/campaigns/:id/round/next`, `/api/campaigns/:id/end`, `/api/games/:gameId` and `…/{move,resign,draw}`,
+`/api/campaigns/:id/round/next`, `/api/campaigns/:id/schedule/{pause,resume}`, `/api/campaigns/:id/end`, `/api/games/:gameId` and `…/{move,resign,draw}`,
 `/api/campaigns/:id/accords` (propose), `/api/campaigns/:id/accords/:accordId/{answer,withdraw,renounce}`,
 `/api/campaigns/:id/stats`, `/api/campaigns/:id/secret` (choose), `/api/campaigns/:id/victory/missions` (the host's four) and
 `…/missions/:slot/reroll`, `/api/campaigns/:id/victory/proceed`,

@@ -154,6 +154,32 @@ describe('the rules guide', () => {
     expect(text).not.toContain('Raising back and forth');
   });
 
+  it('describes rounds the host starts, and rounds on a schedule', () => {
+    const own = render(campaign(DEFAULT_RULES)).text;
+    expect(own).toContain('From then on the campaign moves in rounds, and the host starts each one.');
+    expect(own).toContain('The host presses Next round.');
+    expect(own).toContain("There's no timer.");
+    expect(own).toContain('by the time the host moves on from it, the campaign ends');
+    // The standard page mentions the schedule a correspondence campaign can choose.
+    expect(standard.text).toContain('or, in a correspondence campaign, a schedule the host chose');
+
+    const scheduled = render(campaign({ ...DEFAULT_RULES, rounds: { progression: 'scheduled', hours: 48 } })).text;
+    expect(scheduled).toContain(
+      'From then on the campaign moves in rounds, each 2 days long: the next starts by itself when one has run its time, unless the host starts it sooner or pauses the schedule.',
+    );
+    expect(scheduled).toContain('The round before has run its 2 days, or the host started this one sooner.');
+    expect(scheduled).toContain('When round 25, the campaign’s last, has run its time, the campaign ends instead');
+    expect(scheduled).toContain("When the round's 2 days are up, the next starts by itself, ready or not.");
+    expect(scheduled).toContain(
+      'Unfinished wars carry on into the next round as they stand, deadlines and clocks too, and their countries stay locked. Unused tokens carry over, up to 3, and anyone still to declare loses the rest of their turns for the round.',
+    );
+    expect(scheduled).toContain(
+      'by the time its 2 days are up (the war room shows when, and the host can pause the schedule)',
+    );
+    expect(scheduled).toContain('A round runs its time 2 days The next round starts by itself');
+    expect(scheduled).not.toContain('The host presses Next round');
+  });
+
   it('describes a campaign stored before titles by its own mission rules', () => {
     const rules = parseRules({ victory: { mode: 'objectives', version: 4, publicMissions: MISSIONS, lastRound: 20 } });
     const { html, text } = render(campaign(rules, '2026.2'));

@@ -12,6 +12,7 @@ import {
   kindName,
   missionRules,
   raiseFloor,
+  roundProgression,
   selectionMs,
   stakeFloor,
   tiebreakText,
@@ -143,6 +144,15 @@ export function deadlineRows(rules: CampaignRules, paces: readonly Pace[] = [rul
   });
   const answer = (r: CampaignRules) => RESPONSE_WINDOW_TEXT[r.war.pace];
   return [
+    ...(roundProgression(rules) === 'scheduled'
+      ? [
+          row(
+            'A round runs its time',
+            (r) => (roundProgression(r) === 'scheduled' ? hoursText(r.rounds.hours) : 'The host’s call'),
+            'The next round starts by itself: turns not yet taken are lost, and wars carry on. After the last round, the campaign ends on points.',
+          ),
+        ]
+      : []),
     ...(war.turns
       ? [
           row(
@@ -318,6 +328,7 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Draft', value: rules.draft.mode === 'contiguous' ? 'Contiguous' : 'Free' },
     { label: 'Pace', value: war.pace === 'live' ? 'Live' : 'Correspondence' },
     { label: 'Time control', value: timeControlText(rules) },
+    { label: 'Rounds', value: roundsText(rules) },
     {
       label: 'Declaring',
       value: war.turns ? `In turns, ${TURN_WINDOW_TEXT[war.pace]} each` : 'Whenever you like',
@@ -342,8 +353,14 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
   ];
 }
 
+/** How the campaign's rounds move on, in a few words: "Started by the host", "On a schedule, 3 days each". */
+export const roundsText = (rules: CampaignRules) =>
+  roundProgression(rules) === 'scheduled'
+    ? `On a schedule, ${hoursText(rules.rounds.hours)} each`
+    : 'Started by the host';
+
 /** The settings a campaign is summed up by, in this order, before the rest (`settingsList`). */
-const KEY_SETTINGS = ['Pace', 'Time control', 'Players', 'Draft', 'Victory', 'Last round'];
+const KEY_SETTINGS = ['Pace', 'Time control', 'Rounds', 'Players', 'Draft', 'Victory', 'Last round'];
 
 /** The few settings that sum a campaign up: its pace and clocks, the table, the draft and how it's won. */
 export function keySettings(rules: CampaignRules): { label: string; value: string }[] {

@@ -36,6 +36,7 @@ function eventFilter(filter: FeedFilter): SQL | undefined {
     return or(
       like(events.type, 'war.%'),
       eq(events.type, 'round.started'),
+      like(events.type, 'schedule.%'),
       eq(events.type, 'country.fortified'),
       eq(events.type, 'turn.passed'),
       eq(events.type, 'turns.ended'),

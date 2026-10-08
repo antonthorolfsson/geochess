@@ -1,10 +1,20 @@
 'use client';
 
-import { TITLES, botLevel, missionName, valueOf, type EventView, type TerritoryId, type WarView } from '@empire/rules';
+import {
+  TITLES,
+  botLevel,
+  lastRoundOf,
+  missionName,
+  valueOf,
+  type EventView,
+  type TerritoryId,
+  type WarView,
+} from '@empire/rules';
 import type { ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
+import { formatWhen } from '@/lib/format';
 import { requirementText } from '@/lib/victory';
-import { termsText, tokensText } from '@/lib/wars';
+import { termsText, timeLeft, tokensText } from '@/lib/wars';
 import { EmpireSwatch } from '../hatch';
 import { TitleToken } from '../victory/title-tokens';
 
@@ -60,14 +70,31 @@ export function DispatchLine({
   };
   switch (event.type) {
     case 'round.started': {
-      const { round, order } = event.payload;
+      const { round, order, scheduled } = event.payload;
       const turns = order?.length ? ` Declaring in turns: ${order.map(name).join(', ')}.` : '';
       return round === 1 ? (
         <strong>Round 1 began: to war. Everyone has their first war token.{turns}</strong>
       ) : (
         <strong>
-          Round {round} began. War tokens refilled.{turns}
+          Round {round} began{scheduled ? ' on schedule, as the last one’s time ran out' : ''}. War tokens refilled.
+          {turns}
         </strong>
+      );
+    }
+    case 'schedule.paused':
+      return (
+        <span>
+          {name(event.actorId)} paused the round schedule, with {timeLeft(event.payload.remainingMs)} left in round{' '}
+          {event.round}.
+        </span>
+      );
+    case 'schedule.resumed': {
+      const last = lastRoundOf(model.campaign.rules) === event.round;
+      return (
+        <span>
+          {name(event.actorId)} resumed the round schedule: {last ? 'the campaign ends' : `round ${event.round} ends`}{' '}
+          {formatWhen(event.payload.nextRoundAt)}.
+        </span>
       );
     }
     case 'turn.passed': {

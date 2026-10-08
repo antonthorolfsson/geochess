@@ -34,6 +34,7 @@ import {
   raiseOptions,
   redirectOptions,
   refillTokens,
+  roundProgression,
   stakeFromReserves,
   tributeOptions,
   turnDeadline,
@@ -47,6 +48,7 @@ import {
   type GameEndReason,
   type GameResult,
   type Handicap,
+  type NextRoundInput,
   type PeaceTerms,
   type RaiseStep,
   type Transfer,
@@ -56,7 +58,7 @@ import {
   type WarBoard,
   type WarResponse,
 } from '@empire/rules';
-import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { mutate, requireActive, requireHost, requireMember, userName, type MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
 import { campaigns, games, holdings, members, peaceOffers, wars } from '../db/schema';
@@ -69,6 +71,7 @@ import { botSeats } from '../bots/ids';
 import { endSeason } from '../victory/finish';
 import { loadBoard, type WarRow } from './board';
 import { armFlag, publishGame } from './games';
+import { scheduleRound } from './schedule';
 import { beginTurns, declaring, requireTurn, roundTurnOrder, turnTaken } from './turns';
 
 /** Live games open with a countdown, so both players can get to the board. */
@@ -806,7 +809,11 @@ export async function stopWarGames(ctx: AppContext, scope: MutationScope, warId:
  * the tiebreak. Safe to call more than once.
  */
 export async function settleGame(ctx: AppContext, campaignId: string, gameId: string): Promise<void> {
-  await mutate(ctx, campaignId, (scope) => settleFinishedGame(ctx, scope, gameId));
+  // As of when the game ended, which may come before a scheduled end the server has since passed.
+  const [game] = await ctx.db.select({ finishedAt: games.finishedAt }).from(games).where(eq(games.id, gameId));
+  await mutate(ctx, campaignId, (scope) => settleFinishedGame(ctx, scope, gameId), {
+    upTo: game?.finishedAt ?? undefined,
+  });
 }
 
 async function settleFinishedGame(ctx: AppContext, scope: MutationScope, gameId: string): Promise<void> {
@@ -930,37 +937,106 @@ export async function resolveWar(
 // Rounds and deadlines
 
 /**
- * The host starts the next round: everyone's tokens refill, locks and truces count down, accords
- * whose time is up run their course, and turns to declare begin where the rules have them. After
- * the season's last round, the campaign ends instead (see `endSeason`).
+ * The host starts the next round (see `moveOn`). Naming the round they mean to end (`input.round`)
+ * keeps a request that crosses a scheduled start from ending the new round too.
  */
-export async function nextRound(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+export async function nextRound(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  input: NextRoundInput = {},
+): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'start the next round');
     requireActive(scope);
-    const last = lastRoundOf(scope.campaign.rules);
-    if (last !== null && scope.campaign.round >= last) {
-      await endSeason(ctx, scope);
-      return;
+    if (input.round !== undefined && input.round !== scope.campaign.round) {
+      throw conflict(`Round ${scope.campaign.round} has already begun.`, 'round-moved-on');
     }
-    const round = scope.campaign.round + 1;
-    const roundStartedAt = ctx.now();
-    await scope.tx.update(campaigns).set({ round, roundStartedAt }).where(eq(campaigns.id, campaignId));
-    for (const m of scope.members) {
-      const tokens = refillTokens(scope.campaign.rules, m.tokens);
-      if (tokens === m.tokens) continue;
-      await scope.tx
-        .update(members)
-        .set({ tokens })
-        .where(and(eq(members.campaignId, campaignId), eq(members.userId, m.userId)));
-      m.tokens = tokens;
-    }
-    scope.campaign = { ...scope.campaign, round, roundStartedAt };
-    const order = roundTurnOrder(scope.campaign, scope.members);
-    await scope.log.add({ type: 'round.started', payload: { round, ...(order ? { order } : {}) } }, userId, round);
-    await startRoundForAccords(ctx, scope);
-    await beginTurns(ctx, scope);
+    await moveOn(ctx, scope, userId);
   });
+}
+
+/**
+ * The round ends: the host started the next one (`actorId`), or its scheduled time ran out (null).
+ * Everyone's tokens refill, locks and truces count down, accords whose time is up run their course,
+ * turns to declare begin again where the rules have them (anyone still to declare loses the rest of
+ * their turns, and keeps their tokens), and a schedule gives the new round its time. Wars carry on
+ * as they were, deadlines and clocks too. After the season's last round, the campaign ends instead
+ * (see `endSeason`): wars underway are called off, and claims not yet scored don't count.
+ */
+export async function moveOn(ctx: AppContext, scope: MutationScope, actorId: string | null): Promise<void> {
+  const last = lastRoundOf(scope.campaign.rules);
+  if (last !== null && scope.campaign.round >= last) {
+    await endSeason(ctx, scope);
+    return;
+  }
+  const campaignId = scope.campaign.id;
+  const round = scope.campaign.round + 1;
+  const roundStartedAt = ctx.now();
+  await scope.tx.update(campaigns).set({ round, roundStartedAt }).where(eq(campaigns.id, campaignId));
+  for (const m of scope.members) {
+    const tokens = refillTokens(scope.campaign.rules, m.tokens);
+    if (tokens === m.tokens) continue;
+    await scope.tx
+      .update(members)
+      .set({ tokens })
+      .where(and(eq(members.campaignId, campaignId), eq(members.userId, m.userId)));
+    m.tokens = tokens;
+  }
+  scope.campaign = { ...scope.campaign, round, roundStartedAt };
+  const order = roundTurnOrder(scope.campaign, scope.members);
+  const payload = { round, ...(order ? { order } : {}), ...(actorId === null ? { scheduled: true } : {}) };
+  await scope.log.add({ type: 'round.started', payload }, actorId, round);
+  await startRoundForAccords(ctx, scope);
+  await beginTurns(ctx, scope);
+  await scheduleRound(ctx, scope);
+}
+
+/** The times scheduled rounds ran out at that the server hasn't moved on from yet, soonest first. */
+export async function dueRoundEnds(ctx: AppContext): Promise<Date[]> {
+  const rows = await ctx.db
+    .selectDistinct({ at: campaigns.nextRoundAt })
+    .from(campaigns)
+    .where(and(eq(campaigns.status, 'active'), isNull(campaigns.roundPausedAt), lte(campaigns.nextRoundAt, ctx.now())))
+    .orderBy(asc(campaigns.nextRoundAt));
+  return rows.flatMap((r) => (r.at ? [r.at] : []));
+}
+
+/**
+ * Rounds whose scheduled time ran out by `upTo`: the next one starts, or after the last, the
+ * campaign ends; one round per campaign a sweep, and the new round's time runs from when it
+ * starts. Checked again under the campaign's lock, so a sweep run twice, a second server, or the
+ * host moving on in the same moment can't start two rounds for one, nor end a round the host has
+ * paused. The scheduler deals with what fell due before a round's end first (`runDueWork`).
+ */
+export async function advanceScheduledRounds(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
+  const due = await ctx.db
+    .select({ id: campaigns.id, round: campaigns.round, at: campaigns.nextRoundAt })
+    .from(campaigns)
+    .where(and(eq(campaigns.status, 'active'), isNull(campaigns.roundPausedAt), lte(campaigns.nextRoundAt, upTo)));
+  for (const { id, round, at } of due) {
+    try {
+      await mutate(
+        ctx,
+        id,
+        async (scope) => {
+          const c = scope.campaign;
+          // Nothing to do, so nobody hears of it unless the check every change runs logs something.
+          scope.notifyOnly([]);
+          if (c.status !== 'active' || c.round !== round || c.roundPausedAt || !c.nextRoundAt) return;
+          if (c.nextRoundAt > upTo || c.nextRoundAt > ctx.now()) return;
+          if (roundProgression(c.rules) !== 'scheduled') {
+            await scheduleRound(ctx, scope);
+            return;
+          }
+          await moveOn(ctx, scope, null);
+        },
+        { upTo: at ?? undefined },
+      );
+    } catch (err) {
+      ctx.log.error({ err, campaignId: id }, 'could not start a scheduled round');
+    }
+  }
 }
 
 /**
@@ -981,27 +1057,32 @@ export async function endCampaign(ctx: AppContext, campaignId: string, userId: s
 }
 
 /**
- * Answers declarations and counter-offers whose time ran out: a silent defender accepts the war as
- * declared; a silent attacker gets no war (a raise or redirect is withdrawn, a tribute accepted).
- * Silence on a raise after raising is backing down: the defender yields the target, the attacker
- * forfeits the stake as declared.
+ * Answers declarations and counter-offers whose time ran out by `upTo`: a silent defender accepts
+ * the war as declared; a silent attacker gets no war (a raise or redirect is withdrawn, a tribute
+ * accepted). Silence on a raise after raising is backing down: the defender yields the target, the
+ * attacker forfeits the stake as declared.
  */
-export async function expireResponses(ctx: AppContext): Promise<void> {
+export async function expireResponses(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
   const due = await ctx.db
     .select({ id: wars.id, campaignId: wars.campaignId })
     .from(wars)
-    .where(and(inArray(wars.status, ['declared', 'countered']), lte(wars.respondBy, ctx.now())));
+    .where(and(inArray(wars.status, ['declared', 'countered']), lte(wars.respondBy, upTo)));
   for (const { id, campaignId } of due) {
     try {
-      await mutate(ctx, campaignId, async (scope) => {
-        const war = await findWar(scope, id);
-        if (!war.respondBy || war.respondBy > ctx.now()) return;
-        if (war.status === 'declared') await applyResponse(ctx, scope, war, { response: 'accept' }, true);
-        else if (war.status === 'countered' && war.counter) {
-          const reply: WarReply = war.counter.kind === 'tribute' ? { reply: 'accept' } : { reply: 'withdraw' };
-          await applyReply(ctx, scope, war, reply, true);
-        }
-      });
+      await mutate(
+        ctx,
+        campaignId,
+        async (scope) => {
+          const war = await findWar(scope, id);
+          if (!war.respondBy || war.respondBy > upTo) return;
+          if (war.status === 'declared') await applyResponse(ctx, scope, war, { response: 'accept' }, true);
+          else if (war.status === 'countered' && war.counter) {
+            const reply: WarReply = war.counter.kind === 'tribute' ? { reply: 'accept' } : { reply: 'withdraw' };
+            await applyReply(ctx, scope, war, reply, true);
+          }
+        },
+        { upTo },
+      );
     } catch (err) {
       ctx.log.error({ err, warId: id }, 'could not expire a war response');
     }

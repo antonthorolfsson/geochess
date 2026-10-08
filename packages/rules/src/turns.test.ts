@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseRules } from './config';
 import { indexDataset } from './graph';
 import { warDataset } from './test-fixtures';
-import { canTakeTurn, checkTurn, nextTurn, turnOrder, turnsBefore, type TurnState } from './turns';
+import { canTakeTurn, checkTurn, nextTurn, turnOrder, turnsBefore, turnsToCome, type TurnState } from './turns';
 import type { WarBoard } from './war';
 
 const ANN = 'ann';
@@ -131,5 +131,16 @@ describe('taking a turn', () => {
     // Bo has nothing to do, so his turn will be passed over; the player whose turn it is still counts.
     expect(turnsBefore(state(), CY, (id) => id !== BO)).toBe(1);
     expect(turnsBefore(state({ current: BO }), ANN, (id) => id !== BO && id !== CY)).toBe(1);
+  });
+
+  it('lists the players still to declare, whose turn it is first', () => {
+    const anyone = () => true;
+    expect(turnsToCome(state(), anyone)).toEqual([ANN, BO, CY]);
+    expect(turnsToCome(state({ current: BO }), anyone)).toEqual([BO, CY, ANN]);
+    expect(turnsToCome(state({ current: CY, passed: [ANN] }), anyone)).toEqual([CY, BO]);
+    // Players with nothing to do are passed over, but whoever holds the turn is still to take it.
+    expect(turnsToCome(state(), (id) => id !== CY)).toEqual([ANN, BO]);
+    expect(turnsToCome(state(), (id) => id !== ANN)).toEqual([ANN, BO, CY]);
+    expect(turnsToCome(state({ current: null }), anyone)).toEqual([]);
   });
 });

@@ -28,9 +28,12 @@ The full design and roadmap live in [empire-chess-implementation-plan.md](empire
 
 **Phase 2 (War loop)** is in place:
 
-- War tokens (one a round, saved up to three) and host-advanced rounds. New campaigns declare in
-  turns round the table: one declaration or fortification a turn, and passing ends your declaring
-  for the round.
+- War tokens (one a round, saved up to three) and rounds the host starts, or, where the host of a
+  correspondence campaign chooses it, rounds on a schedule: each lasts a set time (one to seven
+  days), then the next starts by itself, and the host can pause the schedule. The war room says what
+  a round is still waiting for and what carries into the next. New campaigns declare in turns round
+  the table: one declaration or fortification a turn, and passing ends your declaring for the
+  round.
 - Declaring war on a bordering enemy country, with attackable countries highlighted on the map and
   a stake builder: the launching country plus connected countries, worth at least 110% of the
   target (80% in campaigns created before the higher stakes).

@@ -6,6 +6,7 @@ import { parse } from '../lib/http';
 import { gameAction, gameView, overTheBoardAction, playMove } from './games';
 import { answerPeace, proposePeace, withdrawPeace } from './peace';
 import { declareWar, endCampaign, fortifyCountry, nextRound, recallWar, replyToWar, respondToWar } from './service';
+import { pauseSchedule, resumeSchedule } from './schedule';
 import { passTurn } from './turns';
 import { warView } from './views';
 
@@ -28,6 +29,8 @@ const declareInput = z.object({
 const fortifyInput = z.object({ territoryId: territory });
 
 const passInput = z.object({ userId: id });
+
+const nextRoundInput = z.object({ round: z.number().int().min(0).max(10_000).optional() });
 
 const overTheBoardInput = z.object({
   action: z.enum(['offer', 'accept', 'decline', 'report-win', 'report-draw', 'confirm', 'dispute', 'online']),
@@ -145,7 +148,23 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   app.post('/api/campaigns/:id/round/next', async (req) => {
     const user = requireUser(req);
-    await nextRound(ctx, parse(campaignParams, req.params).id, user.id);
+    const params = parse(campaignParams, req.params);
+    await nextRound(ctx, params.id, user.id, parse(nextRoundInput, req.body ?? {}));
+    return { ok: true };
+  });
+
+  /** The host pauses rounds on a schedule: the round keeps the time it has left. Names the round, as Next round does. */
+  app.post('/api/campaigns/:id/schedule/pause', async (req) => {
+    const user = requireUser(req);
+    const params = parse(campaignParams, req.params);
+    await pauseSchedule(ctx, params.id, user.id, parse(nextRoundInput, req.body ?? {}));
+    return { ok: true };
+  });
+
+  app.post('/api/campaigns/:id/schedule/resume', async (req) => {
+    const user = requireUser(req);
+    const params = parse(campaignParams, req.params);
+    await resumeSchedule(ctx, params.id, user.id, parse(nextRoundInput, req.body ?? {}));
     return { ok: true };
   });
 

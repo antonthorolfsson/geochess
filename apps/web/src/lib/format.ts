@@ -31,6 +31,16 @@ const shortDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'shor
 /** A day in the weeks ahead, in the viewer's time zone: "Tuesday 14 October", or "14 Oct" `short`. */
 export const formatDay = (iso: string, { short = false } = {}) => (short ? shortDay : longDay).format(new Date(iso));
 
+const dayAndTime = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+/** A moment in the days ahead, in the viewer's time zone: "Fri 10 Oct, 18:00". */
+export const formatWhen = (at: string | number) => dayAndTime.format(new Date(at));
+
 export function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;

@@ -10,13 +10,16 @@ import {
   MAX_PLAYERS,
   MAX_RAISES,
   MIN_PLAYERS,
+  ROUND_HOURS,
   TURN_WINDOW_TEXT,
+  roundRules,
   type CampaignRules,
   type DraftMode,
   type DrawRule,
   type HandicapLevel,
   type Pace,
   type RaiseStyle,
+  type RoundProgression,
   type WarRules,
   withStakeFloor,
 } from '@empire/rules';
@@ -33,6 +36,19 @@ export const PACE_OPTIONS: { value: Pace; title: string; body: string }[] = [
     value: 'live',
     title: 'Live',
     body: 'Blitz for game nights with everyone online. Each player plays one game at a time.',
+  },
+];
+
+const ROUND_OPTIONS: { value: RoundProgression; title: string; body: string }[] = [
+  {
+    value: 'manual',
+    title: 'The host starts each round',
+    body: 'The host presses Next round when the group is ready. Nothing moves on by itself.',
+  },
+  {
+    value: 'scheduled',
+    title: 'On a schedule',
+    body: 'Each round lasts a set time, then the next starts by itself, ready or not: turns not yet taken are lost, and wars carry on. The last round ends the campaign on points when its time is up. The host can pause the schedule, or start a round sooner.',
   },
 ];
 
@@ -192,9 +208,13 @@ export function TableFields({ rules, players, disabled, onSave }: FieldsProps & 
   );
 }
 
-/** The pace and the clocks: time control, turns, draws, clock modifiers and the rating handicap. */
+/**
+ * The pace and the clocks: time control, how rounds move on, turns, draws, clock modifiers and the
+ * rating handicap.
+ */
 export function ClockFields({ rules, disabled, onSave }: FieldsProps) {
   const war = rules.war;
+  const rounds = roundRules(rules);
   const save = (patch: Partial<WarRules>) => onSave({ war: patch });
   return (
     <>
@@ -234,6 +254,37 @@ export function ClockFields({ rules, disabled, onSave }: FieldsProps) {
           </select>
         )}
       </SelectRow>
+      {war.pace === 'correspondence' ? (
+        <>
+          <Choices
+            legend="Rounds"
+            options={ROUND_OPTIONS}
+            value={rounds.progression}
+            disabled={disabled}
+            onChange={(progression) => onSave({ rounds: { progression } })}
+          />
+          {rounds.progression === 'scheduled' && (
+            <SelectRow label="Round length">
+              <select
+                className="input w-32"
+                value={rounds.hours}
+                disabled={disabled}
+                onChange={(e) => onSave({ rounds: { hours: Number(e.target.value) } })}
+              >
+                {ROUND_HOURS.map((h) => (
+                  <option key={h} value={h}>
+                    {hoursLabel(h)}
+                  </option>
+                ))}
+              </select>
+            </SelectRow>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          The host starts each round of a live campaign. Rounds on a schedule are for correspondence campaigns.
+        </p>
+      )}
       <Toggle
         checked={war.turns}
         disabled={disabled}

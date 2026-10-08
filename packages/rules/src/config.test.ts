@@ -57,6 +57,7 @@ describe('campaign rules', () => {
         lastRound: 25,
         tiebreak: 'realWorld',
       },
+      rounds: { progression: 'manual', hours: 72 },
     });
     expect(
       parseRules({
@@ -65,6 +66,19 @@ describe('campaign rules', () => {
         victory: { mode: 'objectives', version: 6, lastRound: 25, tiebreak: 'realWorld', hold: 'turns' },
       }),
     ).toEqual(DEFAULT_RULES);
+  });
+
+  it('leaves rounds to the host in campaigns stored before schedules, and in new ones unless chosen', () => {
+    const stored = { war: REVISED_WAR_RULES, victory: { mode: 'objectives', version: 6, publicMissions: [] } };
+    expect(parseRules(stored).rounds).toEqual({ progression: 'manual', hours: 72 });
+    expect(DEFAULT_RULES.rounds.progression).toBe('manual');
+    expect(parseRules({ rounds: { progression: 'scheduled', hours: 48 } }).rounds).toEqual({
+      progression: 'scheduled',
+      hours: 48,
+    });
+    // Only the lengths on offer.
+    expect(() => parseRules({ rounds: { progression: 'scheduled', hours: 30 } })).toThrow();
+    expect(() => parseRules({ rounds: { progression: 'weekly' } })).toThrow();
   });
 
   it('holds claims by time in campaigns stored before claims were held through turns', () => {

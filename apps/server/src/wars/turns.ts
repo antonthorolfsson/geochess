@@ -176,19 +176,24 @@ export async function passTurn(
   });
 }
 
-/** Turns whose time ran out pass on their own. */
-export async function expireTurns(ctx: AppContext): Promise<void> {
+/** Turns whose time ran out by `upTo` pass on their own. */
+export async function expireTurns(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
   const due = await ctx.db
     .select({ id: campaigns.id })
     .from(campaigns)
-    .where(and(eq(campaigns.status, 'active'), lte(campaigns.turnDeadline, ctx.now())));
+    .where(and(eq(campaigns.status, 'active'), lte(campaigns.turnDeadline, upTo)));
   for (const { id } of due) {
     try {
-      await mutate(ctx, id, async (scope) => {
-        const { turnUserId, turnDeadline } = scope.campaign;
-        if (scope.campaign.status !== 'active' || !turnUserId || !turnDeadline || turnDeadline > ctx.now()) return;
-        await recordPass(ctx, scope, turnUserId, null, true);
-      });
+      await mutate(
+        ctx,
+        id,
+        async (scope) => {
+          const { turnUserId, turnDeadline } = scope.campaign;
+          if (scope.campaign.status !== 'active' || !turnUserId || !turnDeadline || turnDeadline > upTo) return;
+          await recordPass(ctx, scope, turnUserId, null, true);
+        },
+        { upTo },
+      );
     } catch (err) {
       ctx.log.error({ err, campaignId: id }, 'could not pass a turn whose time ran out');
     }

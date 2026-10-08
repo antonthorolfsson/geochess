@@ -102,6 +102,19 @@ export function checkTurn(state: TurnState | null, userId: UserId): TurnRejectio
 }
 
 /**
+ * Players still to declare this round, in the order their turns come: whoever's turn it is, then
+ * the players after them who haven't passed and have something to do (`canAct`, as things stand).
+ * Moving on to the next round ends their declaring for this one. Empty once declaring is over.
+ */
+export function turnsToCome(state: TurnState, canAct: (userId: UserId) => boolean): UserId[] {
+  const { order, passed, current } = state;
+  if (current === null) return [];
+  const start = order.indexOf(current);
+  const rest = start < 0 ? order : [...order.slice(start + 1), ...order.slice(0, start)];
+  return [current, ...rest.filter((id) => id !== current && !passed.includes(id) && canAct(id))];
+}
+
+/**
  * Turns to come before `userId`'s: whoever's turn it is, then the players after them who haven't
  * passed and have something to do (`canAct`, as things stand). A guide, since that can change
  * before their turns come. Null once declaring is over, or when `userId` has passed.

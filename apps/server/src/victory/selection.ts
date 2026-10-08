@@ -148,16 +148,16 @@ export async function proceedWithoutSecrets(ctx: AppContext, campaignId: string,
  * Time's up for choosing: players who haven't chosen get their best-fit option, and are told
  * privately which. If some players had nothing to choose from, the campaign waits for the host.
  */
-export async function expireSelections(ctx: AppContext): Promise<void> {
+export async function expireSelections(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
   const due = await ctx.db
     .select({ id: campaigns.id })
     .from(campaigns)
-    .where(and(eq(campaigns.status, 'selection'), lte(campaigns.selectionDeadline, ctx.now())));
+    .where(and(eq(campaigns.status, 'selection'), lte(campaigns.selectionDeadline, upTo)));
   for (const { id } of due) {
     try {
       await mutate(ctx, id, async (scope) => {
         const deadline = scope.campaign.selectionDeadline;
-        if (scope.campaign.status !== 'selection' || !deadline || deadline > ctx.now()) {
+        if (scope.campaign.status !== 'selection' || !deadline || deadline > upTo) {
           scope.notifyOnly([]);
           return;
         }

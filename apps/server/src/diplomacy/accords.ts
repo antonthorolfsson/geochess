@@ -478,21 +478,26 @@ async function keepFinishedAccords(ctx: AppContext, scope: MutationScope): Promi
 }
 
 /** Proposals nobody answered in time lapse. */
-export async function lapseProposals(ctx: AppContext): Promise<void> {
+export async function lapseProposals(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
   const due = await ctx.db
     .select({ id: accords.id, campaignId: accords.campaignId })
     .from(accords)
-    .where(and(eq(accords.status, 'proposed'), lte(accords.respondBy, ctx.now())));
+    .where(and(eq(accords.status, 'proposed'), lte(accords.respondBy, upTo)));
   for (const { id, campaignId } of due) {
     try {
-      await mutate(ctx, campaignId, async (scope) => {
-        const accord = await findAccord(scope, id);
-        if (accord.status !== 'proposed' || !accord.respondBy || accord.respondBy > ctx.now()) {
-          scope.notifyOnly([]);
-          return;
-        }
-        await closeProposal(ctx, scope, accord, 'lapsed');
-      });
+      await mutate(
+        ctx,
+        campaignId,
+        async (scope) => {
+          const accord = await findAccord(scope, id);
+          if (accord.status !== 'proposed' || !accord.respondBy || accord.respondBy > upTo) {
+            scope.notifyOnly([]);
+            return;
+          }
+          await closeProposal(ctx, scope, accord, 'lapsed');
+        },
+        { upTo },
+      );
     } catch (err) {
       ctx.log.error({ err, accordId: id }, 'could not lapse an accord proposal');
     }

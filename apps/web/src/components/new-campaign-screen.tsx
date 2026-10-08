@@ -22,7 +22,7 @@ const SETUPS: { value: Setup; title: string; body: string }[] = [
   {
     value: 'advanced',
     title: 'Advanced',
-    body: 'Choose every setting yourself on the next page: the players and the draft, the clocks, how wars are answered and how the campaign is won.',
+    body: 'Choose every setting yourself on the next page: the players and the draft, the clocks, rounds on a schedule, how wars are answered and how the campaign is won.',
   },
 ];
 

@@ -150,9 +150,34 @@ export const REVISED_WAR_RULES = {
 } as const satisfies Partial<z.input<typeof warRulesSchema>>;
 
 /**
+ * How a campaign moves from one round to the next:
+ * - `manual`: the host starts each round (the original rule, and the standard one).
+ * - `scheduled`: correspondence campaigns only: each round lasts `rules.rounds.hours`, then the
+ *   next starts by itself, as if the host had started it; after the last round the campaign ends.
+ *   The host can pause the schedule, or start the next round sooner.
+ */
+export const ROUND_PROGRESSIONS = ['manual', 'scheduled'] as const;
+export type RoundProgression = (typeof ROUND_PROGRESSIONS)[number];
+
+/** How long a scheduled round can last, in hours: a day at least, as long as a turn to declare. */
+export const ROUND_HOURS = [24, 48, 72, 120, 168] as const;
+/** The round length a host is first offered with a schedule. */
+export const DEFAULT_ROUND_HOURS = 72;
+
+/**
+ * Round settings. Rules stored before 2026-10-08 have none and read as `manual`, and so do new
+ * campaigns until the host chooses a schedule: no round moves on by itself unless the host opted in.
+ */
+export const roundRulesSchema = z.object({
+  progression: z.enum(ROUND_PROGRESSIONS).default('manual'),
+  /** A scheduled round's length, in hours. */
+  hours: z.literal(ROUND_HOURS).default(DEFAULT_ROUND_HOURS),
+});
+
+/**
  * Longer holding times the host can pick besides the pace's default, by pace, in minutes. The
- * default is also the least: rounds are the host's to start, so the time is what stops a rushed
- * round from cutting the response window short.
+ * default is also the least: rounds can move on as soon as the host (or a schedule) likes, so the
+ * time is what stops a rushed round from cutting the response window short.
  */
 export const HOLD_MINUTE_OPTIONS: Record<Pace, readonly number[]> = {
   live: [15, 30, 60],
@@ -226,6 +251,7 @@ export const campaignRulesSchema = z.object({
   draft: draftRulesSchema.prefault({}),
   war: warRulesSchema.prefault({}),
   victory: victoryRulesSchema.prefault({}),
+  rounds: roundRulesSchema.prefault({}),
 });
 
 export type CampaignRules = z.infer<typeof campaignRulesSchema>;
@@ -233,6 +259,7 @@ export type CampaignRulesInput = z.input<typeof campaignRulesSchema>;
 export type DraftMode = CampaignRules['draft']['mode'];
 export type WarRules = CampaignRules['war'];
 export type VictoryRules = CampaignRules['victory'];
+export type RoundRules = CampaignRules['rounds'];
 
 /**
  * A new stake floor, with the raised stake (what a fortified country needs) moved by as much, so
@@ -257,7 +284,7 @@ export function parseRules(input: unknown): CampaignRules {
 /**
  * The settings a new campaign starts with: the revised war answers, Objectives, its public
  * missions generated on creation, a last round settled on points, then real-world size, and claims
- * held through a round's turns.
+ * held through a round's turns. Rounds are the host's to start: a schedule is the host's choice.
  */
 export const DEFAULT_RULES: CampaignRules = parseRules({
   war: REVISED_WAR_RULES,

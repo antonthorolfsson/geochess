@@ -17,6 +17,7 @@ import {
   perMoveText,
   raiseText,
   raisedRowLabel,
+  roundProgressionText,
   recordMissions,
   seasonEndText,
   selectionTimeText,
@@ -65,6 +66,7 @@ describe('rules in words', () => {
       'Claims are held': 'Until everyone has had their turns in a later round',
       'Time to choose a secret': '24 hours',
       Pace: 'Correspondence',
+      Rounds: 'Started by the host',
       Declaring: 'In turns, 24 hours each',
       'Time to answer': '24 hours',
       'War tokens': '1 a round, up to 3',
@@ -100,6 +102,8 @@ describe('rules in words', () => {
     expect(liveSettings).toMatchObject({
       Pace: 'Live',
       'Time control': '5+3',
+      // Rules stored before schedules leave rounds to the host.
+      Rounds: 'Started by the host',
       // Rules stored before turns keep declaring whenever players like.
       Declaring: 'Whenever you like',
       'Time to answer': '5 minutes',
@@ -146,6 +150,7 @@ describe('rules in words', () => {
     expect(keySettings(DEFAULT_RULES)).toEqual([
       { label: 'Pace', value: 'Correspondence' },
       { label: 'Time control', value: '1 day per move' },
+      { label: 'Rounds', value: 'Started by the host' },
       { label: 'Players', value: 'Up to 8' },
       { label: 'Draft', value: 'Contiguous' },
       { label: 'Victory', value: 'First to 10 points, with titles' },
@@ -155,6 +160,7 @@ describe('rules in words', () => {
     expect(keySettings(parseRules({})).map((s) => s.label)).toEqual([
       'Pace',
       'Time control',
+      'Rounds',
       'Players',
       'Draft',
       'Victory',
@@ -179,6 +185,18 @@ describe('rules in words', () => {
     const older = { ...DEFAULT_RULES, victory: { ...DEFAULT_RULES.victory, version: 4 } };
     expect(standardRules(older).victory.version).toBe(4);
     expect(changedSettings(older)).toEqual([]);
+    // A schedule is the host's choice, never the standard.
+    const scheduled = { ...DEFAULT_RULES, rounds: { progression: 'scheduled' as const, hours: 48 as const } };
+    expect(changedSettings(scheduled)).toEqual(['Rounds']);
+    expect(keySettings(scheduled).find((s) => s.label === 'Rounds')?.value).toBe('On a schedule, 2 days each');
+    // Rules from a server older than schedules have no round settings: the host starts each round.
+    const { rounds: _rounds, ...withoutRounds } = DEFAULT_RULES;
+    const fromOlder = withoutRounds as unknown as typeof DEFAULT_RULES;
+    expect(roundProgressionText(fromOlder)).toBe('Started by the host');
+    expect(changedSettings(fromOlder)).toEqual([]);
+    expect(deadlineRows(fromOlder).map((r) => r.who)).not.toContain('A round runs its time');
+    // Live rounds are the host's, whatever was stored.
+    expect(roundProgressionText({ ...scheduled, war: { ...scheduled.war, pace: 'live' } })).toBe('Started by the host');
     // Stored rules from before the revised war answers differ in each of them.
     expect(changedSettings(parseRules({ victory: DEFAULT_RULES.victory }))).toEqual(
       expect.arrayContaining(['Declaring', 'Least stake', 'Raising the stakes', 'Redirects', 'Fortifying']),
@@ -228,6 +246,15 @@ describe('times by pace', () => {
     expect(stored).not.toContain('A player takes their turn to declare');
     expect(stored).not.toContain('The attacker answers a raise after raising');
     expect(stored).not.toContain('A player chooses a secret mission');
+    // Rounds on a schedule run out like any other deadline.
+    expect(deadlineRows(DEFAULT_RULES).map((r) => r.who)).not.toContain('A round runs its time');
+    const scheduled = { ...DEFAULT_RULES, rounds: { progression: 'scheduled' as const, hours: 120 as const } };
+    expect(deadlineRows(scheduled)[0]).toEqual({
+      who: 'A round runs its time',
+      times: ['5 days'],
+      silence:
+        'The next round starts by itself: turns not yet taken are lost, and wars carry on. After the last round, the campaign ends on points.',
+    });
   });
 });
 

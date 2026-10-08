@@ -1,11 +1,23 @@
 'use client';
 
-import { TURN_WINDOW_TEXT, lastRoundOf, missionRules, type WarView } from '@empire/rules';
+import { TURN_WINDOW_TEXT, lastRoundOf, missionRules, type RoundReadiness, type WarView } from '@empire/rules';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys } from '@/lib/queries';
-import { perMoveText, seasonEndText, sentenceCase } from '@/lib/rules-text';
+import {
+  finalRoundText,
+  nextRoundQuestion,
+  pauseQuestion,
+  readinessOf,
+  readinessText,
+  resumeQuestion,
+  roundClock,
+  roundEndText,
+  type ReadinessItem,
+} from '@/lib/readiness';
+import { perMoveText } from '@/lib/rules-text';
 import { useMyGames } from '@/lib/use-my-games';
 import { useNow } from '@/lib/use-now';
 import { countryName, playerName, timeLeft, warStatusText } from '@/lib/wars';
@@ -65,10 +77,20 @@ export function WarsPanel({
 function RoundStatus({ model }: { model: CampaignModel }) {
   const { campaign, isHost } = model;
   const queryClient = useQueryClient();
-  const next = useMutation({
-    mutationFn: () => api.nextRound(campaign.id),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) }),
+  const refresh = () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) });
+  // Naming the round to end, so a press that crosses a scheduled start doesn't end the new one too.
+  const next = useMutation({ mutationFn: () => api.nextRound(campaign.id, campaign.round), onSettled: refresh });
+  const pause = useMutation({ mutationFn: () => api.pauseSchedule(campaign.id, campaign.round), onSettled: refresh });
+  const resume = useMutation({
+    mutationFn: () => api.resumeSchedule(campaign.id, campaign.round),
+    onSettled: refresh,
   });
+  const active = campaign.status === 'active';
+  const now = useNow(1000, active);
+  // Who can still take a turn is worked out over the whole map, so only as the campaign changes, or
+  // each minute for a claim's holding time; the countdowns tick every second.
+  const minute = Math.floor(now / 60_000);
+  const readiness = useMemo(() => readinessOf(model, minute * 60_000), [model, minute]);
   const { rules } = campaign;
   const pace =
     rules.war.pace === 'live'
@@ -77,14 +99,9 @@ function RoundStatus({ model }: { model: CampaignModel }) {
   const cap = Math.max(rules.war.tokenCap, model.tokens);
   const last = lastRoundOf(rules);
   const final = last !== null && campaign.round >= last;
-  // How the season ends if nobody reaches the points to win first: the campaign's own tiebreak.
-  const toWin = missionRules(rules.victory.version).points.toWin;
-  const seasonEnd = seasonEndText(rules);
-  const underway = model.activeWars.length;
-  // Players still to take their turns this round, which a new round cuts short.
-  const stillDeclaring = model.turns?.current
-    ? model.turns.order.filter((m) => !model.turns!.passed.has(m.userId))
-    : [];
+  const clock = roundClock(model);
+  const busy = next.isPending || pause.isPending || resume.isPending;
+  const error = next.error ?? pause.error ?? resume.error;
   return (
     <section className="space-y-3">
       <div>
@@ -93,9 +110,10 @@ function RoundStatus({ model }: { model: CampaignModel }) {
           {last !== null && ` of ${last}`}
         </div>
         <p className="text-sm text-muted">{pace}</p>
-        {final && campaign.status === 'active' && (
+        {active && <p className="text-sm">{roundEndText(model, now)}</p>}
+        {final && active && (
           <p className="text-sm text-amber">
-            The last round: when it ends, if nobody has reached {toWin} points, {seasonEnd}.
+            {finalRoundText(model, missionRules(rules.victory.version).points.toWin)}
           </p>
         )}
       </div>
@@ -112,38 +130,97 @@ function RoundStatus({ model }: { model: CampaignModel }) {
         </span>
         <span className="text-sm text-muted tabular-nums">{model.tokens}</span>
       </div>
-      {isHost && campaign.status === 'active' && (
+      {active && <Readiness model={model} readiness={readiness} now={now} />}
+      {isHost && active && (
         <div className="space-y-1">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled={next.isPending}
-            onClick={() => {
-              const question = final
-                ? `Round ${campaign.round} was the last. End the campaign? ${sentenceCase(seasonEnd)}.${
-                    underway > 0
-                      ? ` ${underway} ${underway === 1 ? 'war still underway is' : 'wars still underway are'} called off.`
-                      : ''
-                  }`
-                : `Start round ${campaign.round + 1}? Everyone gains ${rules.war.tokensPerRound} war ${
-                    rules.war.tokensPerRound === 1 ? 'token' : 'tokens'
-                  }, up to ${rules.war.tokenCap}.${
-                    stillDeclaring.length > 0
-                      ? ` ${stillDeclaring.map((m) => m.name).join(', ')} ${
-                          stillDeclaring.length === 1 ? "hasn't" : "haven't"
-                        } finished declaring this round.`
-                      : ''
-                  }`;
-              if (confirm(question)) next.mutate();
-            }}
-          >
-            {final ? 'End the campaign' : 'Next round'}
-          </button>
-          {next.error && <Notice tone="error">{errorMessage(next.error)}</Notice>}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={busy}
+              onClick={() => {
+                if (confirm(nextRoundQuestion(model, readiness))) next.mutate();
+              }}
+            >
+              {final ? 'End the campaign' : 'Next round'}
+            </button>
+            {clock.kind === 'scheduled' && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(pauseQuestion(model, now))) pause.mutate();
+                }}
+              >
+                Pause schedule
+              </button>
+            )}
+            {clock.kind === 'paused' && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(resumeQuestion(model, now))) resume.mutate();
+                }}
+              >
+                Resume schedule
+              </button>
+            )}
+          </div>
+          {error && <Notice tone="error">{errorMessage(error)}</Notice>}
         </div>
       )}
       <NotificationsToggle />
     </section>
+  );
+}
+
+/**
+ * What the round is waiting for (turns still to be taken; in the last round, wars and claims its
+ * end cuts short), the wars that carry on into the next, claims waiting to score, and what the
+ * round's end does to turns not taken.
+ */
+function Readiness({ model, readiness, now }: { model: CampaignModel; readiness: RoundReadiness; now: number }) {
+  const text = readinessText(model, readiness, now);
+  return (
+    <section aria-label={text.heading} className="space-y-1.5 rounded-[3px] border border-line px-3 py-2">
+      <h2 className="label">{text.heading}</h2>
+      <p className={`text-[0.95rem] ${readiness.ready ? 'text-muted' : 'text-amber'}`}>{text.summary}</p>
+      {text.checklist.length > 0 && <ReadinessList items={text.checklist} />}
+      {text.boundary && <p className="text-sm text-muted">{text.boundary}</p>}
+      {text.carries && <p className="text-sm text-muted">{text.carries}</p>}
+      {text.claims.length > 0 && (
+        <>
+          <h3 className="label pt-1">Claims waiting to score</h3>
+          <ReadinessList items={text.claims} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function ReadinessList({ items }: { items: ReadinessItem[] }) {
+  return (
+    <ul className="space-y-0.5 text-sm">
+      {items.map((item, i) => (
+        <li key={i} className={`flex gap-1.5 ${item.state === 'done' ? 'text-muted' : ''}`}>
+          <span
+            aria-hidden="true"
+            className={`w-3 shrink-0 text-center ${
+              item.state === 'done' ? 'text-amber' : item.state === 'waiting' ? 'text-[#ef7b72]' : 'text-faint'
+            }`}
+          >
+            {item.state === 'done' ? '✓' : item.state === 'waiting' ? '○' : '·'}
+          </span>
+          <span className="min-w-0">
+            {item.text}
+            {item.state !== 'note' && <span className="sr-only">{item.state === 'done' ? ' Done.' : ' Not yet.'}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

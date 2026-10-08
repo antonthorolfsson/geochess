@@ -1,5 +1,5 @@
 import type { FactKey } from '@empire/rules';
-import { formatCount, formatTwh, formatWhole } from './format';
+import { formatCount, formatMillionBarrels, formatMillionM3, formatTwh, formatWhole } from './format';
 
 /** The arsenals and energy figures as the statistics pages show them. */
 export const FACT_ROWS: { key: FactKey; label: string; format(n: number | null): string }[] = [
@@ -7,13 +7,13 @@ export const FACT_ROWS: { key: FactKey; label: string; format(n: number | null):
   { key: 'tanks', label: 'Tanks', format: formatWhole },
   { key: 'combatAircraft', label: 'Combat aircraft', format: formatWhole },
   { key: 'navalShips', label: 'Naval ships', format: formatWhole },
-  { key: 'oilTwh', label: 'Oil production', format: formatTwh },
-  { key: 'gasTwh', label: 'Gas production', format: formatTwh },
+  { key: 'oilMillionBarrels', label: 'Oil production', format: formatMillionBarrels },
+  { key: 'gasMillionM3', label: 'Gas production', format: formatMillionM3 },
   { key: 'electricityTwh', label: 'Electricity', format: formatTwh },
 ];
 
 /** What the figures are, for a note under their heading. */
-export const FACTS_NOTE = 'Active troops and equipment, and energy produced in a year';
+export const FACTS_NOTE = 'Active troops and equipment, and oil, gas and electricity produced in a year';
 
 /** Credit for the figures, for the pages' small print. */
 export const FACTS_CREDIT =

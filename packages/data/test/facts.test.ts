@@ -35,7 +35,7 @@ describe('arsenals and energy table', () => {
     for (const key of ['activePersonnel', 'tanks', 'combatAircraft', 'navalShips'] as const) {
       expect(count(key), key).toBeGreaterThanOrEqual(140);
     }
-    for (const key of ['oilTwh', 'gasTwh', 'electricityTwh'] as const)
+    for (const key of ['oilMillionBarrels', 'gasMillionM3', 'electricityTwh'] as const)
       expect(count(key), key).toBeGreaterThanOrEqual(180);
   });
 
@@ -46,8 +46,13 @@ describe('arsenals and energy table', () => {
     expect(fact('NOR', 'combatAircraft')).toBeGreaterThan(0);
     expect(fact('RUS', 'tanks')).toBeGreaterThan(fact('GBR', 'tanks'));
     expect(fact('CHN', 'activePersonnel')).toBeGreaterThan(1_000_000);
-    expect(fact('SAU', 'oilTwh')).toBeGreaterThan(fact('NOR', 'oilTwh'));
-    expect(fact('QAT', 'gasTwh')).toBeGreaterThan(fact('DEU', 'gasTwh'));
+    expect(fact('SAU', 'oilMillionBarrels')).toBeGreaterThan(fact('NOR', 'oilMillionBarrels'));
+    expect(fact('QAT', 'gasMillionM3')).toBeGreaterThan(fact('DEU', 'gasMillionM3'));
+    // Volumes, not energy: Saudi Arabia pumps some 11 million barrels a day, Qatar some 180 billion m³ a year.
+    expect(fact('SAU', 'oilMillionBarrels') / 366).toBeGreaterThan(10);
+    expect(fact('SAU', 'oilMillionBarrels') / 366).toBeLessThan(12);
+    expect(fact('QAT', 'gasMillionM3')).toBeGreaterThan(170_000);
+    expect(fact('QAT', 'gasMillionM3')).toBeLessThan(190_000);
     expect(fact('CHN', 'electricityTwh')).toBeGreaterThan(fact('USA', 'electricityTwh'));
     expect(factOf(table, 'GRL', 'tanks')).toBeNull();
     expect(factOf(null, 'USA', 'tanks')).toBeNull();

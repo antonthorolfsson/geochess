@@ -11,14 +11,15 @@ export const FACT_KEYS = [
   'tanks',
   'combatAircraft',
   'navalShips',
-  'oilTwh',
-  'gasTwh',
+  'oilMillionBarrels',
+  'gasMillionM3',
   'electricityTwh',
 ] as const;
 
 export type FactKey = (typeof FACT_KEYS)[number];
 
 export interface Fact {
+  /** In the key's unit: a count, millions of barrels or cubic metres a year, or terawatt-hours a year. */
   value: number;
   /** Data year of the figure, the most recent of the parts summed into it. */
   year: number | null;

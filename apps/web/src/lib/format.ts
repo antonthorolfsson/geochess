@@ -16,9 +16,15 @@ export const formatAreaCompact = (km2: number | null) => (km2 === null ? '—' :
 export const formatInt = (n: number) => wholeNumber.format(n);
 /** A count in full, for things counted in the hundreds or thousands: "4,666". */
 export const formatWhole = (n: number | null) => (n === null ? '—' : wholeNumber.format(n));
-/** Energy in terawatt-hours: whole from 100 up ("9,977 TWh"), three digits below ("34.4 TWh"). */
-export const formatTwh = (n: number | null) =>
-  n === null ? '—' : `${n >= 100 ? wholeNumber.format(n) : threeDigits.format(n)} TWh`;
+/** An amount in a unit: whole from 100 up ("9,977"), three digits below ("34.4"). */
+const inUnit = (n: number | null, unit: string) =>
+  n === null ? '—' : `${n >= 100 ? wholeNumber.format(n) : threeDigits.format(n)} ${unit}`;
+/** Energy in terawatt-hours: "9,977 TWh", "34.4 TWh". */
+export const formatTwh = (n: number | null) => inUnit(n, 'TWh');
+/** Oil in millions of barrels: "6,685 million barrels". A long one wraps after the number, not in the unit. */
+export const formatMillionBarrels = (n: number | null) => inUnit(n, 'million\u00a0barrels');
+/** Gas in millions of cubic metres: "1,033,004 million m³", wrapping the same way. */
+export const formatMillionM3 = (n: number | null) => inUnit(n, 'million\u00a0m³');
 
 const longDay = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });

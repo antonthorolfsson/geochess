@@ -1115,6 +1115,14 @@ reads, so no game can change.
   production (Energy Institute to 2024 for the big producers, The Shift Project to 2016 for the
   rest) and electricity generation (Ember, mostly 2024–25), all in terawatt-hours a year. "Energy
   production" is electricity: Our World in Data has no total of primary energy produced.
+- **Oil and gas by volume** (2026-10-07, at the user's request: "a more common way is million cubic
+  meters per year for gas and millions of barrels per year for oil"). The build converts Our World
+  in Data's terawatt-hours (`oilMillionBarrels`, `gasMillionM3` in place of `oilTwh` and `gasTwh`).
+  Gas is exact: the Energy Institute counts a billion m³ as 10 TWh. Oil is the world's average,
+  0.67 million barrels a TWh (97 million barrels a day in 2024 over 52,831 TWh), since its
+  terawatt-hours are tonnes and barrels to the tonne vary: within about 10% of the big producers'
+  own counts, the United States 9% low. Volumes by country (the Energy Institute's own tables, the
+  EIA) aren't reachable from the container; only GitHub is.
 - **Web.** `/facts/facts.json` (copied by `copy-datasets.mjs`, read once a visit with `useFacts`).
   A country's panel lists the seven under "Arsenal and energy" (source and year on hover); an
   empire page's real-world totals add them with the same share, world rank and empire rank; the

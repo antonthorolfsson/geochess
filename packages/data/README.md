@@ -58,8 +58,10 @@ harmless.
 
 The arsenals and energy table is separate too: `facts/facts.json` (`FactTable` from
 `@empire/rules`) holds each territory's standing army, tanks, combat aircraft (fighters and attack
-aircraft) and naval ships from Global Firepower 2025, and its oil, gas and electricity production
-in TWh a year from Our World in Data, each with its year. Both sources are pinned to a commit in
+aircraft) and naval ships from Global Firepower 2025, and its oil (million barrels), gas (million
+m³) and electricity (TWh) produced in a year from Our World in Data, each with its year. Our World
+in Data gives oil and gas in TWh too; the build converts them (see `scripts/facts.ts`: exact for
+gas, about 10% either way for oil). Both sources are pinned to a commit in
 `scripts/facts.ts`; `config/facts.yaml` maps the names that differ from the canon, and the build
 fails on any it can't place. A territory sums its statistics codes as the dataset does; review
 `facts/REPORT.md` after a rebuild. Only the statistics pages show these figures and no rule reads

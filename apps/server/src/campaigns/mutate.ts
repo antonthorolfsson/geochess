@@ -7,6 +7,7 @@ import { campaigns, events, members, users } from '../db/schema';
 import { conflict, forbidden, notFound } from '../lib/errors';
 import type { Notice } from '../notifications/notifier';
 import { settleVictory } from '../victory/settle';
+import { requireSeasonOn } from './round-end';
 import { toEventView } from './views';
 
 export type CampaignRow = typeof campaigns.$inferSelect;
@@ -60,12 +61,16 @@ interface Queued {
  * `settleVictory`), so every change that could complete, break or score a mission is checked in
  * one place. Afterwards every member (before or after the change) hears about it, unless
  * `notifyOnly` limits that to the players concerned by a private change that logged no events.
+ *
+ * Once a scheduled last round's time is up, nothing changes until the scheduler has ended the
+ * campaign as of that time (`requireSeasonOn`), but for deadlines that fell due by then: a change
+ * the scheduler makes for what fell due by `upTo` names that time.
  */
 export async function mutate<T>(
   ctx: AppContext,
   campaignId: string,
   fn: (scope: MutationScope) => Promise<T>,
-  { notifyOnly }: { notifyOnly?: string | readonly string[] } = {},
+  { notifyOnly, upTo }: { notifyOnly?: string | readonly string[]; upTo?: Date } = {},
 ): Promise<T> {
   return ctx.locks.run(campaignId, async () => {
     const recipients = new Set<string>();
@@ -78,6 +83,7 @@ export async function mutate<T>(
       const [row] = await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).for('update');
       if (!row) throw notFound('Campaign not found.');
       const campaign = { ...row, rules: parseRules(row.rules) };
+      requireSeasonOn(campaign, ctx.now(), upTo);
       const before = await tx.select().from(members).where(eq(members.campaignId, campaignId));
       const log = new EventLog(tx, campaignId);
       const scope: MutationScope = {

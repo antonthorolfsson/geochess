@@ -247,21 +247,26 @@ export async function withdrawPeace(
 }
 
 /** Offers nobody answered in time lapse. */
-export async function lapsePeaceOffers(ctx: AppContext): Promise<void> {
+export async function lapsePeaceOffers(ctx: AppContext, upTo: Date = ctx.now()): Promise<void> {
   const due = await ctx.db
     .select({ id: peaceOffers.id, warId: peaceOffers.warId, campaignId: peaceOffers.campaignId })
     .from(peaceOffers)
-    .where(and(eq(peaceOffers.status, 'proposed'), lte(peaceOffers.respondBy, ctx.now())));
+    .where(and(eq(peaceOffers.status, 'proposed'), lte(peaceOffers.respondBy, upTo)));
   for (const { id, warId, campaignId } of due) {
     try {
-      await mutate(ctx, campaignId, async (scope) => {
-        const [offer] = await scope.tx.select().from(peaceOffers).where(eq(peaceOffers.id, id));
-        if (!offer || offer.status !== 'proposed' || !offer.respondBy || offer.respondBy > ctx.now()) {
-          scope.notifyOnly([]);
-          return;
-        }
-        await closeOffer(ctx, scope, offer, 'lapsed');
-      });
+      await mutate(
+        ctx,
+        campaignId,
+        async (scope) => {
+          const [offer] = await scope.tx.select().from(peaceOffers).where(eq(peaceOffers.id, id));
+          if (!offer || offer.status !== 'proposed' || !offer.respondBy || offer.respondBy > upTo) {
+            scope.notifyOnly([]);
+            return;
+          }
+          await closeOffer(ctx, scope, offer, 'lapsed');
+        },
+        { upTo },
+      );
     } catch (err) {
       ctx.log.error({ err, offerId: id, warId }, 'could not lapse a peace offer');
     }

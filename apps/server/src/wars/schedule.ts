@@ -8,7 +8,7 @@
  * when it's back, not one for each. The host can pause the schedule: the round then keeps the time
  * it had left until the host resumes it.
  */
-import { durationText, lastRoundOf, roundMs, roundProgression } from '@empire/rules';
+import { durationText, lastRoundOf, roundMs, roundProgression, type NextRoundInput } from '@empire/rules';
 import { eq } from 'drizzle-orm';
 import { mutate, requireActive, requireHost, type CampaignRow, type MutationScope } from '../campaigns/mutate';
 import type { AppContext } from '../context';
@@ -66,9 +66,13 @@ export async function scheduleRound(ctx: AppContext, scope: MutationScope): Prom
   }
 }
 
-function requireSchedule(scope: MutationScope): void {
+/** Refuses where there's no schedule, or the round the host meant has given way to another. */
+function requireSchedule(scope: MutationScope, input: NextRoundInput): void {
   if (roundProgression(scope.campaign.rules) !== 'scheduled') {
     throw conflict('The host starts each round in this campaign: there is no schedule.', 'no-schedule');
+  }
+  if (input.round !== undefined && input.round !== scope.campaign.round) {
+    throw conflict(`Round ${scope.campaign.round} has already begun.`, 'round-moved-on');
   }
 }
 
@@ -76,11 +80,16 @@ function requireSchedule(scope: MutationScope): void {
  * The host pauses the round schedule: the round no longer ends by itself, and keeps the time it had
  * left. Everything else carries on: turns, answers and games keep their own deadlines and clocks.
  */
-export async function pauseSchedule(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+export async function pauseSchedule(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  input: NextRoundInput = {},
+): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'pause the round schedule');
     requireActive(scope);
-    requireSchedule(scope);
+    requireSchedule(scope, input);
     const c = scope.campaign;
     if (c.roundPausedAt) throw conflict('The schedule is already paused.', 'paused');
     const now = ctx.now();
@@ -92,11 +101,16 @@ export async function pauseSchedule(ctx: AppContext, campaignId: string, userId:
 }
 
 /** The host resumes the round schedule: the round ends by itself once the time it had left has run. */
-export async function resumeSchedule(ctx: AppContext, campaignId: string, userId: string): Promise<void> {
+export async function resumeSchedule(
+  ctx: AppContext,
+  campaignId: string,
+  userId: string,
+  input: NextRoundInput = {},
+): Promise<void> {
   await mutate(ctx, campaignId, async (scope) => {
     requireHost(scope, userId, 'resume the round schedule');
     requireActive(scope);
-    requireSchedule(scope);
+    requireSchedule(scope, input);
     const c = scope.campaign;
     if (!c.roundPausedAt) throw conflict('The schedule is not paused.', 'not-paused');
     const nextRoundAt = new Date(ctx.now().getTime() + pausedRemainingMs(c));

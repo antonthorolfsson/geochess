@@ -178,6 +178,9 @@ describe('the rules guide', () => {
     );
     expect(scheduled).toContain('A round runs its time 2 days The next round starts by itself');
     expect(scheduled).not.toContain('The host presses Next round');
+    // Rules from a server older than schedules have no round settings: the host starts each round.
+    const { rounds: _rounds, ...older } = DEFAULT_RULES;
+    expect(render(campaign(older as unknown as CampaignRules)).text).toContain('The host presses Next round.');
   });
 
   it('describes a campaign stored before titles by its own mission rules', () => {

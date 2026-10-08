@@ -57,7 +57,12 @@ when starting new work.**
   times each round from when it actually started (`campaigns.next_round_at`, polled by
   `advanceScheduledRounds`; `round_paused_at` while the host pauses it), so a restart starts one
   overdue round, never a backlog; the sweep re-checks the round under the campaign lock, and the
-  host names the round they end (`NextRoundInput`). `roundReadiness` sums up what a round waits for
+  host names the round they end (`NextRoundInput`). A scheduled round ends at its time however late
+  the server gets there (`campaigns/round-end.ts`): `runDueWork` deals with deadlines due by the end
+  first (every deadline sweep takes an `upTo`), then the end, then the rest; `settleVictory` judges
+  claims as of a due end; and once a scheduled last round's time is up, `mutate()` and game changes
+  refuse everything (`requireSeasonOn`, `season-over`) but deadlines that fell due by then (their
+  `upTo`). A new deadline sweep must take an `upTo` too. `roundReadiness` sums up what a round waits for
   (turns; in the last round, wars and claims) against what carries into the next; the war room
   words it (`apps/web/src/lib/readiness.ts`).
 - The statistics pages also show arsenals and energy (standing army, tanks, combat aircraft, naval

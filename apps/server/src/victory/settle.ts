@@ -18,6 +18,7 @@ import {
 } from '@empire/rules';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { MutationScope } from '../campaigns/mutate';
+import { roundEndDue } from '../campaigns/round-end';
 import { loadBoard } from '../wars/board';
 import { settleFinishedGames } from '../wars/service';
 import type { AppContext } from '../context';
@@ -195,6 +196,9 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
   const names = await memberNames(scope);
   const idx = world.idx;
   const now = ctx.now();
+  // A scheduled round whose time is up, which the server hasn't moved on from yet, is judged as it
+  // stood at its end: a holding time that runs out after it is served in the next round, if any.
+  const asOf = roundEndDue(campaign, now) ?? now;
   const round = campaign.round;
   const byTurns = holdsByTurns(campaign.rules);
   const hold = holdMs(campaign.rules);
@@ -292,9 +296,9 @@ export async function settleVictory(ctx: AppContext, scope: MutationScope): Prom
         served = claimTimeServed(
           { startedRound: claim.startedRound, eligibleAt: eligibleAt?.getTime() ?? null },
           round,
-          now.getTime(),
+          asOf.getTime(),
         );
-        if (eligibleAt && now >= eligibleAt && !claim.timeReached) set.timeReached = true;
+        if (eligibleAt && asOf >= eligibleAt && !claim.timeReached) set.timeReached = true;
       }
       const blockers = board ? claimBlockers(world, board, userId, mission.spec, openWars) : [];
       if (blockers.join(',') !== claim.blockedBy.join(',')) set.blockedBy = blockers;

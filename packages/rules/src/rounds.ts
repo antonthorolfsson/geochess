@@ -12,22 +12,31 @@
  * `roundReadiness` sums up what a round is waiting for, telling what its end would cut short (the
  * blockers) from the wars that carry into the next round.
  */
-import type { CampaignRules, RoundProgression } from './config';
+import { DEFAULT_ROUND_HOURS, type CampaignRules, type RoundProgression, type RoundRules } from './config';
 import type { UserId } from './draft';
 import { turnsToCome, type TurnState } from './turns';
 import type { ClaimHold } from './victory/catalog';
 import { waitingOn, type WarCounter } from './war';
 
+/**
+ * The campaign's round settings. Rules parsed by `parseRules` always have them; rules a client
+ * gets from a server older than 2026-10-08 don't, and read as rounds the host starts.
+ */
+export function roundRules(rules: CampaignRules): RoundRules {
+  const rounds = rules.rounds as Partial<RoundRules> | undefined;
+  return { progression: rounds?.progression ?? 'manual', hours: rounds?.hours ?? DEFAULT_ROUND_HOURS };
+}
+
 /** How the campaign's rounds move on: on a schedule only in a correspondence campaign. */
 export const roundProgression = (rules: CampaignRules): RoundProgression =>
-  rules.rounds.progression === 'scheduled' && rules.war.pace === 'correspondence' ? 'scheduled' : 'manual';
+  roundRules(rules).progression === 'scheduled' && rules.war.pace === 'correspondence' ? 'scheduled' : 'manual';
 
 /** How long a scheduled round lasts, in milliseconds. */
-export const roundMs = (rules: CampaignRules): number => rules.rounds.hours * 3_600_000;
+export const roundMs = (rules: CampaignRules): number => roundRules(rules).hours * 3_600_000;
 
 /** Why the campaign's round settings can't be used, if they can't: a schedule is for correspondence. */
 export function roundsIssue(rules: CampaignRules): string | null {
-  if (rules.rounds.progression !== 'scheduled' || rules.war.pace === 'correspondence') return null;
+  if (roundRules(rules).progression !== 'scheduled' || rules.war.pace === 'correspondence') return null;
   return 'Rounds run on a schedule only in correspondence campaigns: in a live one, the host starts each round.';
 }
 

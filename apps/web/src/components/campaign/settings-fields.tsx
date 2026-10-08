@@ -12,6 +12,7 @@ import {
   MIN_PLAYERS,
   ROUND_HOURS,
   TURN_WINDOW_TEXT,
+  roundRules,
   type CampaignRules,
   type DraftMode,
   type DrawRule,
@@ -213,6 +214,7 @@ export function TableFields({ rules, players, disabled, onSave }: FieldsProps & 
  */
 export function ClockFields({ rules, disabled, onSave }: FieldsProps) {
   const war = rules.war;
+  const rounds = roundRules(rules);
   const save = (patch: Partial<WarRules>) => onSave({ war: patch });
   return (
     <>
@@ -257,15 +259,15 @@ export function ClockFields({ rules, disabled, onSave }: FieldsProps) {
           <Choices
             legend="Rounds"
             options={ROUND_OPTIONS}
-            value={rules.rounds.progression}
+            value={rounds.progression}
             disabled={disabled}
             onChange={(progression) => onSave({ rounds: { progression } })}
           />
-          {rules.rounds.progression === 'scheduled' && (
+          {rounds.progression === 'scheduled' && (
             <SelectRow label="Round length">
               <select
                 className="input w-32"
-                value={rules.rounds.hours}
+                value={rounds.hours}
                 disabled={disabled}
                 onChange={(e) => onSave({ rounds: { hours: Number(e.target.value) } })}
               >

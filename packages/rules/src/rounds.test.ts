@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseRules } from './config';
+import { parseRules, type CampaignRules } from './config';
 import {
   claimAtRoundEnd,
   roundMs,
   roundProgression,
   roundReadiness,
+  roundRules,
   roundsIssue,
   type ReadinessClaim,
   type ReadinessWar,
@@ -28,6 +29,19 @@ describe('round progression', () => {
     // Live rounds stay the host's, whatever was stored.
     const live = parseRules({ war: { pace: 'live' }, rounds: { progression: 'scheduled' } });
     expect(roundProgression(live)).toBe('manual');
+  });
+
+  it('reads rules from servers older than schedules as rounds the host starts', () => {
+    const { rounds: _rounds, ...older } = parseRules({});
+    const rules = older as unknown as CampaignRules;
+    expect(roundRules(rules)).toEqual({ progression: 'manual', hours: 72 });
+    expect(roundProgression(rules)).toBe('manual');
+    expect(roundsIssue(rules)).toBeNull();
+    // Half a change, shown before the server answers.
+    expect(roundRules({ ...rules, rounds: { progression: 'scheduled' } as CampaignRules['rounds'] })).toEqual({
+      progression: 'scheduled',
+      hours: 72,
+    });
   });
 
   it('refuses a schedule for a live campaign', () => {

@@ -13,6 +13,7 @@ import {
   missionRules,
   raiseFloor,
   roundProgression,
+  roundRules,
   selectionMs,
   stakeFloor,
   tiebreakText,
@@ -148,7 +149,7 @@ export function deadlineRows(rules: CampaignRules, paces: readonly Pace[] = [rul
       ? [
           row(
             'A round runs its time',
-            (r) => (roundProgression(r) === 'scheduled' ? hoursText(r.rounds.hours) : 'The host’s call'),
+            (r) => (roundProgression(r) === 'scheduled' ? hoursText(roundRules(r).hours) : 'The host’s call'),
             'The next round starts by itself: turns not yet taken are lost, and wars carry on. After the last round, the campaign ends on points.',
           ),
         ]
@@ -328,7 +329,7 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
     { label: 'Draft', value: rules.draft.mode === 'contiguous' ? 'Contiguous' : 'Free' },
     { label: 'Pace', value: war.pace === 'live' ? 'Live' : 'Correspondence' },
     { label: 'Time control', value: timeControlText(rules) },
-    { label: 'Rounds', value: roundsText(rules) },
+    { label: 'Rounds', value: roundProgressionText(rules) },
     {
       label: 'Declaring',
       value: war.turns ? `In turns, ${TURN_WINDOW_TEXT[war.pace]} each` : 'Whenever you like',
@@ -354,9 +355,9 @@ export function settingsList(rules: CampaignRules): { label: string; value: stri
 }
 
 /** How the campaign's rounds move on, in a few words: "Started by the host", "On a schedule, 3 days each". */
-export const roundsText = (rules: CampaignRules) =>
+export const roundProgressionText = (rules: CampaignRules) =>
   roundProgression(rules) === 'scheduled'
-    ? `On a schedule, ${hoursText(rules.rounds.hours)} each`
+    ? `On a schedule, ${hoursText(roundRules(rules).hours)} each`
     : 'Started by the host';
 
 /** The settings a campaign is summed up by, in this order, before the rest (`settingsList`). */

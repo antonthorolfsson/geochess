@@ -355,6 +355,28 @@ describe('a scheduled round', () => {
   });
 });
 
+describe('deadlines around a scheduled end', () => {
+  it('fall in the round that was on when they fell due, however late the server gets to them', async () => {
+    const s = await atWar({ war: { turns: false } });
+    // Cy's declaration waits for an answer until the round's end, Ann's until an hour after it.
+    const early = await s.declare(s.cy!, 'A2', 'Q2');
+    server.clock.advance(HOUR);
+    const late = await s.declare(s.ann, 'B5', 'A4');
+    // The server is down from before the end until two hours after it.
+    server.clock.advance(DAY + HOUR);
+    await server.runDue();
+    const v = await s.view();
+    expect(v.round).toBe(2);
+    const answer = (warId: string) =>
+      v.events.find((e) => e.type === 'war.response' && e.payload.warId === warId && e.payload.auto)!;
+    const started = v.events.find((e) => e.type === 'round.started')!;
+    expect(answer(early)).toMatchObject({ round: 1 });
+    expect(answer(late)).toMatchObject({ round: 2 });
+    expect(answer(early).id).toBeLessThan(started.id);
+    expect(started.id).toBeLessThan(answer(late).id);
+  });
+});
+
 describe('pausing the schedule', () => {
   it('is the host’s: the round keeps the time it had left, and ends once that has run after resuming', async () => {
     const s = await atWar();
@@ -424,6 +446,20 @@ describe('pausing the schedule', () => {
     server.clock.advance(5 * DAY);
     await server.runDue();
     expect((await s.view()).round).toBe(2);
+  });
+
+  it('refuses a pause or resume meant for a round that has given way to another', async () => {
+    const s = await atWar();
+    server.clock.advance(DAY);
+    await server.runDue();
+    expect((await s.ann.post(`${s.url}/schedule/pause`, { round: 1 })).body).toMatchObject({
+      error: { code: 'round-moved-on', message: 'Round 2 has already begun.' },
+    });
+    expect((await s.ann.post(`${s.url}/schedule/pause`, { round: 2 })).status).toBe(200);
+    expect((await s.ann.post(`${s.url}/schedule/resume`, { round: 1 })).body).toMatchObject({
+      error: { code: 'round-moved-on' },
+    });
+    expect((await s.ann.post(`${s.url}/schedule/resume`, { round: 2 })).status).toBe(200);
   });
 
   it('is only for rounds on a schedule', async () => {
@@ -604,6 +640,89 @@ describe('the last round on a schedule', () => {
       error: { code: 'not-active' },
     });
     expect((await s.ann.post(`${s.url}/schedule/pause`)).body).toMatchObject({ error: { code: 'not-active' } });
+  });
+
+  it('ends as of its time however late the server gets to it: nothing after the end counts', async () => {
+    // Rounds of a day, round 3 the last; claims held for 72 hours from the start of the round after theirs.
+    const s = await atWar(
+      { war: { turns: false }, victory: { lastRound: 3, hold: 'time', holdMinutes: 72 * 60 } },
+      { names: ['Ann', 'Bo'], missions: [{ kind: 'strategic_positions', territories: ['A1', 'B1'], need: 2 }] },
+    );
+    const start = server.clock.now().getTime();
+    const end = start + 3 * DAY;
+    await s.give(['B1'], ANN);
+    server.clock.advance(DAY);
+    await server.runDue();
+    server.clock.advance(DAY);
+    await server.runDue();
+    let v = await s.view();
+    expect(v.round).toBe(3);
+    expect(v.schedule!.nextRoundAt).toBe(iso(end));
+    // The claim's holding time runs out a day after the end: too late.
+    expect(v.victory!.claims).toEqual([expect.objectContaining({ eligibleAt: iso(start + 4 * DAY) })]);
+    // A game whose first move is due after the end.
+    server.clock.advance(2 * HOUR);
+    const war = await s.declare(s.ann, 'B5', 'A4');
+    expect((await s.bo.post(`${s.url}/wars/${war}/respond`, { response: 'accept' })).status).toBe(200);
+    const gameId = (await s.view()).wars.find((w) => w.id === war)!.games[0]!.id;
+    const deadline = Date.parse((await s.ann.get<GameView>(`/api/games/${gameId}`)).body.deadline!);
+    expect(deadline).toBeGreaterThan(end);
+
+    // The server is down from before the end until the move is overdue and the claim's time is up.
+    server.clock.advance(2 * DAY);
+    expect(server.clock.now().getTime()).toBeGreaterThan(Math.max(deadline, start + 4 * DAY));
+    // Until the campaign has ended, nothing can change: not a move, a declaration, or a pause.
+    expect(await s.ann.post(`/api/games/${gameId}/move`, { uci: 'e2e4', ply: 0 })).toMatchObject({
+      status: 409,
+      body: { error: { code: 'season-over', message: 'The last round is over, and the campaign is ending.' } },
+    });
+    expect((await s.bo.post(`${s.url}/wars`, { targetId: 'A4', launchId: 'B5', stake: ['B5'] })).body).toMatchObject({
+      error: { code: 'season-over' },
+    });
+    expect((await s.ann.post(`${s.url}/schedule/pause`, { round: 3 })).body).toMatchObject({
+      error: { code: 'season-over' },
+    });
+    await server.runDue();
+    v = await s.view();
+    expect(v.status).toBe('finished');
+    expect(v.victory!.result).toMatchObject({ seasonEnd: true, round: 3 });
+    // As it stood at the end: the war is called off rather than lost on time, and the claim lapses.
+    expect(v.wars.find((w) => w.id === war)).toMatchObject({ status: 'resolved', outcome: 'cancelled' });
+    expect((await s.ann.get<GameView>(`/api/games/${gameId}`)).body).toMatchObject({ status: 'cancelled', moves: [] });
+    expect(await s.points(ANN)).toBe(0);
+    const claims = await server.app.ctx.db
+      .select({ status: missionClaims.status })
+      .from(missionClaims)
+      .where(eq(missionClaims.campaignId, s.id));
+    expect(claims).toEqual([{ status: 'cancelled' }]);
+  });
+
+  it('counts what fell due before its end, though the server gets to it after', async () => {
+    const s = await atWar({ war: { turns: false }, victory: { lastRound: 2 } }, { names: ['Ann', 'Bo'], missions: [] });
+    const start = server.clock.now().getTime();
+    // A game whose first move falls due in round 2, the last, which ends two days from now.
+    server.clock.advance(HOUR);
+    const war = await s.declare(s.ann, 'B5', 'A4');
+    expect((await s.bo.post(`${s.url}/wars/${war}/respond`, { response: 'accept' })).status).toBe(200);
+    const gameId = (await s.view()).wars.find((w) => w.id === war)!.games[0]!.id;
+    const deadline = Date.parse((await s.ann.get<GameView>(`/api/games/${gameId}`)).body.deadline!);
+    expect(deadline).toBeGreaterThan(start + DAY);
+    expect(deadline).toBeLessThan(start + 2 * DAY);
+    server.clock.advance(DAY - HOUR);
+    await server.runDue();
+    expect((await s.view()).round).toBe(2);
+    // The server is down from before the move falls due until after the round's end.
+    server.clock.advance(DAY + 2 * HOUR);
+    await server.runDue();
+    const v = await s.view();
+    expect(v.status).toBe('finished');
+    // Lost on time before the end, so the war was settled, not called off: the stake went to Bo.
+    expect(v.wars.find((w) => w.id === war)).toMatchObject({ outcome: 'defender', resolvedRound: 2 });
+    expect((await s.ann.get<GameView>(`/api/games/${gameId}`)).body).toMatchObject({
+      result: '0-1',
+      reason: 'timeout',
+    });
+    expect(v.holdings.A4).toBe(BO);
   });
 
   it('waits while paused, then ends once the time it had left has run', async () => {

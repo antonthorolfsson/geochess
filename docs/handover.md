@@ -1637,20 +1637,29 @@ advancing them"). Not deployed.
 - **Scheduling** (`wars/schedule.ts`, migration `0016_round_schedule`). `campaigns.next_round_at`
   is when the round ends by itself, set by `scheduleRound` at every round start (round 1 in
   `openCampaign`) from the round's actual start, and cleared when the campaign finishes. The
-  scheduler's `advanceScheduledRounds` (after the other deadlines in `runDueWork`) starts one round
-  per due campaign per sweep, re-checking status, round, pause and time under the campaign lock, so
-  a sweep run twice, a second server or the host pressing at the same moment can't start two; and
-  since each round is timed from when it actually started, a server back after an outage starts one
-  round, not one per round missed. The host's `POST …/round/next` now names the round it ends
-  (`{ round }`, optional for old clients): a press that crosses a scheduled start gets 409
-  `round-moved-on` rather than ending the new round. The host can start the next round sooner; the
-  schedule then times the new one from then.
+  scheduler's `advanceScheduledRounds` starts one round per due campaign per sweep, re-checking
+  status, round, pause and time under the campaign lock, so a sweep run twice, a second server or
+  the host pressing at the same moment can't start two; and since each round is timed from when it
+  actually started, a server back after an outage starts one round, not one per round missed. The
+  host's `POST …/round/next` now names the round it ends (`{ round }`, optional for old clients): a
+  press that crosses a scheduled start gets 409 `round-moved-on` rather than ending the new round.
+  The host can start the next round sooner; the schedule then times the new one from then.
+- **The end is a moment, however late the server gets there** (`campaigns/round-end.ts`; the
+  scheduler polls every 5 seconds, and a restart or an outage can leave it behind). `runDueWork`
+  takes each due round end in turn: first every deadline due by that moment (each sweep takes an
+  `upTo`, and so do `mutate()` and `changeGame`), then the end, then whatever fell due since, in the
+  new round. So an answer due an hour before the end is answered in the old round and one due an
+  hour after in the new, as if the server had never been away, and `settleVictory` judges claims
+  held for a time as of a due end, not of when it runs. In a last round whose time is up, until
+  the scheduler has ended the campaign, `mutate()` and `changeGame` refuse everything else (409
+  `season-over`: moves, declarations, pausing), so nothing after the end counts.
 - **Pause and resume** (`POST …/schedule/pause` and `…/resume`, the host's, scheduled campaigns
   only): `campaigns.round_paused_at`; the round keeps the time it had left (`pausedRemainingMs`)
   and ends that long after resuming. Turns, answers, games and claims' holding times keep their own
   clocks meanwhile. A round the host starts while paused stays paused with its whole length to
-  come. Logged as `schedule.paused` (`remainingMs`) and `schedule.resumed` (`nextRoundAt`), under
-  the Wars feed filter.
+  come. Both name the round (`{ round }`), so a press that crosses a scheduled start gets 409
+  `round-moved-on` instead of pausing the new round. Logged as `schedule.paused` (`remainingMs`)
+  and `schedule.resumed` (`nextRoundAt`), under the Wars feed filter.
 - **Notices.** When the last round starts on a schedule, everyone is told when the campaign ends
   ("ends on points when this round's 3 days are up") and what that does to wars and claims. Other
   round starts still aren't notified (the first turn is).
@@ -1670,7 +1679,9 @@ advancing them"). Not deployed.
   only) and a Round length; `settingsList` and the lobby's key settings gain "Rounds"; the
   campaigns list shows when a scheduled round ends; dispatches say "began on schedule", paused and
   resumed; the rules guide's start-to-finish, round steps, claims, last round and deadlines follow
-  the campaign's progression.
+  the campaign's progression. The web app reads `rules.rounds` through `roundRules()`, which fills
+  in the defaults, so it works against a server that doesn't send them yet (Vercel and Render
+  deploy separately).
 - **Checked in the browser** (dev server on a fresh database, Chromium at 1440 × 900 and 390 × 844,
   scripted): "Schedule Check" (Ann hosting Bo and Cy, scheduled, 3 days, a war fought and a
   declaration waiting), "Last Round Check" (last round 2, round 2 with a war waiting) and "Rounds
@@ -1680,6 +1691,11 @@ advancing them"). Not deployed.
   while the war room was open (it updated without a reload: tokens, the new order, the wars carried
   on). No console errors, no sideways scroll.
 
+An independent review found two bugs, both fixed with tests: a last round the server reached late
+counted what happened after its time (a flag-fall, a move, a claim's holding time running out
+past the end), and the web app failed on rules from a server without `rounds`. It also noted that
+pausing and resuming didn't name the round, now fixed as above.
+
 Defaults taken (not asked; easy to change): round lengths of one to seven days, three as the first
 offered (the turn and answer windows are a day, so nothing shorter); a schedule only for
 correspondence; a schedule that doesn't wait for declaring, as the host's press never did; a
@@ -1688,10 +1704,11 @@ start rounds early; the last round ends the campaign on its own (the host chose 
 the last round, and everyone is told when it starts); one round on recovery after an outage, timed
 from then.
 
-Tests since: rules 347 (`rounds.test.ts`), data 73, web 183 (`lib/readiness.test.ts`), sim 29,
-server 246 (`test/schedule.test.ts`: scheduled starts, duplicate sweeps and a second server, an
-outage, pause and resume, claims held by turns and by time, the last round, stored and live
-campaigns staying manual).
+Tests since: rules 348 (`rounds.test.ts`), data 73, web 183 (`lib/readiness.test.ts`), sim 29,
+server 250 (`test/schedule.test.ts`: scheduled starts, duplicate sweeps and a second server, an
+outage, deadlines either side of a late-processed end, pause and resume, claims held by turns and
+by time, the last round and what comes after its time, stored and live campaigns staying manual),
+883 in all.
 
 ### Victory defaults taken while building (not asked; easy to change)
 

@@ -40,6 +40,7 @@ import {
   refillTokens,
   reservesAllowed,
   roundProgression,
+  roundRules,
   stakeFloor,
   topValueOf,
   type CampaignRules,
@@ -446,7 +447,7 @@ function StartToFinish({ rules, standard }: { rules: CampaignRules; standard: bo
           and everyone gets {first === 1 ? 'their first war token' : warTokens(first)}. From then on the campaign moves
           in rounds,{' '}
           {roundProgression(rules) === 'scheduled'
-            ? `each ${hoursText(rules.rounds.hours)} long: the next starts by itself when one has run its time, unless the host starts it sooner or pauses the schedule.`
+            ? `each ${hoursText(roundRules(rules).hours)} long: the next starts by itself when one has run its time, unless the host starts it sooner or pauses the schedule.`
             : `and the host starts each one${standard ? ' (or, in a correspondence campaign, a schedule the host chose)' : ''}.`}
           {rules.victory.mode === 'objectives' &&
             missionRules(rules.victory.version).titles &&
@@ -479,7 +480,7 @@ function EachRound({ rules, standard }: { rules: CampaignRules; standard: boolea
   const { war } = rules;
   const answer = answerTimeText(rules, standard);
   const scheduled = roundProgression(rules) === 'scheduled';
-  const length = hoursText(rules.rounds.hours);
+  const length = hoursText(roundRules(rules).hours);
   const last = lastRoundOf(rules);
   const battle = standard ? (
     <>
@@ -1586,7 +1587,7 @@ function Victory({ rules, standard }: { rules: CampaignRules; standard: boolean 
             Round {last} is the last{standard ? ' (the host can choose another, or none, in the lobby)' : ''}. If nobody
             has reached {points.toWin}{' '}
             {roundProgression(rules) === 'scheduled'
-              ? `by the time its ${hoursText(rules.rounds.hours)} are up (the war room shows when, and the host can pause the schedule)`
+              ? `by the time its ${hoursText(roundRules(rules).hours)} are up (the war room shows when, and the host can pause the schedule)`
               : 'by the time the host moves on from it'}
             , the campaign ends as if someone had won, and {seasonEndText(rules)}. Players level on all of it share the
             victory. Wars still underway then are called off, with nothing changing hands. Points count as they stand

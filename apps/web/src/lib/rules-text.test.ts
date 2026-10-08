@@ -17,7 +17,7 @@ import {
   perMoveText,
   raiseText,
   raisedRowLabel,
-  roundsText,
+  roundProgressionText,
   recordMissions,
   seasonEndText,
   selectionTimeText,
@@ -189,8 +189,14 @@ describe('rules in words', () => {
     const scheduled = { ...DEFAULT_RULES, rounds: { progression: 'scheduled' as const, hours: 48 as const } };
     expect(changedSettings(scheduled)).toEqual(['Rounds']);
     expect(keySettings(scheduled).find((s) => s.label === 'Rounds')?.value).toBe('On a schedule, 2 days each');
+    // Rules from a server older than schedules have no round settings: the host starts each round.
+    const { rounds: _rounds, ...withoutRounds } = DEFAULT_RULES;
+    const fromOlder = withoutRounds as unknown as typeof DEFAULT_RULES;
+    expect(roundProgressionText(fromOlder)).toBe('Started by the host');
+    expect(changedSettings(fromOlder)).toEqual([]);
+    expect(deadlineRows(fromOlder).map((r) => r.who)).not.toContain('A round runs its time');
     // Live rounds are the host's, whatever was stored.
-    expect(roundsText({ ...scheduled, war: { ...scheduled.war, pace: 'live' } })).toBe('Started by the host');
+    expect(roundProgressionText({ ...scheduled, war: { ...scheduled.war, pace: 'live' } })).toBe('Started by the host');
     // Stored rules from before the revised war answers differ in each of them.
     expect(changedSettings(parseRules({ victory: DEFAULT_RULES.victory }))).toEqual(
       expect.arrayContaining(['Declaring', 'Least stake', 'Raising the stakes', 'Redirects', 'Fortifying']),

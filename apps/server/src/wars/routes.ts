@@ -153,16 +153,18 @@ export function registerWarRoutes(app: FastifyInstance, ctx: AppContext): void {
     return { ok: true };
   });
 
-  /** The host pauses rounds on a schedule: the round keeps the time it has left. */
+  /** The host pauses rounds on a schedule: the round keeps the time it has left. Names the round, as Next round does. */
   app.post('/api/campaigns/:id/schedule/pause', async (req) => {
     const user = requireUser(req);
-    await pauseSchedule(ctx, parse(campaignParams, req.params).id, user.id);
+    const params = parse(campaignParams, req.params);
+    await pauseSchedule(ctx, params.id, user.id, parse(nextRoundInput, req.body ?? {}));
     return { ok: true };
   });
 
   app.post('/api/campaigns/:id/schedule/resume', async (req) => {
     const user = requireUser(req);
-    await resumeSchedule(ctx, parse(campaignParams, req.params).id, user.id);
+    const params = parse(campaignParams, req.params);
+    await resumeSchedule(ctx, params.id, user.id, parse(nextRoundInput, req.body ?? {}));
     return { ok: true };
   });
 

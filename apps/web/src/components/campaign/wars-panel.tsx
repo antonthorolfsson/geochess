@@ -80,8 +80,11 @@ function RoundStatus({ model }: { model: CampaignModel }) {
   const refresh = () => queryClient.invalidateQueries({ queryKey: keys.campaign(campaign.id) });
   // Naming the round to end, so a press that crosses a scheduled start doesn't end the new one too.
   const next = useMutation({ mutationFn: () => api.nextRound(campaign.id, campaign.round), onSettled: refresh });
-  const pause = useMutation({ mutationFn: () => api.pauseSchedule(campaign.id), onSettled: refresh });
-  const resume = useMutation({ mutationFn: () => api.resumeSchedule(campaign.id), onSettled: refresh });
+  const pause = useMutation({ mutationFn: () => api.pauseSchedule(campaign.id, campaign.round), onSettled: refresh });
+  const resume = useMutation({
+    mutationFn: () => api.resumeSchedule(campaign.id, campaign.round),
+    onSettled: refresh,
+  });
   const active = campaign.status === 'active';
   const now = useNow(1000, active);
   // Who can still take a turn is worked out over the whole map, so only as the campaign changes, or

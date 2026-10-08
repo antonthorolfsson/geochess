@@ -4,7 +4,7 @@ import { lapseProposals } from '../diplomacy/accords';
 import { runVictoryDeadlines } from '../victory/scheduler';
 import { armAllFlags, flagOverdueGames } from './games';
 import { lapsePeaceOffers } from './peace';
-import { advanceScheduledRounds, expireResponses } from './service';
+import { advanceScheduledRounds, dueRoundEnds, expireResponses } from './service';
 import { expireTurns } from './turns';
 
 /** How often the server looks for deadlines that have passed. Live flag-falls have their own timers. */
@@ -13,20 +13,31 @@ const POLL_MS = 5_000;
 /**
  * Everything due by now: unanswered declarations and counter-offers, turns to declare nobody
  * took, flag-falls, half-settled games, accord proposals and peace offers nobody answered, secret
- * missions not chosen in time, claims whose holding time is up, rounds whose scheduled time is up
- * (after everything due within them), anything a bot still has to do, and finished campaigns whose
- * time to be kept is up.
+ * missions not chosen in time, claims whose holding time is up, rounds whose scheduled time is up,
+ * anything a bot still has to do, and finished campaigns whose time to be kept is up.
+ *
+ * A scheduled round ends at its time, however late the server gets to it: what fell due by then
+ * is dealt with first, in that round, and what fell due since, after, in the next round, or not at
+ * all once the campaign has ended (see `round-end.ts`).
  */
 export async function runDueWork(ctx: AppContext): Promise<void> {
-  await expireResponses(ctx);
-  await expireTurns(ctx);
-  await flagOverdueGames(ctx);
-  await lapseProposals(ctx);
-  await lapsePeaceOffers(ctx);
-  await runVictoryDeadlines(ctx);
-  await advanceScheduledRounds(ctx);
+  for (const at of await dueRoundEnds(ctx)) {
+    await runDeadlines(ctx, at);
+    await advanceScheduledRounds(ctx, at);
+  }
+  await runDeadlines(ctx, ctx.now());
   await ctx.bots.sweep();
   await deleteFinishedCampaigns(ctx);
+}
+
+/** Every deadline that fell due by `upTo`. */
+async function runDeadlines(ctx: AppContext, upTo: Date): Promise<void> {
+  await expireResponses(ctx, upTo);
+  await expireTurns(ctx, upTo);
+  await flagOverdueGames(ctx, upTo);
+  await lapseProposals(ctx, upTo);
+  await lapsePeaceOffers(ctx, upTo);
+  await runVictoryDeadlines(ctx, upTo);
 }
 
 /**

@@ -99,6 +99,12 @@ when starting new work.**
   their own; `apps/web/src/lib/outcomes.ts` only picks the endings and words them. When a campaign
   is won, each player sees its ending once (`finale.tsx`, after any ceremony still playing), then
   the results page (`/c/[id]/results`, `results-screen.tsx`, logic in `apps/web/src/lib/results.ts`).
+- A game that ends with its board open plays its verdict over the board (`battle-verdict.tsx` in
+  `components/game/`, words from `apps/web/src/lib/verdict.ts`). Countries a war moves crawl over
+  in their winner's color on the map (`conquests` on `WorldMap`), built from the transfers in the
+  pushed `war.resolved` events (`apps/web/src/lib/conquest.ts`), and award ceremonies (then the
+  campaign's ending) wait for the crawl: anything new that moves countries between players needs
+  transfers there too, or the map just repaints.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and

@@ -4,6 +4,7 @@ import { missionTargets, type TerritoryId } from '@empire/rules';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CampaignModel } from '@/lib/campaign';
+import type { MapConquest } from '@/lib/conquest';
 import { useMapData, useMe, type MapData } from '@/lib/queries';
 import {
   INITIAL_TUTORIAL,
@@ -332,6 +333,30 @@ function TutorialMap({
   }, [model.idx, owners, step]);
 
   const launchId = state.stake?.launchId ?? null;
+  // The change of hands plays as in a campaign, whenever the map goes from before the battle to
+  // after it: your color crawls over the target from the country you attacked from. Counted as the
+  // view changes, so the map gets the conquest along with the new owners, never a frame after.
+  const [lastView, setLastView] = useState(mapView);
+  const [crawls, setCrawls] = useState(0);
+  if (lastView !== mapView) {
+    setLastView(mapView);
+    if (step === 'result' && lastView === 'before' && mapView === 'win') setCrawls((n) => n + 1);
+  }
+  const conquests: MapConquest[] = useMemo(
+    () =>
+      crawls > 0 && launchId
+        ? [
+            {
+              key: `tutorial-${crawls}`,
+              color: model.membersById.get(TUTORIAL_PLAYER)!.color,
+              previous: model.membersById.get(TUTORIAL_DEFENDER)!.color,
+              steps: [{ id: TUTORIAL_TARGET, from: launchId, wave: 0 }],
+              frame: false,
+            },
+          ]
+        : [],
+    [crawls, launchId, model],
+  );
   const fighting = step === 'battle' || (step === 'result' && mapView === 'before');
   const wars: MapWar[] = useMemo(
     () =>
@@ -376,6 +401,7 @@ function TutorialMap({
         preview={preview}
         war={war}
         mission={mission}
+        conquests={conquests}
       />
       {search && (
         <div className="absolute top-3 left-3 w-[min(18rem,calc(100%-5rem))]">

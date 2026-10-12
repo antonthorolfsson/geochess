@@ -226,6 +226,36 @@
   }
 }
 
+/* Countries changing hands: a ring spreading from where the winner's color crosses in, and a
+   microstate's dot taking the color with a pop. Each waits for its turn (an inline delay). */
+@keyframes conquest-breach {
+  from {
+    transform: scale(0.25);
+    opacity: 0.95;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.map-svg .conquest-breach {
+  animation: conquest-breach 1100ms cubic-bezier(0.15, 0.7, 0.3, 1) both;
+}
+@keyframes conquest-dot {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.5);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.map-svg .conquest-dot {
+  animation: conquest-dot 800ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
 /* Chess board ---------------------------------------------------------------------------- */
 
 /* Paper and olive squares, from the map room's palette; contrast with the pieces comes first. */
@@ -562,6 +592,83 @@
 }
 .token-pop {
   animation: token-pop 700ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+/* A game's ending, over its board: the winner's colors sweep across it, then the verdict ---------- */
+
+.verdict {
+  cursor: pointer;
+}
+.verdict-out {
+  animation: verdict-out 350ms ease-in forwards;
+}
+@keyframes verdict-out {
+  to {
+    opacity: 0;
+  }
+}
+.verdict-veil {
+  background: radial-gradient(ellipse at 50% 50%, rgb(31 36 40 / 0.4), rgb(14 17 19 / 0.78));
+  animation: finale-fade 300ms ease-out both;
+}
+/* From the winner's side of the board, as their color crawls over the countries on the map. */
+.verdict-wash {
+  opacity: 0.45;
+  animation: verdict-sweep-up 800ms cubic-bezier(0.3, 0.7, 0.2, 1) 100ms both;
+}
+.verdict-wash.verdict-from-top {
+  animation-name: verdict-sweep-down;
+}
+@keyframes verdict-sweep-up {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes verdict-sweep-down {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+.verdict-card {
+  animation: verdict-card 520ms cubic-bezier(0.2, 0.9, 0.3, 1.15) 300ms both;
+}
+@keyframes verdict-card {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+}
+.verdict-up {
+  animation: finale-up 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 550ms both;
+}
+/* The stamp comes down once the card is there; the thud after is the landing. */
+.verdict-stamp {
+  animation: stamp-slam 320ms cubic-bezier(0.55, 0, 0.75, 0.3) 620ms both;
+}
+.verdict-thud {
+  animation: finale-thud 300ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.verdict-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 140%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: finale-ring 800ms cubic-bezier(0.1, 0.7, 0.3, 1) both;
+}
+/* A drawn game's stamp, in map-room white. */
+.stamp-quiet {
+  color: var(--color-paper);
 }
 
 /* The ending: victory or defeat stamped over the whole map room --------------------------------- */

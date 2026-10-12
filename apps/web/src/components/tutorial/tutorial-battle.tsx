@@ -15,6 +15,9 @@ import {
   tacticGame,
   tacticSans,
 } from '@/lib/tutorial';
+import type { Verdict } from '@/lib/verdict';
+import { endingText } from '@/lib/wars';
+import { BattleVerdict } from '../game/battle-verdict';
 import { Board } from '../game/board';
 import { PlayerStrip, TypedMove } from '../game/game-panel';
 import type { StepProps } from './tutorial-steps';
@@ -34,6 +37,28 @@ export function BattleStep({ model, state, dispatch, headingRef }: StepProps) {
   const { moves } = state;
   const game = useMemo(() => tacticGame(moves), [moves]);
   const won = battleWon(moves);
+  // The mate (played or skipped to) ends the game over the board, as a campaign's does.
+  const [ending, setEnding] = useState(false);
+  const [wasWon, setWasWon] = useState(won);
+  if (wasWon !== won) {
+    setWasWon(won);
+    if (won) setEnding(true);
+  }
+  const endingDone = useCallback(() => setEnding(false), []);
+  const verdict: Verdict = useMemo(() => {
+    const how = endingText('won', 'checkmate');
+    const spoils = `${target.name} is yours`;
+    return {
+      mine: 'won',
+      winnerId: TUTORIAL_PLAYER,
+      winnerColor: 'white',
+      stamp: 'Victory',
+      headline: `${model.membersById.get(TUTORIAL_PLAYER)?.name ?? 'You'} wins`,
+      how,
+      spoils,
+      summary: `Victory. ${how}. ${spoils}.`,
+    };
+  }, [model, target.name]);
   const [wrong, setWrong] = useState<string | null>(null);
   const [hint, setHint] = useState(0);
   // Puts the board back after a move that isn't taken.
@@ -165,6 +190,15 @@ export function BattleStep({ model, state, dispatch, headingRef }: StepProps) {
           aria-label={won ? 'Chess board: the final position' : `Chess board: ${game.turn} to move`}
         >
           <Board config={config} />
+          {ending && (
+            <BattleVerdict
+              model={model}
+              verdict={verdict}
+              label={`Battle for ${target.name}`}
+              from="bottom"
+              onDone={endingDone}
+            />
+          )}
         </div>
         <PlayerStrip
           model={model}
@@ -174,6 +208,8 @@ export function BattleStep({ model, state, dispatch, headingRef }: StepProps) {
           toMove={playable}
           perMoveLeft={null}
           note={null}
+          result={won ? 'won' : null}
+          fresh={ending}
         />
       </div>
 

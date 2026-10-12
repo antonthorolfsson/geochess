@@ -26,10 +26,12 @@ import { api, errorMessage } from '@/lib/api';
 import type { CampaignModel } from '@/lib/campaign';
 import { keys, newerGame, toBoardGame, useGame, type BoardGame } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
+import { gameWinner, verdictOf } from '@/lib/verdict';
 import { countryName, formatClock, outcomeText, playerName, resultText, timeControlText, timeLeft } from '@/lib/wars';
 import { PlayerName } from '../campaign/player-name';
 import { WarOutcomes, WarStakesNote } from '../campaign/war-outcomes';
 import { FullscreenIcon, Notice, Spinner } from '../ui';
+import { BattleVerdict } from './battle-verdict';
 import { Board } from './board';
 
 const reducedMotion = () =>
@@ -267,6 +269,19 @@ function GameBoard({
   // Bots, standing in for a person too, play online only.
   const people = !model.membersById.get(game.whiteId)?.bot && !model.membersById.get(game.blackId)?.bot;
 
+  // A game that ends while its board is open plays its ending out over the board: who won, how, and
+  // what it means for the war. Opened afterwards, the board just shows the result. Noticed as the
+  // status changes, so the result never shows a frame before its entrance.
+  const [ending, setEnding] = useState(false);
+  const [lastStatus, setLastStatus] = useState(game.status);
+  if (lastStatus !== game.status) {
+    setLastStatus(game.status);
+    if (game.status === 'finished' && game.result) setEnding(true);
+  }
+  const endingDone = useCallback(() => setEnding(false), []);
+  const verdict = useMemo(() => (ending ? verdictOf(model, game, war) : null), [ending, model, game, war]);
+  const winner = game.status === 'finished' ? gameWinner(game) : undefined;
+
   const strip = (color: Color) => {
     const userId = color === 'white' ? game.whiteId : game.blackId;
     const note =
@@ -288,6 +303,8 @@ function GameBoard({
         toMove={playing && !otb && color === turn}
         perMoveLeft={!live && playing && !otb && color === turn ? perMoveLeft : null}
         note={note}
+        result={winner === undefined ? null : winner === null ? 'drawn' : winner === color ? 'won' : null}
+        fresh={ending}
       />
     );
   };
@@ -348,6 +365,15 @@ function GameBoard({
                   Clocks start in {Math.ceil(countdown / 1000)}
                 </div>
               </div>
+            )}
+            {verdict && (
+              <BattleVerdict
+                model={model}
+                verdict={verdict}
+                label={`Battle for ${target?.name ?? 'the frontier'}`}
+                from={verdict.winnerColor === bottom ? 'bottom' : 'top'}
+                onDone={endingDone}
+              />
             )}
           </div>
           {strip(bottom)}
@@ -486,6 +512,8 @@ export function PlayerStrip({
   toMove,
   perMoveLeft,
   note,
+  result = null,
+  fresh = false,
 }: {
   model: CampaignModel;
   userId: string;
@@ -495,6 +523,10 @@ export function PlayerStrip({
   perMoveLeft: number | null;
   /** What the player offers or reports, if anything: "offers a draw". */
   note: string | null;
+  /** The game is over: this player won it, or it was drawn. */
+  result?: 'won' | 'drawn' | null;
+  /** It has just ended, so the result is stamped on as it's shown. */
+  fresh?: boolean;
 }) {
   const low = clockMs !== null && clockMs < 20_000;
   const member = model.membersById.get(userId);
@@ -504,9 +536,18 @@ export function PlayerStrip({
         aria-hidden="true"
         className={`size-3.5 shrink-0 rounded-full border border-line-strong ${color === 'white' ? 'bg-paper' : 'bg-gunmetal'}`}
       />
-      <span className="min-w-0 flex-1">
+      <span className="flex min-w-0 flex-1 items-center gap-3">
         <PlayerName member={member} you={userId === model.me.userId} size="sm" />
-        {note && <span className="ml-2 text-xs font-bold text-amber uppercase">{note}</span>}
+        {note && <span className="text-xs font-bold text-amber uppercase">{note}</span>}
+        {result && (
+          <span
+            className={`stamp stamp-sm ${result === 'drawn' ? 'stamp-quiet' : ''} ${fresh ? 'stamp-slam' : ''}`}
+            // After the verdict's own stamp has landed.
+            style={fresh ? { animationDelay: '1100ms' } : undefined}
+          >
+            {result === 'won' ? 'Won' : 'Draw'}
+          </span>
+        )}
       </span>
       {clockMs !== null ? (
         <span

@@ -16,6 +16,7 @@ import {
 import type { Topology } from 'topojson-specification';
 import { ApiError, errorMessage } from '@/lib/api';
 import { buildModel, nextAnswer, type CampaignModel } from '@/lib/campaign';
+import { conquestsFrom, type MapConquest } from '@/lib/conquest';
 import { useCampaign, useMapData, useMe, useWar } from '@/lib/queries';
 import { useRealtime, useServerMessages } from '@/lib/realtime';
 import { CAMPAIGN_WIDTH, RAIL_WIDTH, roomLayout } from '@/lib/room-layout';
@@ -89,6 +90,8 @@ const MAIN_LABEL: Record<CampaignStatus, string> = {
 };
 /** The desktop's left column, which the rail's buttons open over the map when it's folded. */
 const CAMPAIGN_PANEL_ID = 'campaign-panel';
+/** The longest award ceremonies wait (with the page in view) for countries to change hands on the map. */
+const CONQUEST_HOLD_MS = 10_000;
 
 /** What the header's calls to action lead to, most pressing first. */
 type ActionKind = 'pick' | 'mission' | 'move' | 'turn' | 'answer';
@@ -254,10 +257,19 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     myGames.some((g) => !g.overTheBoard && (g.game === undefined || g.game.status === 'playing'));
   const answers = model.answers.length;
   const unread = useUnread(campaign.id);
-  // The campaign's ending, once any ceremony for the points that brought it has played; then the results.
-  const [ceremoniesBusy, setCeremoniesBusy] = useState(false);
+  // Countries a war moved crawl over to their winner on the map first (`conquering` while they do, in
+  // view); then the ceremony for any points it brought; then, if it won the campaign, its ending and
+  // the results. A hold on the ceremonies never lasts long, whatever the map does.
+  const [conquering, setConquering] = useState(false);
+  const mapHiddenRef = useRef(false);
   const visible = usePageVisible();
-  const finale = useFinale(model, !ceremoniesBusy && !inLiveGame && visible);
+  useEffect(() => {
+    if (!conquering || !visible) return;
+    const timer = setTimeout(() => setConquering(false), CONQUEST_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [conquering, visible]);
+  const [ceremoniesBusy, setCeremoniesBusy] = useState(false);
+  const finale = useFinale(model, !conquering && !ceremoniesBusy && !inLiveGame && visible);
   const resultsHref = useResultsHref(campaign.id);
   const { leave: leaveFinale } = finale;
   const finaleLeaving = useCallback(() => {
@@ -446,14 +458,24 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
 
   // Intel reports: wars declared on me, answers I'm owed, battles starting and ending. Missions
   // scored and titles changing hands play as award ceremonies instead (`AwardCeremonies`), and the
-  // campaign won as its ending.
+  // campaign won as its ending. Countries won crawl over in their winner's color on the map.
   const modelRef = useRef(model);
   useEffect(() => {
     modelRef.current = model;
   });
+  const [conquests, setConquests] = useState<MapConquest[]>([]);
   useServerMessages((message) => {
     if (message.type !== 'campaign.events' || message.campaignId !== campaign.id) return;
     const current = modelRef.current;
+    // Read against the campaign as it stood: the refetch with the new owners comes after the push.
+    const taken = conquestsFrom(current, message.events);
+    if (taken.length > 0) {
+      setConquests((list) => [...list, ...taken].slice(-24));
+      // The same push brings any points the war moved: their ceremony waits for the map to show the
+      // countries changing hands, from now (the map says when it's done).
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!mapHiddenRef.current && !still) setConquering(true);
+    }
     const warById = (warId: string) => current.campaign.wars.find((w) => w.id === warId);
     // A raise met at once from reserves is answered in the same change.
     const replied = new Set(message.events.flatMap((e) => (e.type === 'war.reply' ? [e.payload.warId] : [])));
@@ -902,6 +924,11 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
   // Another tab or a game covers the map (phones), or the board fills the screen: nothing under it
   // takes focus meanwhile.
   const mapCovered = (!isDesktop && (tab !== 'map' || Boolean(gamePanel))) || gameFull;
+  // Conquests wait for the map too: under a page or the campaign's ending, they'd play unseen.
+  const mapHidden = mapCovered || overPage || Boolean(finale.showing);
+  useLayoutEffect(() => {
+    mapHiddenRef.current = mapHidden;
+  });
   // Full screen, the map or the board covers the columns too.
   const behindFull = mapFull || gameFull;
 
@@ -1027,7 +1054,9 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
             topInset={controlsBottom}
             bottomInset={isDesktop ? 0 : sheetHeight}
             leftInset={drawerOverMap ? CAMPAIGN_WIDTH : 0}
-            covered={mapCovered}
+            covered={mapHidden}
+            conquests={conquests}
+            onConquering={setConquering}
             listed={model.draftListOpen ? model.campaign.myDraftList : undefined}
             fortified={fortifiedIds}
             wars={mapWars}
@@ -1194,7 +1223,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
               {toast}
             </div>
           )}
-          {objectives && <AwardCeremonies model={model} hold={inLiveGame} onBusy={setCeremoniesBusy} />}
+          {objectives && <AwardCeremonies model={model} hold={inLiveGame || conquering} onBusy={setCeremoniesBusy} />}
         </div>
       </div>
       {finale.showing && (

@@ -113,8 +113,9 @@ export interface WorldMapProps {
   covered?: boolean;
   /**
    * Countries changing hands in wars: the winner's color crawls over them from where the war was
-   * fought, as soon as the map is in view (framing the player's own wars first, if they're out of
-   * sight). Until a country's turn comes, it keeps its old color. Each plays once, by its key.
+   * fought (or, for less motion, fades in), as soon as the map is in view (framing the player's own
+   * wars first, if they're out of sight). Until a country's turn comes, it keeps its old color.
+   * Each plays once, by its key.
    */
   conquests?: readonly MapConquest[];
   /** Hears whether conquests are playing in view, or about to: what plays over the map can wait for them. */
@@ -124,6 +125,11 @@ export interface WorldMapProps {
 /** A conquest on the map: waiting for the map to be in view, flying to it, crawling, or played out. */
 interface Play extends MapConquest {
   phase: 'waiting' | 'framing' | 'playing' | 'done';
+  /**
+   * For a player who asked for less motion: each country's new color fades in over the same time,
+   * in the same order, instead of crawling across it, with no ring and no flying to it.
+   */
+  fade: boolean;
   /** Each country's crawl, worked out as it starts to play. */
   runs: Run[];
   /** The countries the color has covered. */
@@ -469,11 +475,12 @@ export function WorldMap(props: WorldMapProps) {
     const fresh = conquests.filter((c) => !queued.current.has(c.key));
     if (fresh.length === 0) return;
     for (const c of fresh) queued.current.add(c.key);
-    // A picture of a campaign, or less motion: the countries just change hands.
-    if (still || prefersReducedMotion()) return;
+    // A picture of a campaign: the countries just change hands.
+    if (still) return;
+    const fade = prefersReducedMotion();
     setPlays((list) => [
       ...list,
-      ...fresh.map((c): Play => ({ ...c, phase: 'waiting', runs: [], covered: new Set() })),
+      ...fresh.map((c): Play => ({ ...c, phase: 'waiting', fade, runs: [], covered: new Set() })),
     ]);
   }, [conquests, still]);
 
@@ -602,6 +609,8 @@ export function WorldMap(props: WorldMapProps) {
     return shown;
   }, [owners, plays]);
   const crawling = useMemo(() => plays.filter((p) => p.phase === 'playing'), [plays]);
+  /** The overlay's elements that the conquests' frames draw, outside React. */
+  const [crawlNodes] = useState(() => new Map<string, SVGElement>());
   const screenScale = useCallback(() => pxPerUnitRef.current * transformRef.current.k, []);
   const conquering = plays.some(
     (p) => p.phase === 'framing' || p.phase === 'playing' || (p.phase === 'waiting' && !covered && pageVisible),
@@ -739,6 +748,7 @@ export function WorldMap(props: WorldMapProps) {
             <ConquestLayer
               geo={geo}
               plays={crawling}
+              nodes={crawlNodes}
               patternPrefix={patternPrefix}
               screenScale={screenScale}
               onCovered={onCovered}
@@ -790,7 +800,7 @@ export function WorldMap(props: WorldMapProps) {
             highlighted={highlighted}
             onSelect={select_}
           />
-          {crawling.length > 0 && <ConquestDots byId={geo.byId} plays={crawling} />}
+          {crawling.length > 0 && <ConquestDots byId={geo.byId} plays={crawling} nodes={crawlNodes} />}
           {warPaths && (
             <g pointerEvents="none" aria-hidden="true">
               <path
@@ -1020,14 +1030,23 @@ function MicroDots({
   );
 }
 
+/** Keeps an element of a conquest's overlay in `nodes` while it's mounted, by key. */
+const keepIn = (nodes: Map<string, SVGElement>, key: string) => (el: SVGElement | null) => {
+  if (el) nodes.set(key, el);
+  else nodes.delete(key);
+};
+
 /**
  * Countries changing hands: over each, the winner's color (as the country will wear it, hatching and
- * all) crawls in from where it crosses, behind a pale edge, its front wavering as it goes. Drawn
- * frame by frame outside React; a country fully covered is handed back to the map in its new color.
+ * all) crawls in from where it crosses, behind a pale edge, its front wavering as it goes; for less
+ * motion, it fades in over the same time instead. Drawn frame by frame outside React (into `nodes`,
+ * shared with the microstates' dots); a country fully covered is handed back to the map in its new
+ * color.
  */
 function ConquestLayer({
   geo,
   plays,
+  nodes,
   patternPrefix,
   screenScale,
   onCovered,
@@ -1035,12 +1054,12 @@ function ConquestLayer({
   geo: Geometry;
   /** Conquests playing. */
   plays: readonly Play[];
+  nodes: Map<string, SVGElement>;
   patternPrefix: string;
   /** Screen pixels to a map unit, right now. */
   screenScale(): number;
   onCovered(key: string, id: TerritoryId): void;
 }) {
-  const paths = useRef(new Map<string, SVGPathElement>());
   /** When each conquest started, on the animation clock: its first frame. */
   const started = useRef(new Map<string, number>());
   /** The countries reported covered, by conquest and country. */
@@ -1067,24 +1086,26 @@ function ConquestLayer({
             onCoveredRef.current(play.key, run.id);
             continue;
           }
+          if (play.fade) {
+            // Less motion: the new color comes in where it will stay, a little more each frame.
+            nodes.get(`${run.uid}:fade`)?.setAttribute('opacity', String(crawlEase(t)));
+            continue;
+          }
           if (run.micro) continue;
           const { radius, waver } = frontAt(run.near, run.far, crawlEase(t));
           const [body = '', edge = ''] =
             t < 0 ? [] : frontPaths(run.front, radius, waver, t * CRAWL_DRIFT_S, scale, [0, rim]);
-          paths.current.get(`${run.uid}:rim`)?.setAttribute('d', edge);
-          paths.current.get(`${run.uid}:body`)?.setAttribute('d', body);
-          paths.current.get(`${run.uid}:hatch`)?.setAttribute('d', body);
+          nodes.get(`${run.uid}:rim`)?.setAttribute('d', edge);
+          nodes.get(`${run.uid}:body`)?.setAttribute('d', body);
+          nodes.get(`${run.uid}:hatch`)?.setAttribute('d', body);
         }
       }
       frame = requestAnimationFrame(draw);
     });
     return () => cancelAnimationFrame(frame);
-  }, [plays, screenScale]);
+  }, [plays, nodes, screenScale]);
 
-  const keep = (key: string) => (el: SVGPathElement | null) => {
-    if (el) paths.current.set(key, el);
-    else paths.current.delete(key);
-  };
+  const keep = (key: string) => keepIn(nodes, key);
   return (
     <g aria-hidden="true" pointerEvents="none">
       {plays.flatMap((play) => {
@@ -1095,11 +1116,21 @@ function ConquestLayer({
         return play.runs
           .filter((run) => !run.micro && !play.covered.has(run.id))
           .map((run) => {
+            const d = geo.byId.get(run.id)?.d ?? '';
+            if (play.fade) {
+              // Faded in by the frames (from nothing: React sets the opacity only once).
+              return (
+                <g key={run.uid} ref={keep(`${run.uid}:fade`)} opacity={0}>
+                  <path d={d} fill={body} />
+                  <path d={d} fill={`url(#${patternPrefix}-${play.color})`} />
+                </g>
+              );
+            }
             const clip = `${patternPrefix}-crawl-${run.uid}`;
             return (
               <g key={run.uid}>
                 <clipPath id={clip}>
-                  <path d={geo.byId.get(run.id)?.d ?? ''} />
+                  <path d={d} />
                 </clipPath>
                 <g clipPath={`url(#${clip})`}>
                   <path ref={keep(`${run.uid}:rim`)} fill={edge} />
@@ -1129,8 +1160,20 @@ function ConquestLayer({
   );
 }
 
-/** A microstate changing hands: its dot fills with the winner's color, inside a spreading ring. */
-function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly Play[] }) {
+/**
+ * A microstate changing hands: its dot fills with the winner's color, inside a spreading ring; for
+ * less motion, the color fades in over the dot instead (the frames of `ConquestLayer` set it, in
+ * `nodes`).
+ */
+function ConquestDots({
+  byId,
+  plays,
+  nodes,
+}: {
+  byId: Geometry['byId'];
+  plays: readonly Play[];
+  nodes: Map<string, SVGElement>;
+}) {
   return (
     <g aria-hidden="true" pointerEvents="none">
       {plays.flatMap((play) => {
@@ -1143,21 +1186,27 @@ function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly
             return (
               <g key={run.uid} transform={`translate(${shape.anchor[0]},${shape.anchor[1]})`}>
                 <g className="counter-scale">
-                  <circle
-                    className="nss conquest-breach"
-                    r={16}
-                    fill="none"
-                    stroke={hex}
-                    strokeWidth={2.5}
-                    style={{ animationDelay: `${run.delay}ms` }}
-                  />
-                  {/* Inside the dot's own outline, filling it from the middle. */}
-                  <circle
-                    className="conquest-dot"
-                    r={4.75}
-                    fill={hex}
-                    style={{ animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` }}
-                  />
+                  {play.fade ? (
+                    <circle ref={keepIn(nodes, `${run.uid}:fade`)} r={4.75} fill={hex} opacity={0} />
+                  ) : (
+                    <>
+                      <circle
+                        className="nss conquest-breach"
+                        r={16}
+                        fill="none"
+                        stroke={hex}
+                        strokeWidth={2.5}
+                        style={{ animationDelay: `${run.delay}ms` }}
+                      />
+                      {/* Inside the dot's own outline, filling it from the middle. */}
+                      <circle
+                        className="conquest-dot"
+                        r={4.75}
+                        fill={hex}
+                        style={{ animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` }}
+                      />
+                    </>
+                  )}
                 </g>
               </g>
             );

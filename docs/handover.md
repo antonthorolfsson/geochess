@@ -1757,8 +1757,15 @@ left to me). Web only: no rule, event or API changed.
   watch, is flown to first. In view, it starts after a 0.9-second beat, so the board's stamp lands
   first. Award ceremonies for the points the war moved wait for the crawl (`onConquering`, held
   from the push itself and never for more than 30 seconds), and the campaign's ending waits for
-  both. With reduced motion the countries just change hands, ceremonies don't wait, and the verdict
-  holds still for 4 seconds.
+  both. The verdict holds still for 4 seconds with reduced motion.
+- **Less motion** (the user, after pushing, saw the colors change at once even on Russia: their
+  Windows had Animation effects off, so browsers asked for reduced motion and the map skipped the
+  crawl). With reduced motion each country's new color now fades in where it will stay (`fade` on
+  each play), over the same time and in the same order, with no moving front, ring or growing dot,
+  and the map jumps to a conquest out of view rather than flying there; ceremonies wait for it as
+  for a crawl. A dissolve rather than motion, as the platforms advise for that setting. To see the
+  crawl itself on Windows: Settings → Accessibility → Visual effects → Animation effects (on Windows
+  10, Ease of Access → Display → Show animations in Windows).
 - **The tutorial.** The result step's change of hands plays as a conquest, your color crawling over
   Italy from the country you attacked from, each time the map goes from "Before the battle" to
   "After".

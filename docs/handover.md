@@ -1713,7 +1713,7 @@ by time, the last round and what comes after its time, stored and live campaigns
 **Battle endings and conquests on the map** (2026-10-12, at the user's request: "When a game of
 chess is concluded I'd like some animated indicator on who won and on the map I'd like to see the
 winners color crawl over the won countries from the invading/defending country"; the design was
-left to me). Web only: no rule, event or API changed. Not committed yet.
+left to me). Web only: no rule, event or API changed.
 
 - **The verdict over the board** (`BattleVerdict` in `components/game/battle-verdict.tsx`, words
   from `verdictOf` in `lib/verdict.ts`). A game that ends while its board is open plays its ending
@@ -1739,16 +1739,26 @@ left to me). Web only: no rule, event or API changed. Not committed yet.
   shared border (`geo.contact`: up to six, or where a sea lane lands on its coast), its edge
   wavering (a few drifting waves around each point, so fingers of color creep in) behind a pale
   rim, in the country's new color and hatching exactly as it will look, so nothing jumps when the
-  map takes over. A ring marks where it crosses; a microstate's dot pops into the new color. Until
-  its turn comes, a country keeps its old color on the map, however soon the refetch arrives.
+  map takes over. A ring marks where it crosses; a microstate's dot fills with the new color from
+  its middle. Until its turn comes, a country keeps its old color on the map, however soon the
+  refetch arrives.
+- **Slowly, by the country's size** (the user's follow-up the same day: "very slow, between 2 and 8
+  seconds depending on the size of the seized country"). `crawlMs` times each country by its land
+  area (`Shape.areaKm2`, from the dataset's statistics), on the logarithm of it: 2 seconds up to
+  10,000 km² (every microstate), 8 from 10 million km² (Canada, the United States, China, Russia),
+  so each tenfold adds 2 seconds: Belgium about 3, Italy 5, France 5½, India 7. The same country
+  takes as long at any zoom. The front creeps steadily, easing off at the far side (`crawlEase`),
+  and its waves drift as far over a crawl of any length (`CRAWL_DRIFT_S`), so a slow crawl creeps
+  rather than boils. The countries beyond start to fall once a country is past halfway, so a
+  stake of several large countries can take 15 seconds or more.
 - **When it plays.** Everyone sees every conquest. It waits while the map is covered (a phone's
   board or other tabs, a full-screen board, a page over the map room, the campaign's ending) or the
   page is hidden. One of the viewer's own wars that is out of sight, or too small on screen to
   watch, is flown to first. In view, it starts after a 0.9-second beat, so the board's stamp lands
-  first; each country takes 1.5 to 3 seconds, by its size on screen. Award ceremonies for the points
-  the war moved wait for the crawl (`onConquering`, held from the push itself and never for more
-  than 10 seconds), and the campaign's ending waits for both. With reduced motion the countries just
-  change hands, ceremonies don't wait, and the verdict holds still for 4 seconds.
+  first. Award ceremonies for the points the war moved wait for the crawl (`onConquering`, held
+  from the push itself and never for more than 30 seconds), and the campaign's ending waits for
+  both. With reduced motion the countries just change hands, ceremonies don't wait, and the verdict
+  holds still for 4 seconds.
 - **The tutorial.** The result step's change of hands plays as a conquest, your color crawling over
   Italy from the country you attacked from, each time the map goes from "Before the battle" to
   "After".
@@ -1759,18 +1769,22 @@ left to me). Web only: no rule, event or API changed. Not committed yet.
   Cameroon to China first), Ann's attack on China from India (the Largest Population ceremony came
   after the crawl), bot battles watched (a checkmate that took Mexico, Guatemala and Honduras in
   three waves, draws by the fifty-move rule), the phone's board (the crawl waited until the board
-  closed, then flew there and played), reduced motion, and the tutorial's battle and result. For
-  scripted checks: a hidden browser window throttles `requestAnimationFrame`, so the crawl only
-  advances while the window draws, and screenshots from one can be stale.
+  closed, then flew there and played), reduced motion, and the tutorial's battle and result. After
+  the follow-up, Italy's crawl in the tutorial measured 4.97 seconds (4.96 by its area). For
+  scripted checks: a hidden browser window throttles `requestAnimationFrame` (and reports the page
+  hidden, so conquests wait), the map isn't measured until the window draws, and screenshots from
+  one can be stale.
 
 Defaults taken (not asked; easy to change): the verdict only for a game that ends with its board
 open; Victory, Defeat and Draw for the two players and the winner's name for everyone else; about
 4½ seconds; the sweep from the winner's side; every viewer sees every conquest, but the map flies
-only to the viewer's own; the 0.9-second beat and the crawl's timings; the pale rim and the ring;
-ceremonies waiting for the crawl.
+only to the viewer's own; the 0.9-second beat; land area (rather than size on the map) on a
+logarithmic scale, with 10,000 km² and 10 million km² as the ends, for the user's 2 to 8 seconds;
+the next country starting halfway through the last; the pale rim and the ring; ceremonies waiting
+for the whole crawl, however long.
 
-Tests since: web 207 (`lib/verdict.test.ts`, `lib/conquest.test.ts`, `lib/crawl.test.ts`, and where
-countries meet in `lib/map-geometry.test.ts`).
+Tests since: web 210 (`lib/verdict.test.ts`, `lib/conquest.test.ts`, `lib/crawl.test.ts`, and where
+countries meet and their areas in `lib/map-geometry.test.ts`).
 
 ### Victory defaults taken while building (not asked; easy to change)
 

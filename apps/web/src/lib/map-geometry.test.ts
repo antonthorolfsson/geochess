@@ -158,6 +158,11 @@ describe('where countries meet', () => {
     expect(geo.contact('FRA', 'JPN')).toEqual([]);
   });
 
+  it('knows every country’s land area, which sets how long a color takes to crawl over it', () => {
+    for (const shape of geo.shapes) expect(shape.areaKm2).toBeGreaterThan(0);
+    expect(geo.byId.get('RUS')!.areaKm2).toBeGreaterThan(geo.byId.get('BEL')!.areaKm2! * 500);
+  });
+
   it('outlines a country as framed, a microstate by its dot', () => {
     const russia = geo.outline('RUS');
     const focus = geo.focusBounds('RUS')!;

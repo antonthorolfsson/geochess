@@ -14,6 +14,8 @@ export interface Shape {
   name: string;
   value: number;
   micro: boolean;
+  /** Its real land area, where known. */
+  areaKm2: number | null;
   d: string;
   bounds: Bounds;
   anchor: [number, number];
@@ -42,6 +44,7 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
       name: t.name,
       value: t.value,
       micro: t.micro,
+      areaKm2: t.stats.areaKm2,
       d: path(f) ?? '',
       bounds: path.bounds(f),
       anchor: (projection(t.anchor) ?? path.centroid(f)) as [number, number],

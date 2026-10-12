@@ -476,8 +476,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
       setConquests((list) => [...list, ...taken].slice(-24));
       // The same push brings any points the war moved: their ceremony waits for the map to show the
       // countries changing hands, from now (the map says when it's done).
-      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!mapHiddenRef.current && !still) setConquering(true);
+      if (!mapHiddenRef.current) setConquering(true);
     }
     const warById = (warId: string) => current.campaign.wars.find((w) => w.id === warId);
     // A raise met at once from reserves is answered in the same change.

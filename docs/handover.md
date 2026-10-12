@@ -1735,13 +1735,22 @@ left to me). Web only: no rule, event or API changed.
   refetch). The winner's color crawls over the countries taken from the attacker's launching
   country or the defender's target, wave by wave (`conquestSteps`: those bordering it first, then
   those bordering those; a country bordering none of them comes from a neighbor the winner already
-  held, or from the source across the map). Each country's front spreads from points along the
-  shared border (`geo.contact`: up to six, or where a sea lane lands on its coast), its edge
-  wavering (a few drifting waves around each point, so fingers of color creep in) behind a pale
-  rim, in the country's new color and hatching exactly as it will look, so nothing jumps when the
-  map takes over. A ring marks where it crosses; a microstate's dot fills with the new color from
-  its middle. Until its turn comes, a country keeps its old color on the map, however soon the
-  refetch arrives.
+  held, or from the source across the map). Each country's color sweeps across it from one end to
+  the other (`makeSweep`, `sweepPaths`): in from the middle of the shared border (`geo.contact`, or
+  where a sea lane lands, or the source's anchor from across the map), heading for the country's
+  farthest corner, so the front starts at the end nearest where it crosses in and runs to the far
+  end. A blob of the color runs ahead of the front, joined to it by a swell: sized to the country's
+  width where it is (at most a sixth of the way across), wobbling, wandering a little from the
+  country's middle, which `makeSweep` measures in 16 slices along the way. The edge behind wavers
+  (three drifting waves, the finer ones only once they're big enough on screen to draw) behind a
+  pale rim, in the country's new color and hatching exactly as it will look, so nothing jumps when
+  the map takes over. A ring marks where the color starts; a microstate's dot fills with the new
+  color from its middle. Until its turn comes, a country keeps its old color on the map, however
+  soon the refetch arrives.
+- **End to end, with a blob** (2026-10-12, the user's follow-up: "I'd like the new color to crawl
+  over the country on the map from one end to the other with a blob from the new color leading the
+  way"). Before, the front spread as wavering circles from up to six points along the border, which
+  on a long border closed in from the side and read as a fade.
 - **Slowly, by the country's size** (the user's follow-up the same day: "very slow, between 2 and 8
   seconds depending on the size of the seized country"). `crawlMs` times each country by its land
   area (`Shape.areaKm2`, from the dataset's statistics), on the logarithm of it: 2 seconds up to
@@ -1758,14 +1767,14 @@ left to me). Web only: no rule, event or API changed.
   first. Award ceremonies for the points the war moved wait for the crawl (`onConquering`, held
   from the push itself and never for more than 30 seconds), and the campaign's ending waits for
   both. The verdict holds still for 4 seconds with reduced motion.
-- **Less motion** (the user, after pushing, saw the colors change at once even on Russia: their
-  Windows had Animation effects off, so browsers asked for reduced motion and the map skipped the
-  crawl). With reduced motion each country's new color now fades in where it will stay (`fade` on
-  each play), over the same time and in the same order, with no moving front, ring or growing dot,
-  and the map jumps to a conquest out of view rather than flying there; ceremonies wait for it as
-  for a crawl. A dissolve rather than motion, as the platforms advise for that setting. To see the
-  crawl itself on Windows: Settings → Accessibility → Visual effects → Animation effects (on Windows
-  10, Ease of Access → Display → Show animations in Windows).
+- **Less motion.** The crawl plays the same for everyone, reduced motion or not. The user's Windows
+  has Animation effects off, so browsers there ask for reduced motion: at first the map skipped the
+  crawl, then (2026-10-12, first pass) faded each country's new color in instead, and the user saw
+  only that fade and asked for the crawl. A slow fill in place is no flourish, so it plays; the
+  ring and a microstate's dot keep their timing under reduced motion (`--crawl-ms`, exempted from
+  the global cut in `globals.css`); the map still jumps rather than flies to a conquest out of
+  view; the tutorial no longer skips its "Before the battle" map under reduced motion. The verdict
+  over the board still holds still for 4 seconds with reduced motion.
 - **The tutorial.** The result step's change of hands plays as a conquest, your color crawling over
   Italy from the country you attacked from, each time the map goes from "Before the battle" to
   "After".
@@ -1781,6 +1790,15 @@ left to me). Web only: no rule, event or API changed.
   scripted checks: a hidden browser window throttles `requestAnimationFrame` (and reports the page
   hidden, so conquests wait), the map isn't measured until the window draws, and screenshots from
   one can be stale.
+- **Checked, end to end with a blob** (2026-10-12): the desktop app's browser pane stayed hidden,
+  which runs no animation frames at all and times out screenshots of anything animating, so the
+  sweep was checked by rendering the real geometry (`makeSweep`, `sweepPaths` over the dataset's
+  outlines, `geo.contact` for the way in) into a static contact sheet served from the web app's
+  public folder, six moments each for Italy from France, Russia from Kazakhstan, Chile from
+  Argentina, Canada from the United States and China from India, and larger frames of Italy; and in
+  the tutorial's result step, where the overlay drew Italy's sweep (its clip, rim, body and ring all
+  there) with no console errors. Not yet watched moving in a visible browser: worth a look at
+  `/tutorial` (Before the battle → After) on the next pass.
 
 Defaults taken (not asked; easy to change): the verdict only for a game that ends with its board
 open; Victory, Defeat and Draw for the two players and the winner's name for everyone else; about
@@ -1788,9 +1806,12 @@ open; Victory, Defeat and Draw for the two players and the winner's name for eve
 only to the viewer's own; the 0.9-second beat; land area (rather than size on the map) on a
 logarithmic scale, with 10,000 km² and 10 million km² as the ends, for the user's 2 to 8 seconds;
 the next country starting halfway through the last; the pale rim and the ring; ceremonies waiting
-for the whole crawl, however long.
+for the whole crawl, however long; the sweep heading for the farthest corner from where it crosses
+in (so Canada taken from the United States sweeps west to east, from the Alaskan end of the border),
+starting at the end nearest that, with the ring there rather than at the border crossing; the blob's
+size (under half the country's width where it is, at most a sixth of the way across) and lead.
 
-Tests since: web 210 (`lib/verdict.test.ts`, `lib/conquest.test.ts`, `lib/crawl.test.ts`, and where
+Tests since: web 216 (`lib/verdict.test.ts`, `lib/conquest.test.ts`, `lib/crawl.test.ts`, and where
 countries meet and their areas in `lib/map-geometry.test.ts`).
 
 ### Victory defaults taken while building (not asked; easy to change)

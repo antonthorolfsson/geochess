@@ -42,9 +42,6 @@ import {
   type StepProps,
 } from './tutorial-steps';
 
-const reducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /**
  * The guest tutorial: the landing page's sample campaign, played by the visitor from Ada's turn to
  * declare war to the map changing hands. Nothing leaves the browser: the campaign is built locally,
@@ -115,16 +112,14 @@ function Tutorial({ data, signedIn }: { data: MapData; signedIn: boolean | null 
     if (step === null) return;
     const first = shownStep.current === null;
     shownStep.current = step;
-    setMapView(
-      step === 'result' && !reducedMotion() ? 'before' : step === 'result' || step === 'finish' ? 'win' : 'now',
-    );
+    setMapView(step === 'result' ? 'before' : step === 'finish' ? 'win' : 'now');
     if (first) return;
     scrollRef.current?.scrollTo({ top: 0 });
     headingRef.current?.focus({ preventScroll: true });
   }, [step]);
   // The change of hands, played once: the map before the war, then after it.
   useEffect(() => {
-    if (step !== 'result' || reducedMotion()) return;
+    if (step !== 'result') return;
     const timer = setTimeout(() => setMapView((v) => (v === 'before' ? 'win' : v)), 1400);
     return () => clearTimeout(timer);
   }, [step]);

@@ -8,17 +8,7 @@ import { zoom as d3Zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Topology } from 'topojson-specification';
 import type { MapConquest } from '@/lib/conquest';
-import {
-  CRAWL_DRIFT_S,
-  crawlEase,
-  crawlMs,
-  frontAt,
-  frontPaths,
-  makeFront,
-  mixHex,
-  reachOf,
-  type Front,
-} from '@/lib/crawl';
+import { CRAWL_DRIFT_S, crawlEase, crawlMs, makeSweep, mixHex, sweepPaths, type Sweep } from '@/lib/crawl';
 import {
   W,
   buildGeometry,
@@ -43,8 +33,9 @@ const PAPER = '#e4e2d8';
 const AMBER = '#e3a92b';
 const GREASE = '#c8372d';
 
-// Countries changing hands (`conquests`): the winner's color crawls over each from where it crosses in,
-// slowly, for 2 to 8 seconds by the country's size (`crawlMs`).
+// Countries changing hands (`conquests`): the winner's color crawls over each from one end to the other,
+// a blob of it leading the way, slowly, for 2 to 8 seconds by the country's size (`crawlMs`). It plays
+// the same for everyone, reduced motion or not: a slow fill in place, not a flourish.
 /**
  * A beat before a conquest plays in view, so a game's own ending over its board (its stamp coming
  * down) has the moment to itself; flying to one out of view takes about as long.
@@ -125,11 +116,6 @@ export interface WorldMapProps {
 /** A conquest on the map: waiting for the map to be in view, flying to it, crawling, or played out. */
 interface Play extends MapConquest {
   phase: 'waiting' | 'framing' | 'playing' | 'done';
-  /**
-   * For a player who asked for less motion: each country's new color fades in over the same time,
-   * in the same order, instead of crawling across it, with no ring and no flying to it.
-   */
-  fade: boolean;
   /** Each country's crawl, worked out as it starts to play. */
   runs: Run[];
   /** The countries the color has covered. */
@@ -141,12 +127,8 @@ interface Run {
   uid: number;
   id: TerritoryId;
   micro: boolean;
-  front: Front;
-  /** How far the front spreads: from where it first touches the country to past its farthest corner. */
-  near: number;
-  far: number;
-  /** Where the color crosses in, marked as it starts. */
-  entry: Point;
+  /** The color's way across the country, from the end nearest where it crosses in to the far one. */
+  sweep: Sweep;
   /** Milliseconds after the conquest starts. */
   delay: number;
   duration: number;
@@ -477,10 +459,9 @@ export function WorldMap(props: WorldMapProps) {
     for (const c of fresh) queued.current.add(c.key);
     // A picture of a campaign: the countries just change hands.
     if (still) return;
-    const fade = prefersReducedMotion();
     setPlays((list) => [
       ...list,
-      ...fresh.map((c): Play => ({ ...c, phase: 'waiting', fade, runs: [], covered: new Set() })),
+      ...fresh.map((c): Play => ({ ...c, phase: 'waiting', runs: [], covered: new Set() })),
     ]);
   }, [conquests, still]);
 
@@ -508,19 +489,22 @@ export function WorldMap(props: WorldMapProps) {
       for (const step of [...conquest.steps].sort((a, b) => a.wave - b.wave)) {
         const shape = geo.byId.get(step.id);
         if (!shape) continue;
-        // Over the border, or from a sea lane's landing; from a country further off, across the map.
+        // In over the border (from the middle of it), or from a sea lane's landing; from a country
+        // further off, from across the map.
         const contact = step.from ? geo.contact(step.from, step.id) : [];
-        const seeds = contact.length > 0 ? contact : [(step.from && geo.byId.get(step.from)?.anchor) || shape.anchor];
-        const { near, far, entry } = reachOf(seeds, geo.outline(step.id));
+        const origin: Point =
+          contact.length > 0
+            ? [
+                contact.reduce((sum, [x]) => sum + x, 0) / contact.length,
+                contact.reduce((sum, [, y]) => sum + y, 0) / contact.length,
+              ]
+            : (step.from && geo.byId.get(step.from)?.anchor) || shape.anchor;
         const parent = step.from ? runs.get(step.from) : undefined;
         runs.set(step.id, {
           uid: ++runCount,
           id: step.id,
           micro: shape.micro,
-          front: makeFront(seeds),
-          near,
-          far,
-          entry: shape.micro ? shape.anchor : contact.length > 0 ? contact[Math.floor(contact.length / 2)]! : entry,
+          sweep: makeSweep(origin, geo.outline(step.id)),
           delay: parent ? parent.delay + parent.duration * NEXT_AT : lead,
           duration: crawlMs(shape.areaKm2),
         });
@@ -800,7 +784,7 @@ export function WorldMap(props: WorldMapProps) {
             highlighted={highlighted}
             onSelect={select_}
           />
-          {crawling.length > 0 && <ConquestDots byId={geo.byId} plays={crawling} nodes={crawlNodes} />}
+          {crawling.length > 0 && <ConquestDots byId={geo.byId} plays={crawling} />}
           {warPaths && (
             <g pointerEvents="none" aria-hidden="true">
               <path
@@ -1038,10 +1022,9 @@ const keepIn = (nodes: Map<string, SVGElement>, key: string) => (el: SVGElement 
 
 /**
  * Countries changing hands: over each, the winner's color (as the country will wear it, hatching and
- * all) crawls in from where it crosses, behind a pale edge, its front wavering as it goes; for less
- * motion, it fades in over the same time instead. Drawn frame by frame outside React (into `nodes`,
- * shared with the microstates' dots); a country fully covered is handed back to the map in its new
- * color.
+ * all) sweeps from the end nearest where it crosses in to the far one, a blob of the color running
+ * ahead of the front, behind a pale edge, the front wavering as it goes. Drawn frame by frame
+ * outside React (into `nodes`); a country fully covered is handed back to the map in its new color.
  */
 function ConquestLayer({
   geo,
@@ -1086,15 +1069,9 @@ function ConquestLayer({
             onCoveredRef.current(play.key, run.id);
             continue;
           }
-          if (play.fade) {
-            // Less motion: the new color comes in where it will stay, a little more each frame.
-            nodes.get(`${run.uid}:fade`)?.setAttribute('opacity', String(crawlEase(t)));
-            continue;
-          }
           if (run.micro) continue;
-          const { radius, waver } = frontAt(run.near, run.far, crawlEase(t));
           const [body = '', edge = ''] =
-            t < 0 ? [] : frontPaths(run.front, radius, waver, t * CRAWL_DRIFT_S, scale, [0, rim]);
+            t < 0 ? [] : sweepPaths(run.sweep, crawlEase(t), t * CRAWL_DRIFT_S, scale, [0, rim]);
           nodes.get(`${run.uid}:rim`)?.setAttribute('d', edge);
           nodes.get(`${run.uid}:body`)?.setAttribute('d', body);
           nodes.get(`${run.uid}:hatch`)?.setAttribute('d', body);
@@ -1117,15 +1094,6 @@ function ConquestLayer({
           .filter((run) => !run.micro && !play.covered.has(run.id))
           .map((run) => {
             const d = geo.byId.get(run.id)?.d ?? '';
-            if (play.fade) {
-              // Faded in by the frames (from nothing: React sets the opacity only once).
-              return (
-                <g key={run.uid} ref={keep(`${run.uid}:fade`)} opacity={0}>
-                  <path d={d} fill={body} />
-                  <path d={d} fill={`url(#${patternPrefix}-${play.color})`} />
-                </g>
-              );
-            }
             const clip = `${patternPrefix}-crawl-${run.uid}`;
             return (
               <g key={run.uid}>
@@ -1137,10 +1105,10 @@ function ConquestLayer({
                   <path ref={keep(`${run.uid}:body`)} fill={body} />
                   <path ref={keep(`${run.uid}:hatch`)} fill={`url(#${patternPrefix}-${play.color})`} />
                 </g>
-                {/* Where it crosses in: a ring spreading from the border as the color comes over. The
-                    ring grows inside the group that keeps it screen-sized: on one element, browsers
-                    drop the one scale while animating the other. */}
-                <g transform={`translate(${run.entry[0]},${run.entry[1]})`}>
+                {/* Where the color starts: a ring spreading from the end it comes in at. The ring
+                    grows inside the group that keeps it screen-sized: on one element, browsers drop
+                    the one scale while animating the other. */}
+                <g transform={`translate(${run.sweep.start[0]},${run.sweep.start[1]})`}>
                   <g className="counter-scale">
                     <circle
                       className="nss conquest-breach"
@@ -1161,19 +1129,11 @@ function ConquestLayer({
 }
 
 /**
- * A microstate changing hands: its dot fills with the winner's color, inside a spreading ring; for
- * less motion, the color fades in over the dot instead (the frames of `ConquestLayer` set it, in
- * `nodes`).
+ * A microstate changing hands: its dot fills with the winner's color, inside a spreading ring, over
+ * its crawl's time (`--crawl-ms` keeps that time under reduced motion, which cuts other animations
+ * short).
  */
-function ConquestDots({
-  byId,
-  plays,
-  nodes,
-}: {
-  byId: Geometry['byId'];
-  plays: readonly Play[];
-  nodes: Map<string, SVGElement>;
-}) {
+function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly Play[] }) {
   return (
     <g aria-hidden="true" pointerEvents="none">
       {plays.flatMap((play) => {
@@ -1183,30 +1143,24 @@ function ConquestDots({
           .map((run) => {
             const shape = byId.get(run.id);
             if (!shape) return null;
+            const timing = {
+              animationDelay: `${run.delay}ms`,
+              animationDuration: `${run.duration}ms`,
+              '--crawl-ms': `${run.duration}ms`,
+            } as React.CSSProperties;
             return (
               <g key={run.uid} transform={`translate(${shape.anchor[0]},${shape.anchor[1]})`}>
                 <g className="counter-scale">
-                  {play.fade ? (
-                    <circle ref={keepIn(nodes, `${run.uid}:fade`)} r={4.75} fill={hex} opacity={0} />
-                  ) : (
-                    <>
-                      <circle
-                        className="nss conquest-breach"
-                        r={16}
-                        fill="none"
-                        stroke={hex}
-                        strokeWidth={2.5}
-                        style={{ animationDelay: `${run.delay}ms` }}
-                      />
-                      {/* Inside the dot's own outline, filling it from the middle. */}
-                      <circle
-                        className="conquest-dot"
-                        r={4.75}
-                        fill={hex}
-                        style={{ animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` }}
-                      />
-                    </>
-                  )}
+                  <circle
+                    className="nss conquest-breach"
+                    r={16}
+                    fill="none"
+                    stroke={hex}
+                    strokeWidth={2.5}
+                    style={{ animationDelay: `${run.delay}ms` }}
+                  />
+                  {/* Inside the dot's own outline, filling it from the middle. */}
+                  <circle className="conquest-dot" r={4.75} fill={hex} style={timing} />
                 </g>
               </g>
             );

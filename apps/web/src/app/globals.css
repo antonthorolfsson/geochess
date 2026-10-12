@@ -226,9 +226,9 @@
   }
 }
 
-/* Countries changing hands: a ring spreading from where the winner's color crosses in, and a
-   microstate's dot slowly filling with the color from its middle, over its crawl's time. Each waits
-   for its turn (an inline delay; the dot's time is inline too). */
+/* Countries changing hands: a ring spreading from where the winner's color starts over a country,
+   and a microstate's dot slowly filling with the color from its middle, over its crawl's time. Each
+   waits for its turn (an inline delay; the dot's time is inline too, as --crawl-ms). */
 @keyframes conquest-breach {
   from {
     transform: scale(0.25);
@@ -969,5 +969,12 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  /* A country changing hands plays the same for everyone: a slow fill in place, no flourish. */
+  .map-svg .conquest-breach {
+    animation-duration: 1100ms !important;
+  }
+  .map-svg .conquest-dot {
+    animation-duration: var(--crawl-ms, 2000ms) !important;
   }
 }

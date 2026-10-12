@@ -102,9 +102,10 @@ when starting new work.**
 - A game that ends with its board open plays its verdict over the board (`battle-verdict.tsx` in
   `components/game/`, words from `apps/web/src/lib/verdict.ts`). Countries a war moves crawl over
   in their winner's color on the map (`conquests` on `WorldMap`), built from the transfers in the
-  pushed `war.resolved` events (`apps/web/src/lib/conquest.ts`), and award ceremonies (then the
-  campaign's ending) wait for the crawl: anything new that moves countries between players needs
-  transfers there too, or the map just repaints.
+  pushed `war.resolved` events (`apps/web/src/lib/conquest.ts`), and the campaign's ending waits
+  for the crawl: anything new that moves countries between players needs transfers there too, or
+  the map just repaints. Award ceremonies don't wait for it: the room's standings and title tokens
+  react at the refetch, and the card must play alongside them, not after.
 - Diplomacy lives in `apps/server/src/diplomacy/`. Accords go through `mutate()`; the event log is
   public to every member, so private changes (proposals, declines) log no events and call
   `scope.notifyOnly()`. Chat doesn't change the campaign: `chat.ts` skips the campaign lock and

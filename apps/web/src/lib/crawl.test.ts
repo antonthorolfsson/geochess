@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WAVER, crawlEase, frontAt, frontPath, makeFront, mixHex, reachOf } from './crawl';
+import { WAVER, crawlEase, crawlMs, frontAt, frontPath, makeFront, mixHex, reachOf } from './crawl';
 import type { Point } from './map-geometry';
 
 /** A 10 by 10 square, its left edge on x = 0. */
@@ -78,11 +78,39 @@ describe('a front’s outline', () => {
 });
 
 describe('crawlEase', () => {
-  it('runs from 0 to 1, quick at first', () => {
+  it('runs from 0 to 1, a steady creep easing off at the end', () => {
+    expect(crawlEase(-1)).toBe(0);
     expect(crawlEase(0)).toBe(0);
     expect(crawlEase(1)).toBe(1);
     expect(crawlEase(2)).toBe(1);
-    expect(crawlEase(0.25)).toBeGreaterThan(0.4);
+    // A little ahead of an even pace all the way, never racing ahead.
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      expect(crawlEase(t)).toBeGreaterThan(t);
+      expect(crawlEase(t)).toBeLessThan(t + 0.2);
+    }
+  });
+});
+
+describe('crawlMs', () => {
+  it('takes 2 to 8 seconds by the country’s land area', () => {
+    // Liechtenstein and Qatar; Canada and Russia.
+    expect(crawlMs(160)).toBe(2000);
+    expect(crawlMs(10_000)).toBe(2000);
+    expect(crawlMs(9_984_670)).toBeCloseTo(8000, -1);
+    expect(crawlMs(17_125_190)).toBe(8000);
+    // Two seconds for each tenfold: Belgium, Italy, India.
+    expect(crawlMs(30_689)).toBeCloseTo(2974, -1);
+    expect(crawlMs(302_130)).toBeCloseTo(4960, -1);
+    expect(crawlMs(3_287_260)).toBeCloseTo(7034, -1);
+    expect(crawlMs(100_000)).toBeCloseTo(4000);
+  });
+
+  it('takes longer the bigger the country, and the middle when its size isn’t known', () => {
+    const areas = [500, 20_000, 80_000, 400_000, 2_000_000, 9_000_000];
+    const times = areas.map(crawlMs);
+    times.slice(1).forEach((ms, i) => expect(ms).toBeGreaterThan(times[i]!));
+    expect(crawlMs(null)).toBe(5000);
+    expect(crawlMs(Number.NaN)).toBe(5000);
   });
 });
 

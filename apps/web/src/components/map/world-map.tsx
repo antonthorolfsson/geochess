@@ -8,7 +8,17 @@ import { zoom as d3Zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Topology } from 'topojson-specification';
 import type { MapConquest } from '@/lib/conquest';
-import { crawlEase, frontAt, frontPaths, makeFront, mixHex, reachOf, type Front } from '@/lib/crawl';
+import {
+  CRAWL_DRIFT_S,
+  crawlEase,
+  crawlMs,
+  frontAt,
+  frontPaths,
+  makeFront,
+  mixHex,
+  reachOf,
+  type Front,
+} from '@/lib/crawl';
 import {
   W,
   buildGeometry,
@@ -33,7 +43,8 @@ const PAPER = '#e4e2d8';
 const AMBER = '#e3a92b';
 const GREASE = '#c8372d';
 
-// Countries changing hands (`conquests`): the winner's color crawls over each from where it crosses in.
+// Countries changing hands (`conquests`): the winner's color crawls over each from where it crosses in,
+// slowly, for 2 to 8 seconds by the country's size (`crawlMs`).
 /**
  * A beat before a conquest plays in view, so a game's own ending over its board (its stamp coming
  * down) has the moment to itself; flying to one out of view takes about as long.
@@ -42,13 +53,6 @@ const CONQUEST_BEAT_MS = 900;
 const FRAME_CONQUEST_MS = 750;
 /** A country smaller than this on screen is too small to watch a color crawl over. */
 const MIN_SEEN_PX = 28;
-/** A country's crawl takes a base time and more for every pixel it covers on screen, within limits. */
-const CRAWL_BASE_MS = 900;
-const CRAWL_MS_PER_PX = 2.6;
-const CRAWL_MIN_MS = 1500;
-const CRAWL_MAX_MS = 3000;
-/** A microstate's dot taking the color. */
-const DOT_MS = 800;
 /** How far through a country's crawl the countries beyond it start to fall. */
 const NEXT_AT = 0.55;
 /** The pale edge running ahead of the color, in screen pixels. */
@@ -490,10 +494,9 @@ export function WorldMap(props: WorldMapProps) {
     [geo, visibleBox],
   );
 
-  /** Each country's crawl in a conquest, timed for how big it is on screen now, after `lead` milliseconds. */
+  /** Each country's crawl in a conquest, timed by the country's size, after `lead` milliseconds. */
   const runsFor = useCallback(
     (conquest: MapConquest, lead: number): Run[] => {
-      const scale = pxPerUnitRef.current * transformRef.current.k;
       const runs = new Map<TerritoryId, Run>();
       for (const step of [...conquest.steps].sort((a, b) => a.wave - b.wave)) {
         const shape = geo.byId.get(step.id);
@@ -503,7 +506,6 @@ export function WorldMap(props: WorldMapProps) {
         const seeds = contact.length > 0 ? contact : [(step.from && geo.byId.get(step.from)?.anchor) || shape.anchor];
         const { near, far, entry } = reachOf(seeds, geo.outline(step.id));
         const parent = step.from ? runs.get(step.from) : undefined;
-        const across = (far - near) * scale;
         runs.set(step.id, {
           uid: ++runCount,
           id: step.id,
@@ -513,9 +515,7 @@ export function WorldMap(props: WorldMapProps) {
           far,
           entry: shape.micro ? shape.anchor : contact.length > 0 ? contact[Math.floor(contact.length / 2)]! : entry,
           delay: parent ? parent.delay + parent.duration * NEXT_AT : lead,
-          duration: shape.micro
-            ? DOT_MS
-            : Math.min(CRAWL_MAX_MS, Math.max(CRAWL_MIN_MS, CRAWL_BASE_MS + across * CRAWL_MS_PER_PX)),
+          duration: crawlMs(shape.areaKm2),
         });
       }
       return [...runs.values()];
@@ -1070,7 +1070,7 @@ function ConquestLayer({
           if (run.micro) continue;
           const { radius, waver } = frontAt(run.near, run.far, crawlEase(t));
           const [body = '', edge = ''] =
-            t < 0 ? [] : frontPaths(run.front, radius, waver, elapsed / 1000, scale, [0, rim]);
+            t < 0 ? [] : frontPaths(run.front, radius, waver, t * CRAWL_DRIFT_S, scale, [0, rim]);
           paths.current.get(`${run.uid}:rim`)?.setAttribute('d', edge);
           paths.current.get(`${run.uid}:body`)?.setAttribute('d', body);
           paths.current.get(`${run.uid}:hatch`)?.setAttribute('d', body);
@@ -1129,7 +1129,7 @@ function ConquestLayer({
   );
 }
 
-/** A microstate changing hands: its dot takes the winner's color with a pop, inside a spreading ring. */
+/** A microstate changing hands: its dot fills with the winner's color, inside a spreading ring. */
 function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly Play[] }) {
   return (
     <g aria-hidden="true" pointerEvents="none">
@@ -1140,7 +1140,6 @@ function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly
           .map((run) => {
             const shape = byId.get(run.id);
             if (!shape) return null;
-            const timing = { animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` };
             return (
               <g key={run.uid} transform={`translate(${shape.anchor[0]},${shape.anchor[1]})`}>
                 <g className="counter-scale">
@@ -1150,9 +1149,15 @@ function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly
                     fill="none"
                     stroke={hex}
                     strokeWidth={2.5}
-                    style={timing}
+                    style={{ animationDelay: `${run.delay}ms` }}
                   />
-                  <circle className="conquest-dot" r={5.5} fill={hex} stroke={INK} strokeWidth={1.5} style={timing} />
+                  {/* Inside the dot's own outline, filling it from the middle. */}
+                  <circle
+                    className="conquest-dot"
+                    r={4.75}
+                    fill={hex}
+                    style={{ animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` }}
+                  />
                 </g>
               </g>
             );

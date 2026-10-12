@@ -135,14 +135,37 @@ export function frontPaths(
   return paths;
 }
 
+/** The shortest and longest crawls, and the land areas they come at. */
+export const CRAWL_MS = [2000, 8000] as const;
+const CRAWL_AREA_KM2 = [10_000, 10_000_000] as const;
+
 /**
- * How far along its crawl a country is, `t` (0 to 1) of the way through its time: quick to cross
- * the border, slowing as it fills the far side.
+ * How long a color takes to crawl over a country, by its land area: 2 seconds for a microstate or
+ * anything up to 10,000 km², 8 for the giants from 10 million km² (Canada, the United States, China,
+ * Russia), and in between by the logarithm of the area, so each tenfold adds 2 seconds: Belgium
+ * about 3, Italy 5, India 7. An unknown area takes the middle, 5.
+ */
+export function crawlMs(areaKm2: number | null): number {
+  if (areaKm2 === null || !Number.isFinite(areaKm2)) return (CRAWL_MS[0] + CRAWL_MS[1]) / 2;
+  const [small, large] = CRAWL_AREA_KM2;
+  const share = Math.log(Math.max(areaKm2, 1) / small) / Math.log(large / small);
+  return CRAWL_MS[0] + (CRAWL_MS[1] - CRAWL_MS[0]) * Math.min(1, Math.max(0, share));
+}
+
+/**
+ * How far along its crawl a country is, `t` (0 to 1) of the way through its time: a steady creep
+ * that eases off as it fills the far side.
  */
 export const crawlEase = (t: number): number => {
   const c = Math.min(1, Math.max(0, t));
-  return 1 - (1 - c) ** 2.2;
+  return 1 - (1 - c) ** 1.4;
 };
+
+/**
+ * How far the waves along a front's edge drift over a whole crawl, in seconds of their own speed:
+ * the same whether the crawl takes 2 seconds or 8, so a slow crawl creeps rather than boils.
+ */
+export const CRAWL_DRIFT_S = 2.5;
 
 /** One color blended over another: `#rrggbb`, `amount` (0 to 1) of `top` over `bottom`. */
 export function mixHex(top: string, bottom: string, amount: number): string {

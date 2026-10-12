@@ -227,7 +227,8 @@
 }
 
 /* Countries changing hands: a ring spreading from where the winner's color crosses in, and a
-   microstate's dot taking the color with a pop. Each waits for its turn (an inline delay). */
+   microstate's dot slowly filling with the color from its middle, over its crawl's time. Each waits
+   for its turn (an inline delay; the dot's time is inline too). */
 @keyframes conquest-breach {
   from {
     transform: scale(0.25);
@@ -242,18 +243,15 @@
   animation: conquest-breach 1100ms cubic-bezier(0.15, 0.7, 0.3, 1) both;
 }
 @keyframes conquest-dot {
-  0% {
+  from {
     transform: scale(0);
   }
-  60% {
-    transform: scale(1.5);
-  }
-  100% {
+  to {
     transform: scale(1);
   }
 }
 .map-svg .conquest-dot {
-  animation: conquest-dot 800ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  animation: conquest-dot 2000ms cubic-bezier(0.3, 0.6, 0.4, 1) both;
 }
 
 /* Chess board ---------------------------------------------------------------------------- */

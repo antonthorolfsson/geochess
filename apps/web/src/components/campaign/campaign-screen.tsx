@@ -90,8 +90,11 @@ const MAIN_LABEL: Record<CampaignStatus, string> = {
 };
 /** The desktop's left column, which the rail's buttons open over the map when it's folded. */
 const CAMPAIGN_PANEL_ID = 'campaign-panel';
-/** The longest award ceremonies wait (with the page in view) for countries to change hands on the map. */
-const CONQUEST_HOLD_MS = 10_000;
+/**
+ * The longest award ceremonies wait (with the page in view) for countries to change hands on the
+ * map: a crawl takes up to 8 seconds a country, and a stake's countries fall one after another.
+ */
+const CONQUEST_HOLD_MS = 30_000;
 
 /** What the header's calls to action lead to, most pressing first. */
 type ActionKind = 'pick' | 'mission' | 'move' | 'turn' | 'answer';

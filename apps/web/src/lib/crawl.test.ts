@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOB, SLICES, WAVER, crawlEase, crawlMs, makeSweep, mixHex, sweepFront, sweepPath, sweepPaths } from './crawl';
+import { WAVER, crawlEase, crawlMs, makeSweep, mixHex, sweepFront, sweepPath, sweepPaths } from './crawl';
 import type { Point } from './map-geometry';
 
 /** A boat 10 long and 4 wide, its blunt end on x = 0 and its prow at [10, 2]. */
@@ -46,15 +46,6 @@ describe('a sweep', () => {
     expect(sweep.start).toEqual([0, 0]);
   });
 
-  it('keeps the country’s middle and width by slices, narrowing to the prow', () => {
-    expect(sweep.middle).toHaveLength(SLICES);
-    for (const m of sweep.middle) expect(m).toBeCloseTo(0);
-    expect(sweep.half[0]).toBeCloseTo(2);
-    expect(sweep.half[8]).toBeCloseTo(2);
-    expect(sweep.half[SLICES - 1]).toBeLessThan(1);
-    sweep.half.slice(9).forEach((h, i) => expect(h).toBeLessThanOrEqual(sweep.half[8 + i]! + 1e-9));
-  });
-
   it('copes with a country of one corner', () => {
     const dot = makeSweep([3, 3], [[3, 3]], () => 0.5);
     expect(dot.along).toEqual([1, 0]);
@@ -77,57 +68,48 @@ describe('a sweep’s front', () => {
     expect(sweepFront(sweep, 0.5, 0).front).toBeLessThan(end.front);
   });
 
-  it('runs a blob ahead of the edge, sized to the country where it is', () => {
-    const { front, waver, edge, blob } = sweepFront(sweep, 0.4, 0);
-    expect(blob.s).toBeGreaterThan(edge(blob.n));
-    // Within its own radius of the edge, whatever the waves there: the swell under it joins them.
-    expect(blob.s - blob.radius).toBeLessThan(edge(blob.n) + blob.radius);
-    expect(Math.abs(edge(blob.n) - front)).toBeLessThanOrEqual(waver + 1e-9);
-    expect(blob.radius).toBeCloseTo(Math.min(BLOB.ofHalf * 2, BLOB.ofLength * 10));
-    expect(Math.abs(blob.n)).toBeLessThan(2);
-    // Smaller in the prow.
-    expect(sweepFront(sweep, 0.95, 0).blob.radius).toBeLessThan(blob.radius);
+  it('wavers within its waver of the front, and more as it comes in', () => {
+    const early = sweepFront(sweep, 0.1, 0.4);
+    const later = sweepFront(sweep, 0.6, 0.4);
+    expect(later.waver).toBeGreaterThan(early.waver);
+    for (const n of [-2, -1, 0, 1, 2]) {
+      expect(Math.abs(later.edge(n) - later.front)).toBeLessThanOrEqual(later.waver + 1e-9);
+    }
+    // Not flat: the waves show.
+    expect(later.edge(-2)).not.toBeCloseTo(later.edge(1), 3);
   });
 });
 
 describe('a sweep’s outline', () => {
   const sweep = makeSweep([0, 2], BOAT, () => 0.5);
 
-  it('is the shape behind the front and the blob ahead of it, closed and wound the same way', () => {
+  it('is the shape behind the wavering front, closed', () => {
     const d = sweepPath(sweep, 0.5, 0.4, 20);
-    const shapes = d.split('z').filter(Boolean);
-    expect(shapes).toHaveLength(2);
-    const turn = (shape: string) => {
-      const points = ends(shape);
-      let twice = 0;
-      points.forEach(([x0, y0], i) => {
-        const [x1, y1] = points[(i + 1) % points.length]!;
-        twice += x0 * y1 - x1 * y0;
-      });
-      return Math.sign(twice);
-    };
-    expect(turn(shapes[0]!)).toBe(turn(shapes[1]!));
-    // The blob sits ahead of the edge, within the country's width.
-    const { front, waver, blob } = sweepFront(sweep, 0.5, 0.4, 20);
-    for (const [x, y] of ends(shapes[1]!)) {
-      expect(x).toBeGreaterThan(front - waver);
-      expect(Math.abs(x - blob.s)).toBeLessThanOrEqual(blob.radius * 1.2 + 0.1);
-      expect(Math.abs(y - 2)).toBeLessThan(2.5);
+    expect(d.split('z').filter(Boolean)).toHaveLength(1);
+    const { front, waver } = sweepFront(sweep, 0.5, 0.4, 20);
+    // The front runs across the country, then the shape turns back behind it.
+    const points = ends(d);
+    const across = points.slice(0, -2);
+    expect(across.length).toBeGreaterThan(16);
+    for (const [x] of across) {
+      expect(x).toBeGreaterThanOrEqual(front - waver - 0.01);
+      expect(x).toBeLessThanOrEqual(front + waver + 0.01);
     }
+    expect(across[0]![1]).toBeLessThan(0);
+    expect(across.at(-1)![1]).toBeGreaterThan(4);
+    for (const [x] of points.slice(-2)) expect(x).toBeLessThan(0);
   });
 
   it('covers nothing at first and everything at the end', () => {
-    const atStart = ends(sweepPath(sweep, 0, 0, 20).split('z')[0]!);
-    for (const [x] of atStart) expect(x).toBeLessThanOrEqual(BLOB.ofLength * 10 * 1.2 + 0.1);
-    const atEnd = ends(sweepPath(sweep, 1, 0, 20).split('z')[0]!);
-    // The front, before the shape turns back behind the country.
-    for (const [x] of atEnd.slice(0, -2)) expect(x).toBeGreaterThanOrEqual(10 - 0.01);
+    for (const [x] of ends(sweepPath(sweep, 0, 0, 20))) expect(x).toBeLessThanOrEqual(0.01);
+    const atEnd = ends(sweepPath(sweep, 1, 0, 20)).slice(0, -2);
+    for (const [x] of atEnd) expect(x).toBeGreaterThanOrEqual(10 - 0.01);
   });
 
   it('draws the rim the same way, further ahead', () => {
     const [body, rim] = sweepPaths(sweep, 0.5, 0.4, 20, [0, 0.3]);
-    const front = ends(body!.split('z')[0]!).slice(0, -2);
-    const ahead = ends(rim!.split('z')[0]!).slice(0, -2);
+    const front = ends(body!).slice(0, -2);
+    const ahead = ends(rim!).slice(0, -2);
     expect(ahead).toHaveLength(front.length);
     front.forEach(([x, y], i) => {
       expect(ahead[i]![0]).toBeCloseTo(x + 0.3, 1);

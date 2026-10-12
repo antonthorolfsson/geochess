@@ -33,9 +33,9 @@ const PAPER = '#e4e2d8';
 const AMBER = '#e3a92b';
 const GREASE = '#c8372d';
 
-// Countries changing hands (`conquests`): the winner's color crawls over each from one end to the other,
-// a blob of it leading the way, slowly, for 2 to 8 seconds by the country's size (`crawlMs`). It plays
-// the same for everyone, reduced motion or not: a slow fill in place, not a flourish.
+// Countries changing hands (`conquests`): the winner's color bleeds over each from one end to the other,
+// slowly, for 2 to 8 seconds by the country's size (`crawlMs`). It plays the same for everyone, reduced
+// motion or not: a slow fill in place, not a flourish.
 /**
  * A beat before a conquest plays in view, so a game's own ending over its board (its stamp coming
  * down) has the moment to itself; flying to one out of view takes about as long.
@@ -1022,9 +1022,9 @@ const keepIn = (nodes: Map<string, SVGElement>, key: string) => (el: SVGElement 
 
 /**
  * Countries changing hands: over each, the winner's color (as the country will wear it, hatching and
- * all) sweeps from the end nearest where it crosses in to the far one, a blob of the color running
- * ahead of the front, behind a pale edge, the front wavering as it goes. Drawn frame by frame
- * outside React (into `nodes`); a country fully covered is handed back to the map in its new color.
+ * all) bleeds from the end nearest where it crosses in to the far one, behind a pale edge, its front
+ * wavering as it goes. Drawn frame by frame outside React (into `nodes`); a country fully covered is
+ * handed back to the map in its new color.
  */
 function ConquestLayer({
   geo,

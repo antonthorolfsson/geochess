@@ -1710,6 +1710,68 @@ outage, deadlines either side of a late-processed end, pause and resume, claims 
 by time, the last round and what comes after its time, stored and live campaigns staying manual),
 883 in all.
 
+**Battle endings and conquests on the map** (2026-10-12, at the user's request: "When a game of
+chess is concluded I'd like some animated indicator on who won and on the map I'd like to see the
+winners color crawl over the won countries from the invading/defending country"; the design was
+left to me). Web only: no rule, event or API changed. Not committed yet.
+
+- **The verdict over the board** (`BattleVerdict` in `components/game/battle-verdict.tsx`, words
+  from `verdictOf` in `lib/verdict.ts`). A game that ends while its board is open plays its ending
+  over the board; a board opened afterwards just shows the result. The board dims, the winner's
+  color and hatching (as their empire wears it on the map) sweep across it from the winner's side,
+  and a card comes in: "Battle for Libya", then "Victory" or "Defeat" stamped for the two players
+  (signal amber or grease red, with a puff of ink and a ring as it lands, and a buzz on phones), or
+  "Bo wins" for anyone watching; under it how the game ended and what it does to the war ("Won by
+  checkmate · Libya is yours", "Lost on time · You lose Chad and Niger", "By agreement · Libya
+  holds", "Drawn by stalemate · An Armageddon game decides it"). The war's side of it comes from
+  the rules (`afterGame`, `warTransfers`), since the war resolves a moment after the game ends. A
+  drawn Armageddon names Black the winner (`gameWinner`). It goes after about 4½ seconds on screen
+  (hidden time doesn't count) or at a tap. The player strips keep a small "Won" (or "Draw") stamp
+  by the winner's name, stamped on as the verdict lands. Screen readers hear one sentence. The
+  tutorial's battle plays the same verdict at its mate.
+- **Conquests on the map** (`conquests` on `WorldMap`; planned in `lib/conquest.ts`, drawn with
+  `lib/crawl.ts`). Each `war.resolved` push with transfers becomes a conquest for each way countries
+  went (`conquestsFrom`, read against the campaign as it stood: the push arrives ahead of the
+  refetch). The winner's color crawls over the countries taken from the attacker's launching
+  country or the defender's target, wave by wave (`conquestSteps`: those bordering it first, then
+  those bordering those; a country bordering none of them comes from a neighbor the winner already
+  held, or from the source across the map). Each country's front spreads from points along the
+  shared border (`geo.contact`: up to six, or where a sea lane lands on its coast), its edge
+  wavering (a few drifting waves around each point, so fingers of color creep in) behind a pale
+  rim, in the country's new color and hatching exactly as it will look, so nothing jumps when the
+  map takes over. A ring marks where it crosses; a microstate's dot pops into the new color. Until
+  its turn comes, a country keeps its old color on the map, however soon the refetch arrives.
+- **When it plays.** Everyone sees every conquest. It waits while the map is covered (a phone's
+  board or other tabs, a full-screen board, a page over the map room, the campaign's ending) or the
+  page is hidden. One of the viewer's own wars that is out of sight, or too small on screen to
+  watch, is flown to first. In view, it starts after a 0.9-second beat, so the board's stamp lands
+  first; each country takes 1.5 to 3 seconds, by its size on screen. Award ceremonies for the points
+  the war moved wait for the crawl (`onConquering`, held from the push itself and never for more
+  than 10 seconds), and the campaign's ending waits for both. With reduced motion the countries just
+  change hands, ceremonies don't wait, and the verdict holds still for 4 seconds.
+- **The tutorial.** The result step's change of hands plays as a conquest, your color crawling over
+  Italy from the country you attacked from, each time the map goes from "Before the battle" to
+  "After".
+- **Checked in the browser** (dev server; "Conquest Check", Ann and two level-1 bots,
+  correspondence; Chromium at 1024 × 660 and 375 × 812, the motion preference overridden in the
+  page): Ann resigning her attack on Algeria (Alpha's color took Libya, then Sudan from Libya),
+  Bravo's attack on Cameroon, Alpha's on China resigned with the board closed (the map flew from
+  Cameroon to China first), Ann's attack on China from India (the Largest Population ceremony came
+  after the crawl), bot battles watched (a checkmate that took Mexico, Guatemala and Honduras in
+  three waves, draws by the fifty-move rule), the phone's board (the crawl waited until the board
+  closed, then flew there and played), reduced motion, and the tutorial's battle and result. For
+  scripted checks: a hidden browser window throttles `requestAnimationFrame`, so the crawl only
+  advances while the window draws, and screenshots from one can be stale.
+
+Defaults taken (not asked; easy to change): the verdict only for a game that ends with its board
+open; Victory, Defeat and Draw for the two players and the winner's name for everyone else; about
+4½ seconds; the sweep from the winner's side; every viewer sees every conquest, but the map flies
+only to the viewer's own; the 0.9-second beat and the crawl's timings; the pale rim and the ring;
+ceremonies waiting for the crawl.
+
+Tests since: web 207 (`lib/verdict.test.ts`, `lib/conquest.test.ts`, `lib/crawl.test.ts`, and where
+countries meet in `lib/map-geometry.test.ts`).
+
 ### Victory defaults taken while building (not asked; easy to change)
 
 - **Generation.** Public targets: a subregion of 5–12 countries worth 20–55 that isn't a whole
@@ -2080,6 +2142,9 @@ pnpm format       # Prettier
   The sheet is measured just after the zoom that opens it, so a zoom asked for from outside
   (`focus`, `fit`) is done again if the room changes within a moment. One country is framed on
   `focusBounds()`, which leaves out pieces stranded across the date line or far out at sea.
+  Countries changing hands crawl over in their winner's color (`conquests`), drawn frame by frame
+  outside React by `ConquestLayer`; the map shows their old owners (`shownOwners`) until each is
+  covered.
 - **Visual language** (plan section 9): gunmetal, panel, olive-drab land, deep sea, grease-pencil
   red for wars (`.btn-war`), signal amber for alerts and your turn; Sofia Sans Condensed with Saira
   Stencil for names and headlines only; plain button labels; 44px tap targets; reduced motion
@@ -2144,14 +2209,14 @@ Smaller follow-ups, none blocking:
 
 ## File map
 
-| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `projection`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                                                                                 |
-| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                                                                                                         |
-| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members), `0012_over_the_board`, `0013_titles`, `0014_turns_ended_round`, `0015_delete_finished`, `0016_round_schedule` (`campaigns.next_round_at`, `round_paused_at`)                                                   |
-| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, settings page and fields, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `new-campaign-screen.tsx` (quick start or advanced), `notifications.tsx` |
-| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `outcomes.ts` (what a war could change, in words), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts`                                      |
+| Where                      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/rules/src/`      | `war.ts`, `handicap.ts`, `turns.ts`, `diplomacy.ts`, `chess.ts`, `bots.ts` (levels, call signs), `openings.ts`, `stats.ts`, `draft.ts`, `graph.ts`, `config.ts`, `colors.ts`, `dataset.ts`, `protocol.ts`, `victory/*` (missions: `catalog`, `evaluate`, `blockers`, `generate`, `claims`, `projection`, `text`, `world`), `test-fixtures.ts` (`@empire/rules/testing`: `lineDataset`, `warDataset`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `packages/data/`           | `config/*.yaml`, `scripts/build.ts` and `scripts/lib/*`, `datasets/2026.1/`, `2026.2/` and `2026.3/`, `scripts/openings.ts` and `openings/openings.json`, `test/datasets.test.ts`, `test/openings.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apps/server/src/`         | `app.ts`, `context.ts`, `campaigns/{mutate,routes,service,views}.ts`, `wars/{board,games,peace,routes,scheduler,service,turns,views}.ts`, `diplomacy/{accords,chat,routes,views}.ts`, `stats/{openings,routes,service}.ts`, `victory/{settle,state,selection,finish,lobby,views,routes,scheduler}.ts`, `bots/{runner,decide,state,engine,chess,draft,lobby,standins,guard,ids,routes}.ts`, `ratings/{lichess,service,routes}.ts`, `notifications/*`, `auth/*`, `realtime/*`, `db/*`, `lib/*`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `apps/server/drizzle/`     | Migrations `0000_init` … `0002_autodraft_fallback`, `0003_wars` (wars, games, member tokens), `0004_push_subscriptions`, `0005_diplomacy` (accords, messages, chat reads, reputation), `0006_victory` (mission players, claims, awards, results), `0007_passwords` (`users.password_hash`), `0008_war_answers` (peace offers, reserves, fortifications), `0009_declaration_turns` (turn order, passes, whose turn), `0010_bots` (`members.bot_level`, `bot_round`), `0011_ratings` (Lichess ratings on users, claimed and frozen ratings on members), `0012_over_the_board`, `0013_titles`, `0014_turns_ended_round`, `0015_delete_finished`, `0016_round_schedule` (`campaigns.next_round_at`, `round_paused_at`)                                                                                                                                                                                        |
+| `apps/web/src/components/` | `campaign/*` (screen, room context, lobby, settings page and fields, draft, wars panel, war detail, declare war, stake builder, territory and empire panels), `diplo/*` (Diplo panel, feed, conversations, accords, dispatch lines, composer), `empire/*` (empire page, compare page, history chart, war record, chess profile), `game/*` (board, game panel, the verdict over the board), `map/world-map.tsx`, `rules/*` (rules guide, `/rules` page, campaign rules page), `landing/*` (the home page's sections, its sample campaign and step pictures), `tutorial/*` (the guest tutorial: screen, steps, battle), `home-screen.tsx` (the landing page), `campaigns-screen.tsx` (your campaigns, name and password), `new-campaign-screen.tsx` (quick start or advanced), `notifications.tsx`                                                                                                          |
+| `apps/web/src/lib/`        | `api.ts`, `queries.ts` (incl. games and stats), `chat.ts` (feed, conversation and unread queries and their live updates), `realtime.tsx`, `campaign.ts` (derived model), `map-geometry.ts` (map shapes and framing, where countries meet), `conquest.ts` (countries changing hands, as the map plays them), `crawl.ts` (a conquest's crawling front), `verdict.ts` (a finished game in words), `empire.ts` (real-world totals and rankings), `compare.ts` (empires side by side), `wars.ts` (war and game text, clocks), `outcomes.ts` (what a war could change, in words), `rules-text.ts` (settings in words), `sample-campaign.ts` (the landing page's sample), `tutorial.ts` (the guest tutorial's scenario and steps), `room-layout.ts` (screen columns), `use-chat-scroll.ts`, `use-document-title.ts`, `use-element-width.ts`, `use-element-size.ts`, `use-my-games.ts`, `use-now.ts`, `format.ts` |
 
 API: `/api/me` (and `PUT /api/me/password`), `/api/auth/{dev,email,email/verify,password,lichess,lichess/callback,logout}`,
 `/api/campaigns` (list, create), `/api/campaigns/:id` (get, patch, delete),

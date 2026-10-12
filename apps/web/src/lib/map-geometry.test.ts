@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Topology } from 'topojson-specification';
 import { describe, expect, it } from 'vitest';
-import { W, buildGeometry, frameAround, union, type Bounds } from './map-geometry';
+import { W, buildGeometry, frameAround, spreadAlong, union, type Bounds } from './map-geometry';
 
 // The real map: the question is how real countries frame.
 const require = createRequire(import.meta.url);
@@ -120,5 +120,73 @@ describe('focusBounds', () => {
     const micro = geo.shapes.find((s) => s.micro)!;
     expect(geo.focusBounds(micro.id)).toEqual([micro.anchor, micro.anchor]);
     expect(geo.focusBounds('NOWHERE')).toBeNull();
+  });
+});
+
+describe('where countries meet', () => {
+  const grown = ([[x0, y0], [x1, y1]]: Bounds, by: number): Bounds => [
+    [x0 - by, y0 - by],
+    [x1 + by, y1 + by],
+  ];
+
+  it('marks a land border along its length', () => {
+    const pyrenees = geo.contact('FRA', 'ESP');
+    expect(pyrenees.length).toBeGreaterThan(1);
+    expect(pyrenees.length).toBeLessThanOrEqual(6);
+    // On the border: in both countries' boxes, and well apart from each other.
+    for (const p of pyrenees) {
+      expect(has(grown(box('FRA'), 0.5), p)).toBe(true);
+      expect(has(grown(box('ESP'), 0.5), p)).toBe(true);
+    }
+    const [first, last] = [pyrenees[0]!, pyrenees.at(-1)!];
+    expect(Math.hypot(last[0] - first[0], last[1] - first[1])).toBeGreaterThan(3);
+    // Either way round.
+    expect(geo.contact('ESP', 'FRA')).toHaveLength(pyrenees.length);
+  });
+
+  it('lands a crossing by sea on the far coast', () => {
+    const [landing, ...more] = geo.contact('GBR', 'FRA');
+    expect(more).toEqual([]);
+    expect(has(grown(box('FRA'), 0.5), landing!)).toBe(true);
+    // The other way, on Britain's coast.
+    const [back] = geo.contact('FRA', 'GBR');
+    expect(has(grown(box('GBR'), 0.5), back!)).toBe(true);
+    expect(back).not.toEqual(landing);
+  });
+
+  it('has nothing for countries that don’t touch', () => {
+    expect(geo.contact('FRA', 'JPN')).toEqual([]);
+  });
+
+  it('outlines a country as framed, a microstate by its dot', () => {
+    const russia = geo.outline('RUS');
+    const focus = geo.focusBounds('RUS')!;
+    expect(russia.length).toBeGreaterThan(100);
+    for (const p of russia) expect(has(grown(focus, 1.01), p)).toBe(true);
+    const micro = geo.shapes.find((s) => s.micro)!;
+    expect(geo.outline(micro.id)).toEqual([micro.anchor]);
+  });
+});
+
+describe('spreadAlong', () => {
+  it('spreads points evenly along lines, in the middle of each stretch', () => {
+    const line: [number, number][] = [
+      [0, 0],
+      [8, 0],
+      [24, 0],
+    ];
+    expect(spreadAlong([line], 6, 8)).toEqual([
+      [3, 0],
+      [9, 0],
+      [15, 0],
+      [21, 0],
+    ]);
+    expect(spreadAlong([line], 6, 2)).toEqual([
+      [6, 0],
+      [18, 0],
+    ]);
+    expect(spreadAlong([line], 100, 8)).toEqual([[12, 0]]);
+    expect(spreadAlong([[[4, 5]]], 6, 8)).toEqual([[4, 5]]);
+    expect(spreadAlong([], 6, 8)).toEqual([]);
   });
 });

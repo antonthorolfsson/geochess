@@ -7,9 +7,21 @@ import 'd3-transition';
 import { zoom as d3Zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Topology } from 'topojson-specification';
-import { W, buildGeometry, frameAround, union, type Bounds, type Geometry, type Shape } from '@/lib/map-geometry';
+import type { MapConquest } from '@/lib/conquest';
+import { crawlEase, frontAt, frontPaths, makeFront, mixHex, reachOf, type Front } from '@/lib/crawl';
+import {
+  W,
+  buildGeometry,
+  frameAround,
+  union,
+  type Bounds,
+  type Geometry,
+  type Point,
+  type Shape,
+} from '@/lib/map-geometry';
 import { HATCH_TILE, HatchTile, patternRotation, svgId } from '../hatch';
 import { FullscreenIcon } from '../ui';
+import { usePageVisible } from '../victory/score-effects';
 
 const MAX_ZOOM = 40;
 /** How long after a zoom is asked for it is done again if the room left for the map changes. */
@@ -20,6 +32,30 @@ const INK = '#161b1e';
 const PAPER = '#e4e2d8';
 const AMBER = '#e3a92b';
 const GREASE = '#c8372d';
+
+// Countries changing hands (`conquests`): the winner's color crawls over each from where it crosses in.
+/**
+ * A beat before a conquest plays in view, so a game's own ending over its board (its stamp coming
+ * down) has the moment to itself; flying to one out of view takes about as long.
+ */
+const CONQUEST_BEAT_MS = 900;
+const FRAME_CONQUEST_MS = 750;
+/** A country smaller than this on screen is too small to watch a color crawl over. */
+const MIN_SEEN_PX = 28;
+/** A country's crawl takes a base time and more for every pixel it covers on screen, within limits. */
+const CRAWL_BASE_MS = 900;
+const CRAWL_MS_PER_PX = 2.6;
+const CRAWL_MIN_MS = 1500;
+const CRAWL_MAX_MS = 3000;
+/** A microstate's dot taking the color. */
+const DOT_MS = 800;
+/** How far through a country's crawl the countries beyond it start to fall. */
+const NEXT_AT = 0.55;
+/** The pale edge running ahead of the color, in screen pixels. */
+const RIM_PX = 2.5;
+/** A conquest played out holds its colors until the campaign shows the new owners, or this long. */
+const SETTLE_CONQUEST_MS = 5000;
+const NO_CONQUESTS: readonly MapConquest[] = [];
 
 export interface WorldMapProps {
   topo: Topology;
@@ -66,9 +102,47 @@ export interface WorldMapProps {
    * controls, and nothing to click, drag, zoom or focus, so the page scrolls over it.
    */
   still?: boolean;
-  /** Something covers the whole map for now (a phone's other tabs, a game): nothing on it takes focus. */
+  /**
+   * Something covers the whole map for now (a phone's other tabs, a game, a page): nothing on it
+   * takes focus, and conquests wait until it's back in view.
+   */
   covered?: boolean;
+  /**
+   * Countries changing hands in wars: the winner's color crawls over them from where the war was
+   * fought, as soon as the map is in view (framing the player's own wars first, if they're out of
+   * sight). Until a country's turn comes, it keeps its old color. Each plays once, by its key.
+   */
+  conquests?: readonly MapConquest[];
+  /** Hears whether conquests are playing in view, or about to: what plays over the map can wait for them. */
+  onConquering?(busy: boolean): void;
 }
+
+/** A conquest on the map: waiting for the map to be in view, flying to it, crawling, or played out. */
+interface Play extends MapConquest {
+  phase: 'waiting' | 'framing' | 'playing' | 'done';
+  /** Each country's crawl, worked out as it starts to play. */
+  runs: Run[];
+  /** The countries the color has covered. */
+  covered: ReadonlySet<TerritoryId>;
+}
+
+/** One country's crawl. */
+interface Run {
+  uid: number;
+  id: TerritoryId;
+  micro: boolean;
+  front: Front;
+  /** How far the front spreads: from where it first touches the country to past its farthest corner. */
+  near: number;
+  far: number;
+  /** Where the color crosses in, marked as it starts. */
+  entry: Point;
+  /** Milliseconds after the conquest starts. */
+  delay: number;
+  duration: number;
+}
+
+let runCount = 0;
 
 export interface MissionOverlayProps {
   targets: readonly TerritoryId[];
@@ -141,6 +215,7 @@ export function WorldMap(props: WorldMapProps) {
     fullscreen,
     still = false,
     covered = false,
+    conquests = NO_CONQUESTS,
   } = props;
   const geo = useMemo(() => buildGeometry(topo, dataset), [topo, dataset]);
   const patternPrefix = svgId(useId());
@@ -382,6 +457,158 @@ export function WorldMap(props: WorldMapProps) {
         .call(zoomRef.current.transform, clamp(zoomIdentity));
   };
 
+  // Conquests: each joins the queue the first time it's seen, before the map paints, so a country
+  // whose new owner arrives with it never shows the new color before its turn.
+  const [plays, setPlays] = useState<Play[]>([]);
+  const queued = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    const fresh = conquests.filter((c) => !queued.current.has(c.key));
+    if (fresh.length === 0) return;
+    for (const c of fresh) queued.current.add(c.key);
+    // A picture of a campaign, or less motion: the countries just change hands.
+    if (still || prefersReducedMotion()) return;
+    setPlays((list) => [
+      ...list,
+      ...fresh.map((c): Play => ({ ...c, phase: 'waiting', runs: [], covered: new Set() })),
+    ]);
+  }, [conquests, still]);
+
+  /** Whether a territory is on screen, and big enough there to watch a color crawl over it. */
+  const inView = useCallback(
+    (id: TerritoryId) => {
+      const shape = geo.byId.get(id);
+      const box = geo.focusBounds(id);
+      if (!shape || !box) return false;
+      const t = transformRef.current;
+      const [vx, vy, vw, vh] = visibleBox();
+      const [x0, y0] = t.apply(box[0]);
+      const [x1, y1] = t.apply(box[1]);
+      const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+      const seen = shape.micro || Math.max(x1 - x0, y1 - y0) * pxPerUnitRef.current >= MIN_SEEN_PX;
+      return seen && cx > vx && cx < vx + vw && cy > vy && cy < vy + vh;
+    },
+    [geo, visibleBox],
+  );
+
+  /** Each country's crawl in a conquest, timed for how big it is on screen now, after `lead` milliseconds. */
+  const runsFor = useCallback(
+    (conquest: MapConquest, lead: number): Run[] => {
+      const scale = pxPerUnitRef.current * transformRef.current.k;
+      const runs = new Map<TerritoryId, Run>();
+      for (const step of [...conquest.steps].sort((a, b) => a.wave - b.wave)) {
+        const shape = geo.byId.get(step.id);
+        if (!shape) continue;
+        // Over the border, or from a sea lane's landing; from a country further off, across the map.
+        const contact = step.from ? geo.contact(step.from, step.id) : [];
+        const seeds = contact.length > 0 ? contact : [(step.from && geo.byId.get(step.from)?.anchor) || shape.anchor];
+        const { near, far, entry } = reachOf(seeds, geo.outline(step.id));
+        const parent = step.from ? runs.get(step.from) : undefined;
+        const across = (far - near) * scale;
+        runs.set(step.id, {
+          uid: ++runCount,
+          id: step.id,
+          micro: shape.micro,
+          front: makeFront(seeds),
+          near,
+          far,
+          entry: shape.micro ? shape.anchor : contact.length > 0 ? contact[Math.floor(contact.length / 2)]! : entry,
+          delay: parent ? parent.delay + parent.duration * NEXT_AT : lead,
+          duration: shape.micro
+            ? DOT_MS
+            : Math.min(CRAWL_MAX_MS, Math.max(CRAWL_MIN_MS, CRAWL_BASE_MS + across * CRAWL_MS_PER_PX)),
+        });
+      }
+      return [...runs.values()];
+    },
+    [geo],
+  );
+  const begin = useCallback(
+    (play: Play, runs: Run[]): Play =>
+      runs.length > 0 ? { ...play, phase: 'playing', runs } : { ...play, phase: 'done', runs },
+    [],
+  );
+
+  // Waiting conquests play once the map is in view: under a phone's board, another tab or a page,
+  // and while the page is hidden, they wait. The player's own, out of sight, are flown to first.
+  const pageVisible = usePageVisible();
+  const waiting = plays.some((p) => p.phase === 'waiting');
+  useEffect(() => {
+    if (!waiting || covered || !pageVisible || !framedRef.current) return;
+    const starting = plays.filter((p) => p.phase === 'waiting');
+    const ours = starting.filter((p) => p.frame);
+    const show =
+      ours.length > 0 && !starting.some((p) => p.steps.some((s) => inView(s.id)))
+        ? frameAround(
+            geo,
+            ours.flatMap((p) => p.steps.flatMap((s) => (s.from ? [s.id, s.from] : [s.id]))),
+          )
+        : null;
+    if (show) requestFrame(show, 6);
+    const runs = new Map(starting.map((p) => [p.key, show ? [] : runsFor(p, CONQUEST_BEAT_MS)]));
+    setPlays((list) =>
+      list.map((p) =>
+        p.phase !== 'waiting' ? p : show ? { ...p, phase: 'framing' } : begin(p, runs.get(p.key) ?? []),
+      ),
+    );
+    // `requestFrame` reads the current room; it needn't start this again.
+  }, [waiting, covered, pageVisible, plays, geo, inView, runsFor, begin]);
+  // Then, once the map is there, they play.
+  const flying = plays.some((p) => p.phase === 'framing');
+  const playsRef = useRef(plays);
+  useLayoutEffect(() => {
+    playsRef.current = plays;
+  });
+  useEffect(() => {
+    if (!flying) return;
+    const timer = setTimeout(() => {
+      const runs = new Map(playsRef.current.filter((p) => p.phase === 'framing').map((p) => [p.key, runsFor(p, 0)]));
+      setPlays((list) => list.map((p) => (p.phase === 'framing' ? begin(p, runs.get(p.key) ?? []) : p)));
+    }, FRAME_CONQUEST_MS);
+    return () => clearTimeout(timer);
+  }, [flying, runsFor, begin]);
+
+  const onCovered = useCallback((key: string, id: TerritoryId) => {
+    setPlays((list) =>
+      list.map((p) => {
+        if (p.key !== key || p.covered.has(id)) return p;
+        const next = new Set(p.covered).add(id);
+        return { ...p, covered: next, phase: p.runs.every((r) => next.has(r.id)) ? 'done' : p.phase };
+      }),
+    );
+  }, []);
+
+  // Played out, a conquest lets go once the campaign shows the countries' new owners (or after a while,
+  // if it never does: they changed hands again).
+  useEffect(() => {
+    if (!plays.some((p) => p.phase === 'done')) return;
+    const settled = (p: Play) => p.phase === 'done' && p.steps.every(({ id }) => owners.get(id) === p.color);
+    if (plays.some(settled)) {
+      setPlays((list) => list.filter((p) => !settled(p)));
+      return;
+    }
+    const timer = setTimeout(() => setPlays((list) => list.filter((p) => p.phase !== 'done')), SETTLE_CONQUEST_MS);
+    return () => clearTimeout(timer);
+  }, [plays, owners]);
+
+  /** The owners as the map shows them: countries still to be crawled over keep their old color. */
+  const shownOwners = useMemo(() => {
+    if (plays.length === 0) return owners;
+    const shown = new Map(owners);
+    for (const play of plays) {
+      for (const { id } of play.steps) {
+        shown.set(id, play.phase === 'done' || play.covered.has(id) ? play.color : play.previous);
+      }
+    }
+    return shown;
+  }, [owners, plays]);
+  const crawling = useMemo(() => plays.filter((p) => p.phase === 'playing'), [plays]);
+  const screenScale = useCallback(() => pxPerUnitRef.current * transformRef.current.k, []);
+  const conquering = plays.some(
+    (p) => p.phase === 'framing' || p.phase === 'playing' || (p.phase === 'waiting' && !covered && pageVisible),
+  );
+  const { onConquering } = props;
+  useEffect(() => onConquering?.(conquering), [conquering, onConquering]);
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     const svg = svgRef.current;
     const behavior = zoomRef.current;
@@ -407,7 +634,7 @@ export function WorldMap(props: WorldMapProps) {
 
   const ownedBy = useMemo(() => {
     const byColor = new Map<number, string[]>();
-    for (const [id, color] of owners) {
+    for (const [id, color] of shownOwners) {
       const d = geo.byId.get(id)?.d;
       if (!d) continue;
       const list = byColor.get(color) ?? [];
@@ -415,7 +642,7 @@ export function WorldMap(props: WorldMapProps) {
       byColor.set(color, list);
     }
     return [...byColor].map(([color, ds]) => ({ color, d: ds.join('') }));
-  }, [owners, geo]);
+  }, [shownOwners, geo]);
 
   const highlightPath = useMemo(
     () => (highlighted ? [...highlighted].map((id) => geo.byId.get(id)?.d ?? '').join('') : ''),
@@ -504,10 +731,19 @@ export function WorldMap(props: WorldMapProps) {
             pointerEvents="none"
           />
           <MicroHitAreas shapes={geo.shapes} onSelect={select_} />
-          <TerritoryFills geo={geo} owners={owners} onSelect={select_} onHover={setHovered} />
+          <TerritoryFills geo={geo} owners={shownOwners} onSelect={select_} onHover={setHovered} />
           {ownedBy.map(({ color, d }) => (
             <path key={color} d={d} fill={`url(#${patternPrefix}-${color})`} pointerEvents="none" />
           ))}
+          {crawling.length > 0 && (
+            <ConquestLayer
+              geo={geo}
+              plays={crawling}
+              patternPrefix={patternPrefix}
+              screenScale={screenScale}
+              onCovered={onCovered}
+            />
+          )}
           <path
             d={geo.borders}
             className="nss"
@@ -549,11 +785,12 @@ export function WorldMap(props: WorldMapProps) {
           )}
           <MicroDots
             shapes={geo.shapes}
-            owners={owners}
+            owners={shownOwners}
             selectedId={selectedId}
             highlighted={highlighted}
             onSelect={select_}
           />
+          {crawling.length > 0 && <ConquestDots byId={geo.byId} plays={crawling} />}
           {warPaths && (
             <g pointerEvents="none" aria-hidden="true">
               <path
@@ -779,6 +1016,148 @@ function MicroDots({
             </g>
           );
         })}
+    </g>
+  );
+}
+
+/**
+ * Countries changing hands: over each, the winner's color (as the country will wear it, hatching and
+ * all) crawls in from where it crosses, behind a pale edge, its front wavering as it goes. Drawn
+ * frame by frame outside React; a country fully covered is handed back to the map in its new color.
+ */
+function ConquestLayer({
+  geo,
+  plays,
+  patternPrefix,
+  screenScale,
+  onCovered,
+}: {
+  geo: Geometry;
+  /** Conquests playing. */
+  plays: readonly Play[];
+  patternPrefix: string;
+  /** Screen pixels to a map unit, right now. */
+  screenScale(): number;
+  onCovered(key: string, id: TerritoryId): void;
+}) {
+  const paths = useRef(new Map<string, SVGPathElement>());
+  /** When each conquest started, on the animation clock: its first frame. */
+  const started = useRef(new Map<string, number>());
+  /** The countries reported covered, by conquest and country. */
+  const reported = useRef(new Set<string>());
+  const onCoveredRef = useRef(onCovered);
+  useEffect(() => {
+    onCoveredRef.current = onCovered;
+  });
+
+  useEffect(() => {
+    let frame = requestAnimationFrame(function draw(now) {
+      const scale = screenScale();
+      const rim = RIM_PX / scale;
+      for (const play of plays) {
+        const start = started.current.get(play.key) ?? now;
+        started.current.set(play.key, start);
+        const elapsed = now - start;
+        for (const run of play.runs) {
+          const done = `${play.key}|${run.id}`;
+          if (reported.current.has(done)) continue;
+          const t = (elapsed - run.delay) / run.duration;
+          if (t >= 1) {
+            reported.current.add(done);
+            onCoveredRef.current(play.key, run.id);
+            continue;
+          }
+          if (run.micro) continue;
+          const { radius, waver } = frontAt(run.near, run.far, crawlEase(t));
+          const [body = '', edge = ''] =
+            t < 0 ? [] : frontPaths(run.front, radius, waver, elapsed / 1000, scale, [0, rim]);
+          paths.current.get(`${run.uid}:rim`)?.setAttribute('d', edge);
+          paths.current.get(`${run.uid}:body`)?.setAttribute('d', body);
+          paths.current.get(`${run.uid}:hatch`)?.setAttribute('d', body);
+        }
+      }
+      frame = requestAnimationFrame(draw);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [plays, screenScale]);
+
+  const keep = (key: string) => (el: SVGPathElement | null) => {
+    if (el) paths.current.set(key, el);
+    else paths.current.delete(key);
+  };
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      {plays.flatMap((play) => {
+        const hex = empireColor(play.color).hex;
+        // As the country will look: the color at 90% over the sea, under its hatching.
+        const body = mixHex(hex, OCEAN, 0.9);
+        const edge = mixHex(PAPER, hex, 0.55);
+        return play.runs
+          .filter((run) => !run.micro && !play.covered.has(run.id))
+          .map((run) => {
+            const clip = `${patternPrefix}-crawl-${run.uid}`;
+            return (
+              <g key={run.uid}>
+                <clipPath id={clip}>
+                  <path d={geo.byId.get(run.id)?.d ?? ''} />
+                </clipPath>
+                <g clipPath={`url(#${clip})`}>
+                  <path ref={keep(`${run.uid}:rim`)} fill={edge} />
+                  <path ref={keep(`${run.uid}:body`)} fill={body} />
+                  <path ref={keep(`${run.uid}:hatch`)} fill={`url(#${patternPrefix}-${play.color})`} />
+                </g>
+                {/* Where it crosses in: a ring spreading from the border as the color comes over. The
+                    ring grows inside the group that keeps it screen-sized: on one element, browsers
+                    drop the one scale while animating the other. */}
+                <g transform={`translate(${run.entry[0]},${run.entry[1]})`}>
+                  <g className="counter-scale">
+                    <circle
+                      className="nss conquest-breach"
+                      r={16}
+                      fill="none"
+                      stroke={edge}
+                      strokeWidth={2.5}
+                      style={{ animationDelay: `${run.delay}ms` }}
+                    />
+                  </g>
+                </g>
+              </g>
+            );
+          });
+      })}
+    </g>
+  );
+}
+
+/** A microstate changing hands: its dot takes the winner's color with a pop, inside a spreading ring. */
+function ConquestDots({ byId, plays }: { byId: Geometry['byId']; plays: readonly Play[] }) {
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      {plays.flatMap((play) => {
+        const hex = empireColor(play.color).hex;
+        return play.runs
+          .filter((run) => run.micro && !play.covered.has(run.id))
+          .map((run) => {
+            const shape = byId.get(run.id);
+            if (!shape) return null;
+            const timing = { animationDelay: `${run.delay}ms`, animationDuration: `${run.duration}ms` };
+            return (
+              <g key={run.uid} transform={`translate(${shape.anchor[0]},${shape.anchor[1]})`}>
+                <g className="counter-scale">
+                  <circle
+                    className="nss conquest-breach"
+                    r={16}
+                    fill="none"
+                    stroke={hex}
+                    strokeWidth={2.5}
+                    style={timing}
+                  />
+                  <circle className="conquest-dot" r={5.5} fill={hex} stroke={INK} strokeWidth={1.5} style={timing} />
+                </g>
+              </g>
+            );
+          });
+      })}
     </g>
   );
 }

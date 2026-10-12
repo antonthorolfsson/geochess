@@ -71,6 +71,12 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
 
   const byId = new Map(shapes.map((s) => [s.id, s]));
   const focusBoxes = new Map<TerritoryId, Bounds>();
+  const outlines = new Map<TerritoryId, Point[]>();
+  const contacts = new Map<string, Point[]>();
+  const project = (p: number[]): Point | null => {
+    const xy = projection(p as [number, number]);
+    return xy && Number.isFinite(xy[0]) && Number.isFinite(xy[1]) ? [xy[0], xy[1]] : null;
+  };
   /** A territory's pieces of land, largest first. */
   const pieces = (id: TerritoryId): { bounds: Bounds; area: number }[] => {
     const f = features.get(id);
@@ -88,6 +94,41 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
       })
       .filter(({ bounds }) => Number.isFinite(bounds[0][0]))
       .sort((a, b) => b.area - a.area);
+  };
+  /**
+   * What to frame to show one territory: its largest piece of land, any piece at least a fifth
+   * its size (both halves of Malaysia), and every piece within reach of what's gathered so far.
+   * Russia leaves out the tip of Chukotka over the date line, the United States the western
+   * Aleutians, Chile Easter Island: their whole boxes would center on the wrong continent, or on
+   * open sea. A microstate is framed on its dot.
+   */
+  const focusBounds = (id: TerritoryId): Bounds | null => {
+    const shape = byId.get(id);
+    if (!shape) return null;
+    if (shape.micro) return [shape.anchor, shape.anchor];
+    let box = focusBoxes.get(id);
+    if (box) return box;
+    const [first, ...others] = pieces(id);
+    if (!first) return shape.bounds;
+    const large = others.filter((p) => p.area >= first.area / 5);
+    box = union([first, ...large].map((p) => p.bounds))!;
+    const rest = others.filter((p) => !large.includes(p)).map((p) => p.bounds);
+    let grew: boolean;
+    do {
+      grew = false;
+      const [[x0, y0], [x1, y1]] = box;
+      const dx = Math.max((x1 - x0) / 4, 10);
+      const dy = Math.max((y1 - y0) / 4, 10);
+      for (let i = rest.length - 1; i >= 0; i--) {
+        const [[a0, b0], [a1, b1]] = rest[i]!;
+        if (a1 < x0 - dx || a0 > x1 + dx || b1 < y0 - dy || b0 > y1 + dy) continue;
+        box = union([box, rest[i]!])!;
+        rest.splice(i, 1);
+        grew = true;
+      }
+    } while (grew);
+    focusBoxes.set(id, box);
+    return box;
   };
 
   return {
@@ -111,42 +152,107 @@ export function buildGeometry(topo: Topology, dataset: Dataset) {
       const bounds = clipPath.bounds(shape);
       return Number.isFinite(bounds[0][0]) ? bounds : null;
     },
+    focusBounds,
     /**
-     * What to frame to show one territory: its largest piece of land, any piece at least a fifth
-     * its size (both halves of Malaysia), and every piece within reach of what's gathered so far.
-     * Russia leaves out the tip of Chukotka over the date line, the United States the western
-     * Aleutians, Chile Easter Island: their whole boxes would center on the wrong continent, or on
-     * open sea. A microstate is framed on its dot.
+     * The corners of a territory's outline, as far as it is framed (`focusBounds`): the far-flung
+     * islands that framing leaves out are left out here too. A microstate is its dot.
      */
-    focusBounds(id: TerritoryId): Bounds | null {
+    outline(id: TerritoryId): Point[] {
+      let points = outlines.get(id);
+      if (points) return points;
       const shape = byId.get(id);
-      if (!shape) return null;
-      if (shape.micro) return [shape.anchor, shape.anchor];
-      let box = focusBoxes.get(id);
-      if (box) return box;
-      const [first, ...others] = pieces(id);
-      if (!first) return shape.bounds;
-      const large = others.filter((p) => p.area >= first.area / 5);
-      box = union([first, ...large].map((p) => p.bounds))!;
-      const rest = others.filter((p) => !large.includes(p)).map((p) => p.bounds);
-      let grew: boolean;
-      do {
-        grew = false;
+      const f = features.get(id);
+      const box = focusBounds(id);
+      const geometry = f && 'geometry' in f ? f.geometry : null;
+      if (!shape || !box || shape.micro || !geometry) {
+        points = shape ? [shape.anchor] : [];
+      } else {
+        const rings =
+          geometry.type === 'MultiPolygon'
+            ? geometry.coordinates.flat()
+            : geometry.type === 'Polygon'
+              ? geometry.coordinates
+              : [];
         const [[x0, y0], [x1, y1]] = box;
-        const dx = Math.max((x1 - x0) / 4, 10);
-        const dy = Math.max((y1 - y0) / 4, 10);
-        for (let i = rest.length - 1; i >= 0; i--) {
-          const [[a0, b0], [a1, b1]] = rest[i]!;
-          if (a1 < x0 - dx || a0 > x1 + dx || b1 < y0 - dy || b0 > y1 + dy) continue;
-          box = union([box, rest[i]!])!;
-          rest.splice(i, 1);
-          grew = true;
-        }
-      } while (grew);
-      focusBoxes.set(id, box);
-      return box;
+        points = rings.flatMap((ring) =>
+          ring.flatMap((p) => {
+            const xy = project(p);
+            return xy && xy[0] >= x0 - 1 && xy[0] <= x1 + 1 && xy[1] >= y0 - 1 && xy[1] <= y1 + 1 ? [xy] : [];
+          }),
+        );
+        if (points.length === 0) points = [shape.anchor];
+      }
+      outlines.set(id, points);
+      return points;
+    },
+    /**
+     * Where `from` meets `to`, for something crossing from one into the other: points spread along
+     * their shared border, or, for neighbors across the sea, where the lane between them lands on
+     * `to`'s coast. Empty when they don't touch.
+     */
+    contact(from: TerritoryId, to: TerritoryId): Point[] {
+      const key = `${from}>${to}`;
+      let points = contacts.get(key);
+      if (points) return points;
+      const border = mesh(
+        topo,
+        object,
+        (a, b) => (String(a.id) === from && String(b.id) === to) || (String(a.id) === to && String(b.id) === from),
+      );
+      const lines = border.coordinates
+        .map((line) =>
+          line.flatMap((p) => {
+            const xy = project(p);
+            return xy ? [xy] : [];
+          }),
+        )
+        .filter((line) => line.length > 0);
+      points = spreadAlong(lines, CONTACT_SPACING, MAX_CONTACTS);
+      if (points.length === 0) {
+        const lane = dataset.seaLanes.find((l) => (l.a === from && l.b === to) || (l.a === to && l.b === from));
+        const landing = lane && project(lane.b === to ? lane.to : lane.from);
+        if (landing) points = [landing];
+      }
+      contacts.set(key, points);
+      return points;
     },
   };
+}
+
+export type Point = [number, number];
+
+/** Map units between the points a shared border is marked at, and the most it is marked at. */
+const CONTACT_SPACING = 8;
+const MAX_CONTACTS = 6;
+
+/**
+ * Points spread evenly along some lines, one every `spacing` (in the middle of each stretch) and at
+ * least one, up to `most`. A single point in a line is taken as it is.
+ */
+export function spreadAlong(lines: readonly Point[][], spacing: number, most: number): Point[] {
+  const segments: { a: Point; b: Point; length: number }[] = [];
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]!;
+      const b = line[i]!;
+      segments.push({ a, b, length: Math.hypot(b[0] - a[0], b[1] - a[1]) });
+    }
+  }
+  const total = segments.reduce((sum, s) => sum + s.length, 0);
+  if (total === 0) return lines.flatMap((line) => line.slice(0, 1)).slice(0, 1);
+  const count = Math.max(1, Math.min(most, Math.round(total / spacing)));
+  const points: Point[] = [];
+  let walked = 0;
+  let next = total / count / 2;
+  for (const { a, b, length } of segments) {
+    while (next <= walked + length && points.length < count) {
+      const t = length === 0 ? 0 : (next - walked) / length;
+      points.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      next += total / count;
+    }
+    walked += length;
+  }
+  return points;
 }
 
 export type Geometry = ReturnType<typeof buildGeometry>;

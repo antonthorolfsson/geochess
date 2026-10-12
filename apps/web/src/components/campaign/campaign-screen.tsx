@@ -91,8 +91,8 @@ const MAIN_LABEL: Record<CampaignStatus, string> = {
 /** The desktop's left column, which the rail's buttons open over the map when it's folded. */
 const CAMPAIGN_PANEL_ID = 'campaign-panel';
 /**
- * The longest award ceremonies wait (with the page in view) for countries to change hands on the
- * map: a crawl takes up to 8 seconds a country, and a stake's countries fall one after another.
+ * The longest the campaign's ending waits (with the page in view) for countries to change hands on
+ * the map: a crawl takes up to 8 seconds a country, and a stake's countries fall one after another.
  */
 const CONQUEST_HOLD_MS = 30_000;
 
@@ -260,9 +260,11 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     myGames.some((g) => !g.overTheBoard && (g.game === undefined || g.game.status === 'playing'));
   const answers = model.answers.length;
   const unread = useUnread(campaign.id);
-  // Countries a war moved crawl over to their winner on the map first (`conquering` while they do, in
-  // view); then the ceremony for any points it brought; then, if it won the campaign, its ending and
-  // the results. A hold on the ceremonies never lasts long, whatever the map does.
+  // Countries a war moved crawl over to their winner on the map (`conquering` while they do, in view),
+  // and if it won the campaign, its ending waits for that and for the ceremony of the points that
+  // brought it; then the results. The hold never lasts long, whatever the map does. Ceremonies don't
+  // wait for the map: the room's standings and title tokens react at the refetch, so the card must
+  // play alongside them, not after the crawl.
   const [conquering, setConquering] = useState(false);
   const mapHiddenRef = useRef(false);
   const visible = usePageVisible();
@@ -474,8 +476,8 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
     const taken = conquestsFrom(current, message.events);
     if (taken.length > 0) {
       setConquests((list) => [...list, ...taken].slice(-24));
-      // The same push brings any points the war moved: their ceremony waits for the map to show the
-      // countries changing hands, from now (the map says when it's done).
+      // If the war won the campaign, its ending waits for the map to show the countries changing
+      // hands, from now (the map says when it's done).
       if (!mapHiddenRef.current) setConquering(true);
     }
     const warById = (warId: string) => current.campaign.wars.find((w) => w.id === warId);
@@ -1225,7 +1227,7 @@ function CampaignRoom({ model, topo, children }: { model: CampaignModel; topo: T
               {toast}
             </div>
           )}
-          {objectives && <AwardCeremonies model={model} hold={inLiveGame || conquering} onBusy={setCeremoniesBusy} />}
+          {objectives && <AwardCeremonies model={model} hold={inLiveGame} onBusy={setCeremoniesBusy} />}
         </div>
       </div>
       {finale.showing && (

@@ -1764,9 +1764,15 @@ left to me). Web only: no rule, event or API changed.
   board or other tabs, a full-screen board, a page over the map room, the campaign's ending) or the
   page is hidden. One of the viewer's own wars that is out of sight, or too small on screen to
   watch, is flown to first. In view, it starts after a 0.9-second beat, so the board's stamp lands
-  first. Award ceremonies for the points the war moved wait for the crawl (`onConquering`, held
-  from the push itself and never for more than 30 seconds), and the campaign's ending waits for
-  both. The verdict holds still for 4 seconds with reduced motion.
+  first. The campaign's ending waits for the crawl (`onConquering`, held from the push itself and
+  never for more than 30 seconds) and for any ceremony. Award ceremonies don't wait for the crawl
+  (they did at first; see below). The verdict holds still for 4 seconds with reduced motion.
+- **Ceremonies play at once again** (2026-10-12, the user: "some of the other animations broke,
+  like title changing hands"). The first pass held the award ceremonies until the crawl was done,
+  but the room's standings, race and title tokens react at the refetch a moment after the push,
+  as designed: so a title changed hands in the room, counted up and popped onto its new holder,
+  and the card tossed it seconds later, after the whole crawl. `AwardCeremonies` is held only for a
+  live game again; `conquering` now holds just the campaign's ending.
 - **Less motion.** The crawl plays the same for everyone, reduced motion or not. The user's Windows
   has Animation effects off, so browsers there ask for reduced motion: at first the map skipped the
   crawl, then (2026-10-12, first pass) faded each country's new color in instead, and the user saw
@@ -1805,8 +1811,8 @@ open; Victory, Defeat and Draw for the two players and the winner's name for eve
 4½ seconds; the sweep from the winner's side; every viewer sees every conquest, but the map flies
 only to the viewer's own; the 0.9-second beat; land area (rather than size on the map) on a
 logarithmic scale, with 10,000 km² and 10 million km² as the ends, for the user's 2 to 8 seconds;
-the next country starting halfway through the last; the pale rim and the ring; ceremonies waiting
-for the whole crawl, however long; the sweep heading for the farthest corner from where it crosses
+the next country starting halfway through the last; the pale rim and the ring; the campaign's
+ending waiting for the whole crawl, however long; the sweep heading for the farthest corner from where it crosses
 in (so Canada taken from the United States sweeps west to east, from the Alaskan end of the border),
 starting at the end nearest that, with the ring there rather than at the border crossing; the
 wavering (at most 9% of the way across, three waves).
